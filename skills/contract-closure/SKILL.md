@@ -10,21 +10,32 @@ description: 境界、public API、永続化、migration、外部副作用、認
 ## Workflow
 
 1. 変更またはfindingを、観測されたcaseと、その背後の不変条件へ分ける。
-2. 関連するsource、test、type、schema、static check、accepted ADRを読む。
+2. 関連するsource、test、type、schema、static check、accepted ADRを読み、accepted contractの根拠、supported scope、観測可能なfailure、canonical owner、兄弟入口、executable anchorを固定する。
 3. capability、operation、owner、状態、resource scopeが同じ兄弟経路を検索する。
 4. 単独では妥当でも組合せで不正になるfield、version、generation、owner / scopeを一つの複合不変条件として列挙する。
 5. 該当triggerの展開軸を `references/trigger-matrices.md` から選ぶ。複数該当する場合は必要な節を組み合わせる。
-6. task-localなClosure Mapを作り、反例を先に列挙する。
+6. task-localなClosure MapとInvariant Matrixを作り、反例を先に列挙する。
 7. 各不変条件を最も強い実行可能な場所へ置く。type / schema / shared validation / static checkで強制できる契約をtestだけへ退避しない。
 8. 実装または修正後、targeted checkに加えてSibling Sweepを行う。
-9. 非局所的または高リスクな変更にはIndependent Closure Reviewを行う。
+9. 非局所的または高リスクな変更にはCandidate Evidenceを凍結し、triggerされたreview lensでIndependent Closure Reviewを行う。
 10. 未確認cell、意図的な例外、実行不能なcheckを残リスクとして報告する。
+
+## Accepted Contract Gate
+
+実装前に、契約の根拠と適用範囲を確定する。
+
+- 根拠は、明示されたユーザー要求、public protocol / schema、accepted ADR、外部consumer、または根拠を確認できる既存のexecutable contractに置く。
+- external schemaやprotocolへ依存する場合は、version、revision、checksum、JSON pointerなど、requiredness、default、enum、failure semanticsを再確認できるexact anchorを残す。
+- 現在のsourceやtestが存在することだけをaccepted contractにしない。
+- 根拠が競合し、required / optional、default、failure semantics、supported scopeなどの結論が変わる場合は、reviewerに選択させず、consumer影響と選択肢を確認して`unresolved`のまま停止する。
 
 ## Closure Map
 
 会話またはtask-local noteへ、必要な項目だけ短く作る。恒久文書を既定にしない。
 
 ```text
+Accepted contract / exact anchor:
+Supported scope:
 Invariant:
 Coupled invariants / valid combinations:
 Trigger:
@@ -41,6 +52,63 @@ Uncovered risks:
 ```
 
 空欄を埋めることを目的にしない。今回の変更で意味が変わる軸だけを選び、選ばなかった高リスク軸には理由を付ける。
+
+## Invariant Matrix
+
+変更した不変条件familyごとに、兄弟経路とfailure timingをmatrixへ置く。行または列は変更に応じて選び、一般チェックリストとして全項目を埋めない。
+
+```text
+Invariant ID:
+Accepted anchor:
+Canonical owner:
+
+| Sibling channel | Coupled values | State / evidence order | Failure timing | Owner / effect certainty | Public projection | Executable anchor | Cell status |
+```
+
+`Cell status`は次のいずれかにする。
+
+- `covered`: sourceとexecutable contractまたは理由付きの直接確認で閉じた
+- `anchored-exception`: accepted contractの根拠を持つ意図的な例外
+- `residual-risk`: 発生条件、影響、検知、復旧、follow-up要否を分類した
+- `unresolved`: 契約または反例の確認が不足し、Candidateをreviewへ渡せない
+
+観測されたcaseを閉じただけで同じInvariant IDの兄弟cellを未確認にしない。無関係なoperation、platform、既存負債へ無制限に広げず、同じcapability、owner、state、resource scope、public projectionを共有する範囲へ限定する。
+
+## Candidate Evidence
+
+high-risk / non-localな変更でIndependent Closure Reviewを行う場合は、source、適用可能なexecutable contract、targeted check、該当する構造収束gateが揃ったexact source stateをtask-localに凍結する。
+
+```text
+Candidate ID:
+Base ref:
+Source identity value:
+Source identity recipe:
+Changed / untracked path manifest:
+Supported-scope cleanliness recipe / result:
+Raw diff command:
+Accepted contract anchors:
+Invariant IDs / matrix cells:
+Executed checks and results:
+Structural convergence gate / result:
+```
+
+- Candidate IDはreview evidenceを結び付けるtask-localな識別子であり、hash algorithmを暗黙に表さない。reviewerはID文字列ではなく、宣言されたrecipeを再実行してsource identityを確認する。
+- commit-boundで対象pathのstageが許可される場合は、宣言済みbase refと`git write-tree`のCandidate tree OIDをcanonicalなsource identityにする。manifestは`git diff --name-status <base-ref> <candidate-tree>`、raw diffは`git diff --binary --no-ext-diff <base-ref> <candidate-tree>`で再生成し、HEADの後続移動に依存させず、supported scopeのunstaged / untracked contentを残さない。
+- stageを使わない場合は、base ref、statusで安定sortしたchanged / untracked manifest、各pathのGit mode / object type、blobまたはsubmodule OID、削除markerを含む再現可能なrecipeを明記する。mode-only変更とuntracked contentをpath名だけで識別せず、任意のdigestを使う場合はalgorithm、入力byte列、正規化を省略しない。
+- scoped content、base、manifest、identity recipe、accepted anchors、matrix cells、実行済みcheckの集合または結果、構造収束gateの結果のいずれかを変更した場合、以前のreviewとcheckを`superseded`として完了証拠から除外する。必要なcheckを再実行して新しいCandidate IDを発行し、全trigger済みlensについて現行Candidate上の証拠を揃える。review結果の追加自体はCandidateを変更しない。
+- targeted re-reviewは新Candidateに対する対象familyとresulting deltaのclosureであり、complete-diff reviewを見た証拠にしない。
+- Candidate evidenceはtask-localに保持し、現行仕様として恒久設計文書へ複製しない。
+
+## Review Lens Selection
+
+Invariant Matrixからtriggerされた1から3個のlensを同じfrozen Candidateへ適用する。複数の独立したlensがtriggerされた場合は1 lensにつき1 reviewerで並列化し、同じlensへreviewerを重ねない。一つのlensだけなら一人のreviewerへ渡す。
+
+- `contract-schema-projection`: public schema、required / optional、default、runtime validation、generated / raw consumer、success / error projection
+- `lifecycle-effect-concurrency`: state transition、effect certainty、correlation owner、retry、delayed event、timeout、disconnect、crash
+- `identity-security-ipc`: identity、authority confirmation、authorization、secret-bearing message、IPC peer / endpoint
+- `resource-cleanup-platform`: aggregate limit、queue、cleanup owner、process lifetime、storage、platform parity
+
+変更規模やfile数だけでlensを追加しない。一つのlensで閉じる変更へ複数reviewerを要求せず、triggerされたlensが4つある場合も相互依存の強い軸を一つのcomposite lensとして命名し、担当cellと未確認cellを明示して最大3名にする。specialist review後の修正とholistic reviewへの合流順序は`AGENTS.md`のTask Workflowを正本とし、このSkillで条件分岐を再定義しない。
 
 ## Finding Promotion
 
@@ -67,8 +135,10 @@ finding分類、risk acceptance、review回数、完了条件は`AGENTS.md`の�
 契約が複数入口・複数subsystemへ波及する、複合不変条件を変更する、または失敗がpublic contract、永続化、migration、外部副作用、認可、owner / scope、並行処理、resource limitへ重大な影響を与える場合は、実装とtargeted checkの後、完了前に実装者から独立したreviewを行う。
 
 - researcherは根拠収集、validatorは機械的確認、reviewerは反例探索を担当する。researchやgreen testをreviewの代用にしない。
-- initialまたはtargetedなIndependent Closure Reviewでは、reviewerにgoal、ユーザー要求または既存のaccepted contract、raw diff、canonical anchors、task-local Closure Map、実行済みcheckを渡す。実装者の結論を確定事実として渡さない。
-- blocking修正後のfresh-context full-diff closure reviewでは、過去finding、claimed resolution、実装者の結論、既存Closure Mapを渡さない。reviewerがaccepted contract、更新後raw diff、canonical anchors、実行済みcheckから不変条件と反例を再構築する。
+- initial、specialist、またはtargetedなIndependent Closure Reviewでは、reviewerにreview kind、Candidate evidence、割り当てたlens、goal、ユーザー要求または既存のaccepted contract、raw diff、canonical anchors、task-local Closure Map、対象matrix cell、実行済みcheckを渡す。実装者の結論を確定事実として渡さない。
+- specialist reviewerは割り当てられたlensとmatrix cellへ集中し、確認したcell、未確認cell、finding、hardening候補、validation gapを分けて返す。rootは複数lensのfindingを不変条件familyへ統合する。
+- specialist reviewの`blocking`を修正した場合はSibling Sweepとcheckを再実行する。新Candidate上でfindingを出したlensは対象familyとresulting deltaをtargeted re-reviewし、他のtrigger済みlensも担当cellへのdeltaの非影響を再確認する。全lensの証拠が同じ現行Candidateへ揃うまでholistic reviewへ進まず、その後の無条件合流は`AGENTS.md`に従う。
+- holistic complete-diff reviewとblocking修正後のfresh-context full-diff closure reviewでは、利用可能なら`fork_turns="none"`を使い、Candidate evidence、goalとaccepted contract、更新後raw diff、canonical anchors、実行済みcheckだけを渡す。過去finding、claimed resolution、実装者の結論、既存Closure Mapを渡さず、reviewerが不変条件と反例を再構築する。
 - reviewerはfinding-firstで、反例、同じ契約を持つ兄弟経路、failure timing、owner / scope、欠けたexecutable contractを根拠付きで返し、各findingの分類を提案する。
 - rootはfindingをsourceとexecutable contractへ照合して分類を確定し、採用した`blocking` findingを同じ不変条件familyへ展開してから修正・再検証する。
 - reviewerを利用できない場合は、実装時の推論を引き継がないfresh-context second passを行い、独立review未実施を残リスクとして報告する。
@@ -99,5 +169,7 @@ pure refactorや局所的な機械変更へ独立reviewを義務化しない。�
 - 未解決の`blocking` findingがなく、その他のfindingを根拠付きで分類した。
 - accepted riskがある場合は、発生条件、影響、検知、復旧、follow-upの要否を報告した。
 - full-diff reviewの回数と、追加reviewを行った場合のtriggerとscopeを報告した。
+- frozen Candidateを使った場合、reviewとcheckが同じCandidate IDへ紐付き、変更後のCandidateへ誤って継承されていない。
+- specialist reviewを使った場合、triggerされたlens、review済みcell、未確認cell、hardening候補を区別し、必要なtargeted closure後にholistic complete-diff reviewを実施した。
 
 pure refactorや局所的な機械変更では、無関係なclosure軸を儀式的に展開しない。

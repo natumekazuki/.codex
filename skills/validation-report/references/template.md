@@ -23,8 +23,12 @@
 
 ## Review
 
-- Scope: not required — <reason> | targeted | initial full-diff | fresh-context closure
-- Complete diff reviewed: yes | no | not applicable
+- Required: yes | no — <reason>
+
+| Step | Candidate ID | Evidence status | Source identity | Lens / scope | Cells reviewed / unreviewed | Complete diff reviewed |
+| --- | --- | --- | --- | --- | --- | --- |
+| <initial / specialist / targeted re-review / holistic complete-diff / fresh-context closure> | <ID or "not applicable — review not Candidate-bound"> | current / superseded / not applicable | <value and recipe pointer, or not applicable> | <lens or scope> | <cells or "not applicable — review not Candidate-bound"> | yes / no |
+
 - Full-diff review count: <number or 0>
 - Blocking status: none | remaining — <detail> | not applicable
 - Accepted risk: <risk and rationale, or none>

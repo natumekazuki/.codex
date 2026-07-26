@@ -59,6 +59,8 @@
 - timeout、abort、cancel、process crash、response loss
 - initial request、同一request retry、delete後retry
 - batchの先頭、中間、末尾での失敗
+- operation、correlation owner、request / response / notificationの到着順
+- side effect certainty、pending / ambiguous / committed / terminal、owner解放
 
 反例:
 
@@ -67,6 +69,10 @@
 - 後半failureで前半だけcommitされないか
 - all-not-foundなどmutationなしの結果もidempotencyへ記録されるか
 - recoveryに必要なpending / ambiguous状態を再起動後に列挙できるか
+- responseより先にnotificationが到着しても正しいownerへ帰属するか
+- timeoutやterminal後の遅延eventが新しいoperationや別ownerへ誤帰属しないか
+- deliveryが曖昧な状態でsafe retry可能なeffect noneを返さないか
+- owner解放条件が兄弟operationとfailure timingで一致するか
 
 ## Owner / Scope / Projection
 
@@ -99,6 +105,26 @@
 - summary / list APIがfull payloadをhydrateしないか
 - transaction内で重いdecode、sanitize、hash、I/Oを実行しないか
 - exact limitで `>=` / `>` の意味がcreateとrefreshで一致するか
+
+## Process / Resource Lifecycle
+
+展開する範囲:
+
+- identity resolve、claim / lock、listener、worker / child、application、client bootstrap
+- starting、ready、busy、draining、fatal、closed
+- startup failure、ready後crash、disconnect、abort、shutdown、replacement
+- generation、owner、effect settlement、resource取得と逆順cleanup
+- Windows / Unixのidentity、permission、endpoint、queue、process lifecycle
+
+反例:
+
+- 起動deadlineが一部stageだけを覆い、claimやlistener取得で停止しないか
+- claimを解放した時点でworker終了、effect settlement、listener closeが揃っているか
+- ready後のworker crashで壊れたgenerationを再利用しないか
+- startup clientのdisconnectがhost全体を意図せず終了させないか
+- abort済みacceptやqueued connectionがcapacityとcleanupを占有し続けないか
+- security確認前にsecret-bearing responseまたはrequest bodyを送らないか
+- platform別実装が同じidentity、authority、cleanup契約を持つか
 
 ## Migration / Repair / Existing Data
 

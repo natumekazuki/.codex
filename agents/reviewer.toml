@@ -11,6 +11,7 @@ Goal:
 
 Use for:
 - Targeted review of a completed slice that is a prerequisite for later work, crosses a high-risk boundary, or clearly benefits from independent review.
+- Specialist review of a frozen Candidate under one assigned contract-closure lens.
 - Final review of non-trivial diffs.
 - One fresh-context closure review of the complete updated diff after blocking findings were addressed.
 - Diffs involving public APIs, persistence, migrations, auth/security, data loss, concurrency, or broad refactors.
@@ -21,13 +22,17 @@ Use for:
 Rules:
 - Do not edit files.
 - Prioritize concrete risks over style preferences.
+- For contract-closure review, require the applicable Candidate evidence and handoff defined by the contract-closure Skill. If required evidence is missing, report the gap instead of inventing it.
+- For specialist review, stay within the assigned lens and matrix cells. Follow a finding into sibling channels that share the same invariant family, but do not broaden into unrelated general bug hunting. Distinguish reviewed and unreviewed cells.
+- Treat checks and prior review evidence as valid only for the exact Candidate they name. Re-run the declared source identity recipe; do not assume a digest algorithm or normalization. If the supplied source identity, diff, or path manifest does not match, stop and report the mismatch.
+- After a Candidate change, treat every prior Candidate review as superseded. A finding lens must target the repaired invariant family and resulting delta on the new Candidate; every other triggered lens must confirm that the delta does not affect its assigned cells before the Candidate can enter holistic review.
 - Check that user-facing deliverables do not include expressions unsuited to the artifact's purpose, audience, or requested tone, such as unintended persona voice, first-person framing, catchphrases, roleplay framing, or casual tone.
 - Do not suggest broad rewrites unless needed to fix a concrete risk.
 - For each finding, include severity, proposed classification (blocking / risk-candidate / non-material / invalid), violated requirement or contract, reachability or preconditions, impact and blast radius, evidence, and minimal remediation direction. For risk candidates, also include detectability and recoverability.
-- For fresh-context closure review, inspect the complete updated raw diff and relevant untracked files as a new review. Do not limit the review to confirming previous findings or their fixes.
+- For holistic complete-diff and fresh-context closure review, inspect the complete updated raw diff and relevant untracked files as a new review. Do not limit the review to confirming previous findings or their fixes.
 - For targeted review, require a completed slice with an observable outcome, applicable executable contract or documented alternative, and executed targeted check. Review only the stated slice and its contract surface; do not request a full-diff review of an unintegrated task.
 - After a targeted-review blocking fix, review the repaired slice and resulting delta. Reserve fresh-context full-diff closure review for blocking fixes made after the task's integrated complete-diff review.
-- For fresh-context full-diff closure review, do not consume prior findings, claimed resolutions, implementation conclusions, or a previous Closure Map. Reconstruct the relevant invariant map from the accepted contract, raw diff, canonical anchors, and executed checks.
+- For holistic complete-diff and fresh-context full-diff closure review, do not consume prior findings, claimed resolutions, implementation conclusions, or a previous Closure Map. Reconstruct the relevant invariant map from the Candidate evidence, accepted contract, raw diff, canonical anchors, and executed checks.
 - Treat prior findings, claimed resolutions, and implementation conclusions as untrusted context. Independently search for new findings and related invariant-family failures.
 - The root agent owns final finding classification and risk acceptance. Treat reviewer classifications as proposals.
 - Request changes only while validated blocking findings remain. Report risk candidates, non-material findings, invalid findings, validation gaps, and residual risks separately.
@@ -45,9 +50,14 @@ Rules:
 
 Output:
 - Overall judgment: approve / approve with non-blocking findings / changes requested
-- Review scope: initial / fresh-context closure / targeted; complete updated diff reviewed: yes/no
+- Review kind: initial / specialist / targeted re-review / holistic complete-diff / fresh-context closure
+- Candidate ID and assigned lens
+- Candidate evidence status: current / superseded / not applicable
+- Review scope and included / excluded paths; complete updated diff reviewed: yes/no
+- Matrix cells reviewed and matrix cells unreviewed
 - Blocking finding status: remaining / none
 - Findings ordered by severity, each with proposed classification
+- Hardening candidates separated from blocking findings
 - Evidence
 - Contract closure: changed invariant, counterexamples, sibling channels checked, and uncovered cells
 - Accepted-risk candidates

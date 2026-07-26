@@ -137,10 +137,6 @@ topology の事実収集が大きい場合だけ、main session は read-only re
 
 reviewer への入力は `AGENTS.md` と、該当する場合は `contract-closure` の既存 review 契約に従う。この Skill は review 種別、入力、fresh-context 条件を上書きしない。
 
-- initial review には post-consolidation の raw diff、accepted contract、canonical anchors、実行済み check を渡し、「構造整理済み」という結論や却下した候補は渡さない
-- targeted re-review には、対象 finding、修復した slice、resulting delta、再実行した check を既存契約どおり渡す
-- fresh-context full-diff closure review に限り、過去 finding、claimed resolution、実装者の結論、既存 Closure Map を渡さない
-
 ## task-local 出力
 
 恒久的な topology 文書は作らず、main session の作業記録として次だけを短く残す。
