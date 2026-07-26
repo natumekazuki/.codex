@@ -1,0 +1,135 @@
+# Trigger Matrices
+
+変更に該当する節だけを使う。問いを網羅的な一般チェックリストとして消化せず、変更した不変条件を壊す反例へ変換する。
+
+## Explicit Input / Authority / Capability
+
+展開する範囲:
+
+- CLI flag、environment、config、request body、discovery、default
+- capabilityの発行、伝播、選択、更新、失効、retry、cleanup
+- owner identity、generation、接続先本人確認
+
+反例:
+
+- 明示値が不正なとき、暗黙のdefaultへfallbackしないか
+- staleまたはrevokedな値が残ったとき、別ownerへ誤接続しないか
+- 複数instanceが同じartifactをpublish / cleanupしたとき、他方を壊さないか
+- validation前にsecretやmutation bodyを未確認の相手へ送らないか
+
+## Public API / Validation / Projection
+
+展開する範囲:
+
+- CLI、HTTP、IPC、JSON、generated client、raw client、public export
+- runtime validator、shared type、schema、docs、shipped helper
+- success、domain error、transport error、unknown input
+
+反例:
+
+- shorthandだけで検証し、raw bodyや別adapterから迂回できないか
+- dynamic import、alias、barrel export、bracket accessで境界を迂回できないか
+- unknown field、invalid enum、不正な組合せが内部処理へ到達しないか
+- internal DTOやerror spreadからprivate fieldが漏れないか
+- responseの不正な状態組合せをtypeで構築できないか
+
+## Coupled Invariant / Versioned Selection
+
+展開する範囲:
+
+- provider / catalog revision / model / reasoning depth
+- owner / scope / permission、status / run state、schema version / row shape
+- create、load、update、clone、import、migration、recovery、retry、fallback
+- 組を解決するcanonical source、atomic update、永続化後の再検証
+
+反例:
+
+- 各fieldは単独で妥当でも、tupleとして未対応の組合せにならないか
+- 一つのfieldを変更したとき、依存fieldが古い値のまま残らないか
+- 既存データのmigrationだけ直し、新規createやcloneが古いdefaultを使わないか
+- fallbackが新しいidentityと古いcapability / revisionを混在させないか
+- tupleの一部だけを保存し、再読込後に構築不能な状態を作らないか
+- validate、persist、public projectionが同じ組合せ規則を使っているか
+
+## Mutation / External Side Effect
+
+展開する範囲:
+
+- validation前、admission前、side effect直前、commit直後、response送信中
+- timeout、abort、cancel、process crash、response loss
+- initial request、同一request retry、delete後retry
+- batchの先頭、中間、末尾での失敗
+
+反例:
+
+- callerへeffect noneを返しながらside effectが実行されないか
+- commit後response lossから同じrequestで収束できるか
+- 後半failureで前半だけcommitされないか
+- all-not-foundなどmutationなしの結果もidempotencyへ記録されるか
+- recoveryに必要なpending / ambiguous状態を再起動後に列挙できるか
+
+## Owner / Scope / Projection
+
+展開する範囲:
+
+- create、read、write、authorization、projection、subscription、audit、cleanup、recovery
+- parent / child、session / run、summary / full、source / derived cache
+
+反例:
+
+- UIだけownerを切り替え、readやauditが旧ownerのまま残らないか
+- 親がidleでもchildがrunningのとき、deleteやcapacity判定を誤らないか
+- summary projectionをsourceへ書き戻してfull dataを失わないか
+- summary権限からfull payloadを取得できないか
+- owner削除後もretry、retention、remote cleanupに必要なidentityを保持できるか
+
+## Limit / Concurrency / Resource
+
+展開する範囲:
+
+- per-item、per-batch、concurrent、session / root、provider、process、storage全体
+- pagination、stream、chunk、queue、cache lifetime
+- memory、CPU、disk、WAL、一時領域、IPC copy
+
+反例:
+
+- per-item上限内の入力を最大並列したとき、aggregate上限を超えないか
+- 複数rootやproviderの合計でprocess hard capを超えないか
+- cacheやtombstoneがprocess lifetimeで無制限に増えないか
+- summary / list APIがfull payloadをhydrateしないか
+- transaction内で重いdecode、sanitize、hash、I/Oを実行しないか
+- exact limitで `>=` / `>` の意味がcreateとrefreshで一致するか
+
+## Migration / Repair / Existing Data
+
+展開する範囲:
+
+- supported old schemaごとのempty / populated / malformed state
+- column、index、table、foreign key、triggerの適用順序
+- 各failure injection point、rollback、再実行、fallback
+- backfill、owner preservation、data visibility
+
+反例:
+
+- column追加前に、そのcolumnを使うindexを作らないか
+- table rebuildのDROPがFK actionでchild dataを変更しないか
+- repair途中の失敗でpartial schemaやdata lossを残さないか
+- old rowの追加columnが空値のまま残らないか
+- repair不能な新DB候補が、validな旧DB fallbackを妨げないか
+- migrationを再実行しても同じ最終状態へ収束するか
+
+## Reactive State / Cache / Async UI
+
+展開する範囲:
+
+- state owner、effect dependency、request generation、subscription lifetime
+- in-flight refresh中のevent、out-of-order response、draft / metadata変更
+- source state、derived state、error state、loading state
+
+反例:
+
+- metadataだけ変わったときderived previewがstaleにならないか
+- draft修正後も古いerrorが操作をblockしないか
+- refresh中に受信したeventを捨てて表示がstaleにならないか
+- 古いresponseが新しいstateを上書きしないか
+- object identityの変化だけで重複requestを発行しないか

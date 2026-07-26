@@ -1,0 +1,39 @@
+# Example agent registry snippet for Codex user config.
+# Copy only the agents you actually want to register.
+
+[agents]
+max_threads = 5
+max_depth = 1
+
+[agents.researcher]
+config_file = "agents/researcher.toml"
+
+[agents.fast_researcher]
+config_file = "agents/fast_researcher.toml"
+
+[agents.planner]
+config_file = "agents/planner.toml"
+
+[agents.fast_planner]
+config_file = "agents/fast_planner.toml"
+
+[agents.designer]
+config_file = "agents/designer.toml"
+
+[agents.implementer]
+config_file = "agents/implementer.toml"
+
+[agents.fast_implementer]
+config_file = "agents/fast_implementer.toml"
+
+[agents.validator]
+config_file = "agents/validator.toml"
+
+[agents.fast_validator]
+config_file = "agents/fast_validator.toml"
+
+[agents.reviewer]
+config_file = "agents/reviewer.toml"
+
+[agents.fast_reviewer]
+config_file = "agents/fast_reviewer.toml"

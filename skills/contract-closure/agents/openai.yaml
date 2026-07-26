@@ -1,0 +1,4 @@
+interface:
+  display_name: "Contract Closure"
+  short_description: "複合不変条件を全経路へ展開し、独立レビューで閉じる"
+  default_prompt: "Use $contract-closure to trace coupled invariants across sibling paths and failure states, then run an independent counterexample review against the executable contracts."

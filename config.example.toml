@@ -1,0 +1,33 @@
+# Portable Codex user config example.
+# Keep the real config.toml local. Copy only the sections you want to merge.
+
+model = "gpt-5.6"
+model_reasoning_effort = "medium"
+model_personality = "pragmatic"
+personality = "pragmatic"
+
+[features]
+unified_exec = true
+shell_snapshot = true
+apps = true
+personality = true
+multi_agent = true
+prevent_idle_sleep = true
+guardian_approval = true
+hooks = true
+goals = true
+
+[tui]
+status_line = ["model-with-reasoning", "current-dir", "model", "project-name", "git-branch", "run-state", "context-remaining", "context-used", "five-hour-limit", "weekly-limit", "codex-version", "context-window-size", "used-tokens", "total-input-tokens", "total-output-tokens", "session-id", "fast-mode", "thread-title", "task-progress"]
+
+[windows]
+sandbox = "elevated"
+
+[desktop]
+ambient-suggestions-enabled = false
+composerEnterBehavior = "cmdIfMultiline"
+conversationDetailMode = "STEPS_COMMANDS"
+show-context-window-usage = true
+
+[desktop.open-in-target-preferences]
+global = "fileManager"

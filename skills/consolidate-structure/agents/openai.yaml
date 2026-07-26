@@ -1,0 +1,4 @@
+interface:
+  display_name: "Consolidate Structure"
+  short_description: "実装完了候補の責務・重複・依存を外部レビュー前に収束する"
+  default_prompt: "Use $consolidate-structure in the main implementation session to consolidate an implementation-complete candidate before its independently planned read-only review without changing accepted behavior."

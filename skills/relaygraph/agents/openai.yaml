@@ -1,0 +1,4 @@
+interface:
+  display_name: "RelayGraph"
+  short_description: "Trace repository resource graphs for AI agents"
+  default_prompt: "Use $relaygraph to inspect related docs, source, tests, and repository graph rules before editing."

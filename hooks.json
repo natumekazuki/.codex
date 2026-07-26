@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/subagent-routing.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/subagent-routing.ps1')\"",
+            "timeout": 10,
+            "statusMessage": "Applying subagent routing mode"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "^(fast_researcher|fast_planner|fast_implementer|fast_validator|fast_reviewer|researcher|planner|designer|implementer|validator|reviewer)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/subagent-routing.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/subagent-routing.ps1')\"",
+            "timeout": 10,
+            "statusMessage": "Applying subagent routing mode"
+          }
+        ]
+      }
+    ]
+  }
+}
