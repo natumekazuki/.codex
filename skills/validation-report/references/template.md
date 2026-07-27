@@ -11,7 +11,9 @@
 
 ## Checks Run
 
-- `<command or check>`: <result and the expectation it proves>
+| Entry ID | Check / evidence kind | Executed-on Candidate ID | Origin entry / Candidate | Reviewed definition delta | Non-impact rationale | Ledger status | Current-evidence basis | Result and expectation proved |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| <entry ID or not applicable> | `<command or check>` / definition-delta non-impact confirmation | <ID or "not applicable — check not Candidate-bound"> | <entry ID and Candidate ID, or not applicable> | <delta or not applicable> | <rationale or not applicable> | current / superseded / unconfirmed / not applicable | executed on this Candidate / new confirmation entry on this Candidate / not applicable | <immutable result and the expectation it proves> |
 
 ## Regression Coverage
 
@@ -25,9 +27,9 @@
 
 - Required: yes | no — <reason>
 
-| Step | Candidate ID | Evidence status | Source identity | Lens / scope | Cells reviewed / unreviewed | Complete diff reviewed |
-| --- | --- | --- | --- | --- | --- | --- |
-| <initial / specialist / targeted re-review / holistic complete-diff / fresh-context closure> | <ID or "not applicable — review not Candidate-bound"> | current / superseded / not applicable | <value and recipe pointer, or not applicable> | <lens or scope> | <cells or "not applicable — review not Candidate-bound"> | yes / no |
+| Entry ID | Step / evidence kind | Executed-on Candidate ID | Origin entry / Candidate | Reviewed definition delta | Non-impact rationale | Source identity | Review contract | Ledger status | Current-evidence basis | Result | Lens / scope | Cells reviewed / unreviewed | Complete diff reviewed |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| <entry ID or not applicable> | <initial / specialist / targeted re-review / holistic complete-diff / fresh-context closure / definition-delta non-impact confirmation> | <ID or "not applicable — review not Candidate-bound"> | <entry ID and Candidate ID, or not applicable> | <delta or not applicable> | <rationale or not applicable> | <identity mode, value, resolved base OIDs, read-only verification recipe, and creator tree OID if applicable; or not applicable> | <revision / recipe, accepted anchors and contract meaning, Invariant IDs and definitions, supported scope, cell definitions, lens scope, or not applicable> | current / superseded / unconfirmed / not applicable | reviewed on this Candidate / new confirmation entry on this Candidate / not applicable | <immutable review result> | <lens or scope> | <cells or "not applicable — review not Candidate-bound"> | yes / no |
 
 - Full-diff review count: <number or 0>
 - Blocking status: none | remaining — <detail> | not applicable

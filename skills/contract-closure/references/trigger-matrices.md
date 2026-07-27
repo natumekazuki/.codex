@@ -73,6 +73,8 @@
 - timeoutやterminal後の遅延eventが新しいoperationや別ownerへ誤帰属しないか
 - deliveryが曖昧な状態でsafe retry可能なeffect noneを返さないか
 - owner解放条件が兄弟operationとfailure timingで一致するか
+- mutationのpostcondition検証をcommit後に実行し、検証失敗時にも変更を残していないか
+- 対象resourceの存在確認より先にopen / connectが新規resourceを作成していないか
 
 ## Owner / Scope / Projection
 
@@ -159,3 +161,49 @@
 - refresh中に受信したeventを捨てて表示がstaleにならないか
 - 古いresponseが新しいstateを上書きしないか
 - object identityの変化だけで重複requestを発行しないか
+
+## Review Candidate / Evidence Convergence
+
+展開する範囲:
+
+- provenanceとして分離したbase ref label
+- source identityを構成するmode、resolved base commit / tree OID、changed / untracked manifest、file mode、object type、content identity、削除marker、作成recipe、read-only verification recipe
+- accepted anchor、Invariant ID、matrix cell定義、trigger済みlens scope、review contract revision / recipe
+- targeted / broader check、specialist / targeted re-review / holistic review、coverage status、構造収束gate
+- Candidate ID、evidence status、通常index、一時index
+
+反例:
+
+- sourceを変えずにcheckを追加しただけでCandidate IDや既存reviewの`current`状態が失効しないか
+- source contentまたはfile modeを変更した後、旧Candidateのreviewやcheckを現行証拠として再利用していないか
+- source identityとreview contractを同時に変更した後、source identityの失効規則を優先せず、旧Candidateのevidenceを`unconfirmed`へ移行または新Candidateへ再関連付けしていないか
+- 既存cellのcoverage statusを`covered`へ更新しただけでCandidate IDを変更していないか
+- accepted anchor、Invariant ID、cell定義、lens scopeを変更した後、影響するlensやholistic evidenceを`current`のまま残していないか
+- source diff、accepted anchor文字列、Invariant IDが同じでも、anchorの契約上の意味、Invariant定義、supported contract scopeを変更した後、新Candidateを発行せず、またはholistic review対象は変わっていないとして旧holistic evidenceを残していないか
+- accepted anchor、Invariant ID、cell定義、lens scopeが同じでも、review contract revision / recipeだけを変更した後に旧Candidateのevidenceを再利用していないか
+- review contract変更の影響を受けないlensを、新Candidate上のdelta非影響確認なしに自動継承していないか
+- source identity変更後の他lensによるdelta非影響確認を、新Candidate上の新しいreview evidenceではなく旧Candidate evidenceの再関連付けとして記録していないか
+- review-contract-only変更後、旧entryのCandidate IDを書き換え、実行Candidateと適用Candidateを同一に見せていないか
+- 新Candidateの定義差分非影響確認が、独立したEntry ID、元entryのEntry IDとCandidate ID、確認した定義差分、非影響の根拠を持っているか
+- review entryまたはvalidation reportのprojectionからentry固有のresultが欠け、複数entryの結果を区別できなくなっていないか
+- 定義差分非影響確認のprojectionからreviewed definition deltaまたはnon-impact rationaleが欠け、origin参照だけで`current`になっていないか
+- 旧entryを元Candidateに保持せず、新しい確認entryの代わりに同じentryを`current`として移動していないか
+- specialist findingの修正後、finding lensのtargeted re-reviewと他lensのdelta非影響確認より先にholistic reviewへ進んでいないか
+- holistic reviewがCandidate IDを問わず、Ledger review entryまたはspecialist evidenceを入力として消費していないか
+- Candidate treeを作るために通常のGit indexまたは既存staged変更を変更していないか
+- `.git`またはobject databaseへのwrite authorityがない作成側へCandidate tree生成を要求し、`manifest-digest`へ切り替えずreview lifecycleを停止させていないか
+- read-only reviewerが`read-tree`、`write-tree`、`hash-object -w`、`update-index`などGit index、object database、worktreeへ書き込むcommandを実行していないか
+- manifest作成、reviewer検証、creator-tree前後確認でplain `git status`を使い、optional index refreshを書き戻していないか
+- revision peel expressionをquoteせず、PowerShellなどのshellが`^{commit}`または`^{tree}`を別構文や別引数として解釈していないか
+- `creator-tree` modeで、作成側が生成したtree OIDが存在しない、読めない、またはtype不一致のとき、reviewerがtreeを再作成していないか
+- `manifest-digest`のrecordからmode-only変更、untracked content、symlink target、submodule OID、削除markerの該当項目が欠けていないか
+- `manifest-digest`のalgorithm、record framing、path encoding、入力byte列、filter適用、正規化が曖昧で、同じ値を異なるsource stateから生成できないか
+- Candidate作成後に`HEAD`やbranchを移動したとき、同じbase ref labelを再解決してmanifestまたはraw diffが変化していないか
+- informationalなbase ref labelをsource identity valueまたはidentity recipeの入力へ含め、label文字列の変更だけでCandidateを失効させていないか
+- `read-tree`、manifest、raw diffの再生成で、記録済みbase tree / commit OIDではなく現在のbase ref labelを使っていないか
+- Candidateを再作成したとき、同じbase ref labelが旧Candidateと別OIDへ解決されたのにsource identity変更として扱わず、または既存Candidateのlabel driftだけで記録済みOIDに基づく証拠を失効させていないか
+- reviewerがbase ref labelのdriftを理由に記録済みOIDを置換またはCandidate mismatchとし、固定OIDからの再現を行っていないか
+- 一時indexのresolved base OID、対象path、mode、untracked contentがCandidate Definitionのsource identityと一致しているか
+- `GIT_INDEX_FILE`が通常indexのpostcondition確認まで残り、一時indexを通常indexとして誤確認していないか
+- 一時indexのcleanup失敗を見逃し、staleなindexを後続Candidateで再利用していないか
+- 一時index削除後、`GIT_INDEX_FILE`を継承しないfresh processで通常indexのtree OIDとstatusを再確認したか

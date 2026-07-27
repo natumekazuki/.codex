@@ -1,9 +1,10 @@
 # ADR-0007: frozen Candidateと不変条件lensでhigh-risk reviewを収束させる
 
-- Status: accepted
+- Status: accepted, amended by ADR-0008
 - Date: 2026-07-26
 - Amends: ADR-0004, ADR-0005
 - Related: ADR-0006
+- Amended by: ADR-0008 (2026-07-27)
 
 ## Context
 
@@ -16,11 +17,10 @@ genericなcomplete-diff reviewを直列に追加すると新しい反例は見�
 ## Decision
 
 - `contract-closure`対象のhigh-riskまたはnon-localな変更では、accepted contractの根拠、supported scope、観測可能なfailure、canonical owner、兄弟入口、executable anchorを実装前に確定する。required / optional、default、failure semanticsなど結論を反転させる根拠が未確定なら、reviewへ進まず契約を確認する
-- source、適用可能なexecutable contract、targeted check、該当する構造収束gateが揃ったexact source stateをtask-localなCandidateとして凍結する。Candidate IDは対象source state、accepted anchors、Invariant Matrix、実行済みcheckを結び付け、具体的なhandoff形式は`contract-closure`を正本とする
-- Candidate IDはtask-localな結合キーとし、hash方式を暗黙に表さない。source identityは値と再現recipeを対にし、対象contentまたはaccepted anchors、Invariant Matrix、実行済みcheckのbindingが変わった場合、以前のreviewとcheckを更新後Candidateの証拠として扱わず、必要な再検証後に新しいCandidate IDを発行する
+- source、適用可能なexecutable contract、targeted check、該当する構造収束gateが揃ったexact source stateをtask-localなCandidateとして凍結する。Candidate DefinitionとEvidence Ledgerの境界、identity mode、失効、evidence entryの出自、sandbox別の作成・read-only検証recipeはADR-0008と`contract-closure`を正本とし、本ADRではreview方式を所有する
 - `contract-closure`はInvariant Matrixから独立してtriggerされたreview lensを選ぶ。1 lensにつき1 reviewer、同じCandidateにつき1から3 lensを原則として並列にreviewし、同じlensへreviewerを重ねない
 - specialist reviewerは割り当てられたlensとmatrix cellを反証し、review済みcell、未確認cell、finding、hardening候補、validation gapを分ける。root sessionがfindingをaccepted contractへ照合し、不変条件familyへ統合して最終分類する
-- 全specialist reviewを終え、`blocking`がある場合だけSibling Sweepとcheckを再実行する。新Candidateではfindingを出したlensがfamilyとdeltaをtargeted re-reviewし、他のtrigger済みlensも担当cellへのdeltaの非影響を再確認する。全lensの証拠が同じ現行Candidateへ揃った後、`blocking`の有無にかかわらず、過去finding、claimed resolution、実装者の結論、既存Closure Mapを知らないreviewerが更新後complete diffをholisticにreviewする
+- 全specialist reviewを終え、`blocking`がある場合だけSibling Sweepとcheckを再実行する。新Candidateではfindingを出したlensがfamilyとdeltaをtargeted re-reviewし、他のtrigger済みlensも担当cellへのdeltaの非影響を再確認する。全lensの証拠が同じ現行Candidateへ揃った後、`blocking`の有無にかかわらず、過去finding、specialist reviewの結論、claimed resolution、実装者の結論、既存Closure Mapを知らないreviewerが更新後complete diffをholisticにreviewする
 - specialist reviewはADR-0004のfull-diff review回数へ数えない。holistic complete-diff reviewと、その`blocking`修正後のfresh-context closure reviewにはADR-0004の上限と停止条件を適用する
 - 初期導入では既存の`reviewer` roleへreview kindとlensを渡す。専用roleの追加、routing hookによる機械制御、恒久的なCandidate保存は、実案件pilotで観点混在や証拠誤帰属が確認された場合だけ検討する
 
@@ -35,7 +35,7 @@ genericなcomplete-diff reviewを直列に追加すると新しい反例は見�
 ## Consequences
 
 - Positive: 同じ不変条件を持つ兄弟operationとfailure timingを、一つのfamilyとしてreviewと修正へ載せられる
-- Positive: schema根拠、check、review結果をexact Candidateへ結び付け、moving diffへの誤ったclosure claimを減らせる
+- Positive: schema根拠とreview scopeをexact Candidateへ、checkとreview結果をそのEvidence Ledgerへ結び付け、moving diffへの誤ったclosure claimを減らせる
 - Positive: reviewコストをgenericな反復ではなく、変更がtriggerした専門観点へ配分できる
 - Positive: hardening候補とaccepted contract違反を分離し、root sessionが根拠付きで停止判断できる
 - Negative: high-riskな変更ではCandidate作成、matrix、複数reviewer、holistic closureの実行コストが増える
@@ -46,8 +46,8 @@ genericなcomplete-diff reviewを直列に追加すると新しい反例は見�
 ## Policy Anchors
 
 - Lifecycle and holistic join: `AGENTS.md`
-- Candidate evidence, identity, invalidation, Invariant Matrix, lens selection, and review handoff: `skills/contract-closure/SKILL.md`
+- Candidate Definition, Evidence Ledger, identity, invalidation, Invariant Matrix, lens selection, and review handoff: `skills/contract-closure/SKILL.md`
 - Reusable counterexample axes: `skills/contract-closure/references/trigger-matrices.md`
 - Reviewer responsibility and output: `agents/reviewer.toml`
 - Structural convergence boundary: `skills/consolidate-structure/SKILL.md`
-- Executable contract: なし。初期導入はtask-local Candidateとhistorical replayで検証し、review cycleを機械制御するruntimeを導入する場合だけその状態遷移を別のexecutable contractとして追加する
+- Runtime executable contract: なし。review cycleを機械制御するruntimeを導入する場合だけ、その状態遷移を別のexecutable contractとして追加する

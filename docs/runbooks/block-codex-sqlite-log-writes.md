@@ -6,22 +6,14 @@ Codexが`%USERPROFILE%\.codex\logs_2.sqlite`へ診断ログを書き続けるこ
 
 この対策は`logs`テーブルへの`INSERT`をSQLiteトリガーで無視する。既存のログは削除せず、会話やスレッドの状態を保存する別のSQLiteデータベースには影響しない。
 
-## この端末での適用状態
-
-- 適用日: 2026-07-25
-- 対象: `%USERPROFILE%\.codex\logs_2.sqlite`
-- トリガー名: `block_log_inserts`
-- 適用時の整合性確認: `PRAGMA quick_check`が`ok`
-- 挿入停止の確認: 検証用の有効な`INSERT`後も、行数、最大ID、`sqlite_sequence`が変化せず、検証行も存在しない
-
-`%USERPROFILE%\.codex\sqlite\logs_2.sqlite`にも古いデータベースがあるが、現在は更新されていないため対象外とした。
+このrunbookは端末間で共有する手順だけを扱う。適用状態は端末ごとに「確認」の手順で判定し、このファイルには記録しない。
 
 ## 動作
 
-適用しているトリガーは次のとおり。
+この手順が作成するトリガーは次のとおり。
 
 ```sql
-CREATE TRIGGER IF NOT EXISTS block_log_inserts
+CREATE TRIGGER block_log_inserts
 BEFORE INSERT ON logs
 BEGIN
     SELECT RAISE(IGNORE);
@@ -52,6 +44,7 @@ expected = " ".join(
 )
 connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
 try:
+    quick_check = connection.execute("PRAGMA quick_check").fetchone()[0]
     trigger = connection.execute(
         """
         SELECT sql
@@ -65,15 +58,16 @@ try:
         actual = " ".join(trigger[0].upper().split()).rstrip(";")
         status = "INSTALLED" if actual == expected else "UNEXPECTED DEFINITION"
         print(status)
+        print(f"quick_check={quick_check}")
         print(trigger[0])
 finally:
     connection.close()
 '@ | python -
 ```
 
-`INSTALLED`とトリガーのSQLが表示されれば、この対策は有効になっている。`UNEXPECTED DEFINITION`の場合は、同名で異なるトリガーが存在するため、その内容を確認してから修正する。
+`INSTALLED`、`quick_check=ok`、トリガーのSQLが表示されれば、この対策は有効になっている。`UNEXPECTED DEFINITION`の場合は、同名で異なるトリガーが存在するため、その内容を確認してから修正する。
 
-## 再適用
+## 適用または再適用
 
 データベースの再作成やmigrationでトリガーが失われた場合は、PowerShellから次を実行する。
 
@@ -93,9 +87,12 @@ expected = " ".join(
     END
     """.upper().split()
 )
-connection = sqlite3.connect(path, timeout=60)
+connection = sqlite3.connect(f"{path.as_uri()}?mode=rw", uri=True, timeout=60)
 connection.execute("PRAGMA busy_timeout = 60000")
 try:
+    connection.execute("BEGIN IMMEDIATE")
+    if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        raise RuntimeError("quick_check failed before trigger installation")
     existing = connection.execute(
         """
         SELECT sql
@@ -104,26 +101,30 @@ try:
         """
     ).fetchone()
     if existing is None:
-        connection.executescript(
+        connection.execute(
             """
             CREATE TRIGGER block_log_inserts
             BEFORE INSERT ON logs
             BEGIN
                 SELECT RAISE(IGNORE);
-            END;
+            END
             """
         )
     else:
         actual = " ".join(existing[0].upper().split()).rstrip(";")
         if actual != expected:
             raise RuntimeError("block_log_inserts has an unexpected definition")
+    if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        raise RuntimeError("quick_check failed after trigger installation")
     connection.commit()
 finally:
+    if connection.in_transaction:
+        connection.rollback()
     connection.close()
 '@ | python -
 ```
 
-再適用後は「確認」の手順を実行する。
+適用後は「確認」の手順を実行する。
 
 ## 解除
 
@@ -145,9 +146,12 @@ expected = " ".join(
     END
     """.upper().split()
 )
-connection = sqlite3.connect(path, timeout=60)
+connection = sqlite3.connect(f"{path.as_uri()}?mode=rw", uri=True, timeout=60)
 connection.execute("PRAGMA busy_timeout = 60000")
 try:
+    connection.execute("BEGIN IMMEDIATE")
+    if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        raise RuntimeError("quick_check failed before trigger removal")
     existing = connection.execute(
         """
         SELECT sql
@@ -160,8 +164,12 @@ try:
         if actual != expected:
             raise RuntimeError("block_log_inserts has an unexpected definition")
         connection.execute("DROP TRIGGER block_log_inserts")
+    if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        raise RuntimeError("quick_check failed after trigger removal")
     connection.commit()
 finally:
+    if connection.in_transaction:
+        connection.rollback()
     connection.close()
 '@ | python -
 ```
@@ -169,7 +177,7 @@ finally:
 ## 制約と再確認の条件
 
 - この対策が止めるのは`logs`テーブルへの新規挿入であり、データベースファイルをOSレベルで読み取り専用にはしない。
-- Codexはログ挿入とは別に、保持期限を過ぎた行の削除やWAL checkpointを起動時に実行する。そのため、大量ログの主因である継続的な`INSERT`は止まるが、ファイルへの書き込みが将来も完全にゼロになることまでは保証しない。
+- Codexはログ挿入とは別に、保持期限を過ぎた行の削除やWAL checkpointを起動時に実行する。そのため、継続的な`INSERT`は止まるが、ファイルへの書き込みが将来も完全にゼロになることまでは保証しない。
 - 既存の`logs_2.sqlite`のファイルサイズは縮小しない。縮小には別途、削除または`VACUUM`などの操作が必要になる。
 - Codexの更新、データベースの再作成、schema migration後は、トリガーが残っているか確認する。
 - `logs_2.sqlite`またはWALの継続的な増加が再発した場合は、トリガーの存在と対象データベースの場所を確認する。
