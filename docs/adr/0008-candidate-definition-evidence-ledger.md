@@ -20,10 +20,8 @@ review contractだけを変更した後に旧evidenceを新Candidateへ再関連
 - Candidateを不変の`Candidate Definition`と可変の`Evidence Ledger`へ分ける
 - Candidate Definitionは、immutableなbase OIDを含むSource Identityと、accepted anchor、その契約上の意味、Invariant、supported scopeを含むReview Contractで構成する。ref labelはprovenanceの説明にだけ使う
 - Source Identityの標準方式は、Git metadataへ書き込まず作成側とread-only reviewerが同じ状態を再現できる方式とする。treeを使う方式は作成側に必要なauthorityがある場合だけ選び、reviewerには生成を要求しない
-- Evidence Ledgerには実行済みcheck、review、coverage、validation gap、residual riskを記録する。entryのID、kind、実行Candidate、resultは変更せず、別Candidateへ移動または再関連付けしない
-- checkやreviewの追加だけではCandidateを失効させない。source identityが変わった場合はreview contractの同時変更より先に扱い、旧Candidateのsource依存証拠を`superseded`にする
-- review contractだけが変わった場合は、旧entryを元Candidateに保持して新Candidateの完了証拠から除外し、影響する対応cellを新Candidate上で`unconfirmed`とする。影響しない旧証拠を利用するには、元entry、確認した定義差分、非影響の根拠を記録した新しい確認entryを必要とする
-- 全trigger済みlensの現行証拠が同じCandidateへ揃った後にcomplete-diff holistic reviewを行う
+- Evidence LedgerにはCandidateの定義を変えずに追加できる完了証拠と、その出自を記録する。field、status、Candidate間の扱いは`skills/contract-closure/SKILL.md`だけで定義する
+- source identityまたはreview contractが変わった場合のCandidate失効とevidenceの扱いは`skills/contract-closure/SKILL.md`、specialist reviewからholistic reviewへの合流順序は`AGENTS.md`だけで定義する
 - Candidate Definition、Evidence Ledger、失効条件、生成・検証手順、review handoffの詳細は`skills/contract-closure/SKILL.md`を正本とする
 
 ## Alternatives
@@ -57,6 +55,6 @@ review contractだけを変更した後に旧evidenceを新Candidateへ再関連
 - Lifecycle and holistic join: `AGENTS.md`
 - Candidate Definition, Evidence Ledger, invalidation, and handoff: `skills/contract-closure/SKILL.md`
 - Reusable counterexamples: `skills/contract-closure/references/trigger-matrices.md`
-- Reviewer input and output: `agents/reviewer.toml`
-- Validation report: `skills/validation-report/SKILL.md`
+- Reviewer read-only boundary, accepted input, and output: `agents/reviewer.toml`
+- User-facing validation projection: `skills/validation-report/SKILL.md`
 - Runtime executable contract: なし。状態管理を実装する場合だけ、その実装の観測可能な振る舞いを検証する

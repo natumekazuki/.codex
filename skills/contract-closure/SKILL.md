@@ -72,11 +72,20 @@ Canonical owner:
 - `residual-risk`: 発生条件、影響、検知、復旧、follow-up要否を分類した
 - `unresolved`: 契約または反例の確認が不足し、Candidateをreviewへ渡せない
 
+Candidate Definitionにはcellの軸と判定条件を含むmatrix cell definitionを固定し、`Cell status`はEvidence Ledgerのcoverage statusとして更新する。`unconfirmed`はEvidence Ledgerのcheck / review entry専用であり、Matrix cellへ設定しない。
+
 観測されたcaseを閉じただけで同じInvariant IDの兄弟cellを未確認にしない。無関係なoperation、platform、既存負債へ無制限に広げず、同じcapability、owner、state、resource scope、public projectionを共有する範囲へ限定する。
 
 ## Candidate Definition and Evidence Ledger
 
 high-risk / non-localな変更でIndependent Closure Reviewを行う場合は、source、適用可能なexecutable contract、targeted check、該当する構造収束gateが揃ったexact source stateをtask-localに凍結する。
+
+### Canonical Boundary
+
+- Candidate Definitionのfieldと意味、source identityの生成・read-only検証、Candidate失効、Evidence Ledgerのentryとstatus、Invariant Matrix、lens選択、review handoffはこのSkillだけで規範的に定義する。
+- `AGENTS.md`はCandidate reviewの開始条件、specialist reviewとfinding対応の合流順序、holistic reviewの開始条件、finding分類、review回数、完了gateを定め、この節のfieldや失効アルゴリズムを再定義しない。
+- `agents/reviewer.toml`はreviewerのread-only安全境界、review kindごとに受け取れる情報、findingとcoverageの出力を定める。reviewerはこの節のhandoffを検証し、CandidateやLedgerの意味を独自に補完または変更しない。
+- `skills/validation-report/`はtask-localなCandidate evidenceをuser-facingな完了報告へ投影する。表示のためにCandidate identityやevidence statusを再計算しない。
 
 ```text
 Candidate Definition:
@@ -92,6 +101,7 @@ Candidate tree OID: <OID or not applicable>
 Changed / untracked path manifest:
 Supported-scope cleanliness recipe / result:
 Raw diff command:
+Raw diff digest: <algorithm:value over exact stdout bytes>
 Accepted contract anchors:
 Accepted contract meaning:
 Supported contract scope:
@@ -112,19 +122,31 @@ Validation gaps / hardening candidates / residual risks:
 
 - Candidate Definitionはsource identityとreview contractを識別する不変の記録である。Candidate IDはEvidence Ledgerを結び付けるtask-localな識別子であり、hash algorithmを暗黙に表さない。作成側は作成recipeと必要なauthorityを、reviewer向けにはGit index、object database、worktreeを変更しないread-only verification recipeを別々に記録する。reviewerはID文字列ではなくread-only verification recipeを再実行してsource identityとreview contractを確認する。
 - Evidence Ledgerは同じCandidateへ追加する可変の完了証拠である。check、review、coverage status、構造収束gate、gap、hardening candidate、residual riskの追加または更新だけではCandidate IDを変更しない。失敗したcheckは完了をblockするが、Candidate Definitionを変更しない。
-- Candidate作成時にbase revision expressionを一つのquoted argumentとして`git rev-parse --verify "<base-ref-label>^{commit}"`へ渡し、commit OIDへ一度だけ解決する。そのcommitから`git rev-parse "<resolved-base-commit-oid>^{tree}"`でtree OIDを得て両方を記録する。各commandのexit code、出力が単一OIDであること、`git cat-file -t`で期待object typeであることを確認し、失敗時はCandidateをreview-readyにしない。PowerShellでは`git rev-parse --verify "$baseRefLabel^{commit}"`、POSIX shellでは`git rev-parse --verify "${base_ref_label}^{commit}"`のように、peel suffixを含むrevision expression全体をquoteする。base ref labelは由来を説明する情報であり、Candidate作成後の再解決結果をsource identity、再現、失効判定へ使わない。ref labelが移動しても、記録済みOIDが変わらない限りCandidateは変化しない。
-- 標準のsource identity modeは`manifest-digest`とする。Git metadataへのwrite authorityを要求せず、記録済みbase OID、read-onlyなGit query、worktreeのreadだけで作成と再検証を完結させる。`git status`を使う場合は必ず`git --no-optional-locks status`とし、index refreshを含むoptional writeを無効化する。changed / untracked pathをNUL区切りなど曖昧でない形式で安定sortし、各recordへpath、追加・変更・削除、Git mode、object type、regular fileのexact byte digest、symlink target bytesのdigest、submodule OID、削除markerを該当分だけ含める。全体digestにはalgorithm、record framing、path encoding、入力byte列、filter適用の有無、改行を含む正規化規則を明記する。mode-only変更とuntracked contentをpath名だけで識別してはならない。
-- `creator-tree` modeは、Candidate作成側に一時indexとGit object databaseへのwrite authorityが既にある場合だけ選べる。作成側は最初に通常indexのtree OIDと`git --no-optional-locks status`の結果を記録し、task-localで一意な一時indexへ`GIT_INDEX_FILE`を限定して、記録済みbase tree OIDから対象source stateを構築し、Candidate treeを生成する。Candidate Definitionへtree OIDを必ず記録し、manifestとraw diffは記録済みbase commit OIDとそのtree OIDから生成する。操作後は環境変数を解除して一時indexを削除し、同変数を継承しないfresh processで通常indexのtree OIDと`git --no-optional-locks status`の結果が作成前と一致することを確認する。write authority、cleanup、またはpostcondition確認のいずれかが満たせない場合は`creator-tree`を使わず、`manifest-digest`へ切り替える。
-- reviewerはsource identity modeにかかわらず`read-tree`、`write-tree`、`hash-object -w`、`update-index`その他Git index、object database、worktreeへ書き込むcommandを実行しない。検証processのGit queryでは`git --no-optional-locks`または同等の`GIT_OPTIONAL_LOCKS=0`を使い、optional index refreshも禁止する。`manifest-digest`では宣言済みrecipeをread-onlyで再計算する。`creator-tree`では作成側が記録した既存tree OIDの存在とtypeを`cat-file`などで確認し、記録済みbase commit OIDとtree OIDからmanifestとraw diffを再生成する。tree objectが存在しない、読めない、またはidentityが一致しない場合は、reviewerが再作成せずCandidate mismatchまたはvalidation gapとして停止する。
+- Candidate作成時に、replacement objectとpromisor remoteからのlazy fetchを無効にしたGit processでbase revision expressionを一つのquoted argumentとして`git --no-replace-objects --no-lazy-fetch rev-parse --verify "<base-ref-label>^{commit}"`へ渡し、commit OIDへ一度だけ解決する。そのcommitから`git --no-replace-objects --no-lazy-fetch rev-parse "<resolved-base-commit-oid>^{tree}"`でtree OIDを得て両方を記録する。各commandのexit code、出力が単一OIDであること、同じprocess条件の`git cat-file -t`で期待object typeであることを確認し、失敗またはmissing objectではfetchせずCandidateをreview-readyにしない。PowerShellとPOSIX shellのどちらでも、peel suffixを含むrevision expression全体を一つのargumentとしてquoteする。base ref labelは由来を説明する情報であり、Candidate作成後の再解決結果をsource identity、再現、失効判定へ使わない。ref labelが移動しても、記録済みOIDが変わらない限りCandidateは変化しない。
+- 標準のsource identity modeは`manifest-digest`とする。Git metadataへのwrite authorityを要求せず、記録済みbase OID、read-onlyなGit query、worktreeのreadだけで作成と再検証を完結させる。すべてのGit processでreplacement objectとlazy fetchを無効にし、`git status`を使う場合はさらに`--no-optional-locks`を指定してindex refreshを含むoptional writeを無効化する。changed / untracked pathをNUL区切りなど曖昧でない形式で安定sortし、各recordへpath、追加・変更・削除、Git mode、object type、regular fileのexact byte digest、symlink target bytesのdigest、submodule OID、削除markerを該当分だけ含める。全体digestにはalgorithm、record framing、path encoding、入力byte列、filter適用の有無、改行を含む正規化規則を明記する。raw diffでは記録済みbase commit OIDを使い、external diffとtext conversionを無効にしたbinary/full-index形式のcommandと、stdoutのexact bytesに対するalgorithm付きdigestを記録する。untracked contentはraw diffへ含まれない場合もmanifestのexact content identityへ固定し、review handoffでは検証済みpathの内容を別途review対象に含める。mode-only変更とuntracked contentをpath名だけで識別してはならない。
+- `creator-tree` modeは、Candidate作成側に一時indexとGit object databaseへのwrite authorityが既にある場合だけ選べる。作成recipeの開始からpostcondition確認まで、一時indexの構築、Candidate tree生成、manifestとraw diffの生成を含むすべてのGit commandへ`--no-replace-objects --no-lazy-fetch`を指定する。通常indexの作成前とcleanup後にtree OIDとstatusを確認するGit commandには、同じ条件に加えて`--no-optional-locks`も指定する。作成側は最初にその条件で通常indexのtree OIDとstatusを記録し、task-localで一意な一時indexへ`GIT_INDEX_FILE`を限定して、記録済みbase tree OIDから対象source stateを構築し、Candidate treeを生成する。Candidate Definitionへtree OIDを必ず記録し、manifestとraw diffは記録済みbase commit OIDとそのtree OIDから生成し、raw diffのstdout exact bytesに対するalgorithm付きdigestを記録する。必要なobjectがローカルに存在しない場合はfetchせず、Candidateをreview-readyにしない。操作後は環境変数を解除して一時indexを削除し、同変数を継承しないfresh processで、同じGit安全条件の下、通常indexのtree OIDとstatusが作成前と一致することを確認する。必要なauthorityまたはpreflight条件を最初のwrite-capable commandの試行前に満たせない場合だけ、`creator-tree`を開始せず`manifest-digest`へ切り替えられる。最初のwrite-capable commandを試行した後は、途中失敗、一時indexのcleanup失敗、またはnormal-index postconditionの不一致・確認不能があればCandidateを発行せず停止し、validation gapまたは安全境界の失敗として報告する。write開始後に`manifest-digest`へ切り替えたり、生成途中のobjectを再利用したりしない。
+- reviewerはsource identity modeにかかわらず`read-tree`、`write-tree`、`hash-object -w`、`update-index`その他Git index、object database、worktreeへ書き込むcommandを実行しない。検証processの全Git queryでは`--no-replace-objects`と`--no-lazy-fetch`を使い、statusなどoptional writeがあり得るcommandでは`--no-optional-locks`も使う。記録済みcommitからreplacement objectなしで得たtree OIDが記録済みbase tree OIDと一致することを確認する。`manifest-digest`では宣言済みmanifest recipeをread-onlyで再計算し、記録済みbase commit OIDと検証済みworktreeから宣言済みraw diff commandを再実行する。`creator-tree`では作成側が記録した既存tree OIDの存在とtypeを確認し、記録済みbase commit OIDとtree OIDからmanifestとraw diffを再生成する。どちらのmodeでも再生成したraw diffのstdout exact bytesを記録済みalgorithmでdigestし、Candidate Definitionの値と一致した場合だけ、その再生成bytesとmanifestで固定したuntracked contentをsubstantive reviewへ使う。handoffに別のraw diff artifactが含まれる場合はそのexact-byte digestも記録値と一致させ、一致しないartifactをreview対象にしない。必要なobjectがローカルに存在しない、読めない、またはmanifest、raw diff、その他identity fieldが一致しない場合は、reviewerがfetchまたは再作成せずCandidate mismatchまたはvalidation gapとして停止する。
+- Candidateのread-only検証結果は`verified`、`mismatch`、`validation-gap`のいずれかとする。宣言済みrecipeを完了して全fieldが一致した場合だけ`verified`、recipeを完了して不一致を確認した場合は`mismatch`、必須field、object、query、sandbox capabilityの不足により一致・不一致を判定できない場合は`validation-gap`とする。`verified`の場合だけsubstantive reviewへ進み、reviewed cellとreview evidenceを生成できる。`mismatch`または`validation-gap`ではsubstantive reviewを開始せず、validation-only outputとしてOverall judgmentを`not assessed — mismatch`または`not assessed — validation-gap`、Blocking finding statusを`not assessed`、review scopeを`Candidate verification only`、reviewed cellを`none`とし、検証evidenceとvalidation gapだけを返す。rootはその結果を現行Candidateのcheck / review entryへ記録せず、Evidence Ledgerのvalidation gapとして扱う。この検証結果はreviewerのimmutableな出力であり、Candidate Definitionのfield、Candidateの失効判定、Evidence Ledger entryのstatusとして扱わない。
 - 通常のGit indexをCandidate作成のためだけに変更しない。既存indexを使えるのは、ユーザーがcommit用stageを明示的に許可し、staged scopeがCandidate Definitionの対象と一致すると確認できた場合に限る。
-- Candidate失効はsource identityを先に判定する。source content、file mode、記録済みresolved base commit / tree OID、identity mode / value、manifest、作成recipe、read-only verification recipeのいずれかが変わった場合は新Candidateを発行する。Candidateを再作成するとき、同じbase ref labelが旧Candidateと異なるOIDへ解決された場合もsource identity変更である。既存Candidateのref labelを再解決した結果だけで、そのCandidateを失効させない。review contractも同時に変わった場合を含め、旧Candidateの全reviewとsource依存checkは必ず`superseded`として完了証拠から除外し、`unconfirmed`への移行や新Candidateへの再関連付けを認めない。
 - Evidence entryはtask-localに一意なEntry ID、実行または作成されたCandidate ID、kind、resultを不変の出自として持つ。既存entryのCandidate IDを書き換えたり、新Candidateへ移動または再関連付けしたりしない。Ledger statusを更新する場合も、entryの出自は変えない。`definition-delta non-impact confirmation`は、元entryのEntry IDとCandidate IDに加え、reviewed definition deltaとnon-impact rationaleもentry固有の不変fieldとして持つ。
-- source identityが変わらず、accepted anchorまたはその契約上の意味、supported contract scope、Invariant IDまたはその定義、matrix cell定義、lens scope、review contract revision / recipeのいずれかだけが変わった場合も新Candidateを発行する。旧entryは元Candidateに保持して新Candidateの完了証拠から除外し、影響するlens、check、holistic review対象の対応cellを新Candidate上で`unconfirmed`とする。holistic review対象はexact source stateとcomplete raw diffだけでなく、accepted anchor、そのanchorが定める契約の意味、Invariant、supported scopeを含む。
-- review-contract-only変更の影響を受けないevidenceも自動継承しない。新Candidate上で定義差分が担当cellへ影響しないことを確認した場合は、元entryのEntry IDとCandidate ID、確認した定義差分、非影響の根拠を持つ独立した`definition-delta non-impact confirmation` entryを新CandidateのLedgerへ追加する。`current`にできるのはこの新しい確認entryであり、元entryは元Candidateの履歴として保持する。影響がある場合は新Candidate上でcheckまたはreviewを実行し、新しい実行entryを作る。
-- source identity変更後に他のtrigger済みlensが担当cellへのdelta非影響を確認する場合、その確認は新Candidateを対象に新しく得たreview evidenceであり、旧Candidateのevidenceの再関連付けではない。
-- Evidence Ledgerのreview entryは`current`、`superseded`、`unconfirmed`のいずれかとする。完了根拠には現行Candidateへ紐付く`current`のentryだけを使う。
+- Evidence Ledgerのcheckとreview entryは`current`、`superseded`、`unconfirmed`のいずれかとする。完了根拠には現行Candidateへ紐付く`current`のentryだけを使う。
 - targeted re-reviewは新Candidateに対する対象familyとresulting deltaのclosureであり、complete-diff reviewを見た証拠にしない。
 - Candidate DefinitionとEvidence Ledgerはtask-localに保持し、現行仕様として恒久設計文書へ複製しない。
+
+### Candidate Transition
+
+Candidateの変更要否はsource identity、review contract、Ledger-only changeの順で判定する。source identityとreview contractが同時に変わった場合はsource identity変更として扱う。
+
+| Observed change | Candidate | Existing evidence | Evidence required for completion |
+| --- | --- | --- | --- |
+| check、review、coverage status、構造収束gate、gap、hardening candidate、residual riskだけを追加または更新 | 同じCandidateを維持する | entryの出自とstatusを自動変更しない。失敗したcheckは完了をblockする | 現行Candidateの既存`current` entryと新しいLedger entry |
+| source identityは不変で、accepted anchorまたはその意味、supported scope、Invariant定義、matrix cell定義、lens scope、review contract revision / recipeのいずれかが変更 | 新Candidateを発行する | 定義差分の影響を受ける旧check / review entryは元Candidateに保持したまま`unconfirmed`とし、新Candidateの対応Matrix cellは`unresolved`とする。旧entryを新Candidateの完了証拠へ移動または再関連付けしない | review handoff前に、影響するcheckの新規実行または定義差分の非影響確認によって対応cellを`covered`、`anchored-exception`、`residual-risk`のいずれかへ更新する。完了には必要な新規review entryも揃える |
+| source content、file mode、記録済みbase OID、identity mode / value、manifest、作成recipe、read-only verification recipe、raw diff command / digest recipe / digest valueのいずれかが変更 | 新Candidateを発行する | review contractも同時に変わった場合を含め、旧Candidateの全reviewとsource依存checkを`superseded`とし、`unconfirmed`への移行や新Candidateへの再関連付けをしない | 新Candidate上で新しく実行または確認したevidence |
+
+- Candidateを再作成するとき、同じbase ref labelが旧Candidateと異なるOIDへ解決された場合はsource identity変更である。既存Candidateのref labelを再解決した結果だけでは、そのCandidateを失効させない。
+- holistic review対象はexact source stateとcomplete raw diffだけでなく、accepted anchor、そのanchorが定める契約の意味、Invariant、supported scopeを含む。これらの変更はreview contract変更として判定する。
+- review-contract-only変更の影響を受けないevidenceも自動継承しない。新Candidate上で定義差分が担当cellへ影響しないことを確認した場合だけ、元entryと元Candidate、reviewed definition delta、non-impact rationaleを持つ独立した`definition-delta non-impact confirmation` entryを`current`にでき、そのentryを根拠に対応cellを正規の`Cell status`へ更新する。影響がある場合は新Candidate上でcheckを実行してreview handoff前に`unresolved`を閉じ、必要なreviewを新しい実行entryとして記録する。
+- source identity変更後に他のtrigger済みlensが担当cellへのdelta非影響を確認する場合、その確認は新Candidateを対象に新しく得たreview evidenceであり、旧Candidateのevidenceの再関連付けではない。
 
 ## Review Lens Selection
 
@@ -154,18 +176,18 @@ Findingへのreply、thread resolve、対象testの追加だけをSibling Sweep�
 
 finding分類、risk acceptance、review回数、完了条件は`AGENTS.md`の「Validation and Review Completion Gates」を正本とする。このSkillは、changed invariant、到達可能な反例、兄弟経路、executable contract、未確認cellをevidenceとして返し、分類を提案するところまでを担当する。
 
-- sliceのtargeted reviewで見つかった`blocking`は、同じsliceのSibling Sweep、targeted check、targeted re-reviewで閉じる。
-- fresh-context full-diff closure reviewは、統合後のcomplete-diff reviewで`blocking`へ対応した場合だけ適用する。未完成または未統合のtaskへ広げない。
+targeted review、specialist finding対応、holistic review、fresh-context closure reviewの開始条件と合流順序は`AGENTS.md`に従う。
 
 ## Independent Closure Review
 
 契約が複数入口・複数subsystemへ波及する、複合不変条件を変更する、または失敗がpublic contract、永続化、migration、外部副作用、認可、owner / scope、並行処理、resource limitへ重大な影響を与える場合は、実装とtargeted checkの後、完了前に実装者から独立したreviewを行う。
 
 - researcherは根拠収集、validatorは機械的確認、reviewerは反例探索を担当する。researchやgreen testをreviewの代用にしない。
-- initial、specialist、またはtargetedなIndependent Closure Reviewでは、reviewerにreview kind、Candidate Definition、現行Evidence Ledger、割り当てたlens、goal、ユーザー要求または既存のaccepted contract、raw diff、canonical anchors、task-local Closure Map、対象matrix cell、実行済みcheckを渡す。実装者の結論を確定事実として渡さない。
+- initial、specialist、またはtargetedなIndependent Closure Reviewでは、reviewerにreview kind、Candidate Definition、現行Evidence Ledger、rootがtask-localに割り当てたreview Entry IDまたは未割当である事実、割り当てたlens、goal、ユーザー要求または既存のaccepted contract、raw diff、canonical anchors、task-local Closure Map、対象matrix cell、実行済みcheckを渡す。実装者の結論を確定事実として渡さない。
 - specialist reviewerは割り当てられたlensとmatrix cellへ集中し、確認したcell、未確認cell、finding、hardening候補、validation gapを分けて返す。rootは複数lensのfindingを不変条件familyへ統合する。
-- specialist reviewの`blocking`を修正した場合はSibling Sweepとcheckを再実行する。新Candidate上でfindingを出したlensは対象familyとresulting deltaをtargeted re-reviewし、他のtrigger済みlensも担当cellへのdeltaの非影響を再確認する。全lensの証拠が同じ現行Candidateへ揃うまでholistic reviewへ進まず、その後の無条件合流は`AGENTS.md`に従う。
-- holistic complete-diff reviewとblocking修正後のfresh-context full-diff closure reviewでは、利用可能なら`fork_turns="none"`を使い、Candidate Definition、現行Candidateに対する実行済みcheck、goalとaccepted contract、更新後raw diff、canonical anchorsだけを渡す。過去finding、specialist reviewの結論、claimed resolution、実装者の結論、既存Closure Mapを渡さず、reviewerが不変条件と反例を再構築する。
+- specialist finding対応後の再検証とreview合流順序は`AGENTS.md`に従い、Candidateとevidenceの変更はこのSkillのCandidate Transitionに従って記録する。
+- holistic complete-diff reviewとblocking修正後のfresh-context full-diff closure reviewでは、利用可能なら`fork_turns="none"`を使い、Candidate Definition、rootがtask-localに割り当てたreview Entry IDまたは未割当である事実、現行Candidateに対する実行済みcheck、goalとaccepted contract、更新後raw diff、canonical anchorsだけを渡す。過去finding、specialist reviewの結論、claimed resolution、実装者の結論、既存Closure Mapを渡さず、reviewerが不変条件と反例を再構築する。
+- reviewerは割り当て済みのreview Entry IDがあればその値をechoし、未割当なら`unassigned`と返して自分で生成しない。reviewerはimmutableなreview resultだけを返し、Evidence Ledger statusを選択または更新しない。rootがresultを受け取った後にentryとstatusをLedgerへ記録する。
 - reviewerはfinding-firstで、反例、同じ契約を持つ兄弟経路、failure timing、owner / scope、欠けたexecutable contractを根拠付きで返し、各findingの分類を提案する。
 - rootはfindingをsourceとexecutable contractへ照合して分類を確定し、採用した`blocking` findingを同じ不変条件familyへ展開してから修正・再検証する。
 - reviewerを利用できない場合は、実装時の推論を引き継がないfresh-context second passを行い、独立review未実施を残リスクとして報告する。

@@ -24,10 +24,8 @@ Rules:
 - Prioritize concrete risks over style preferences.
 - For initial, specialist, or targeted contract-closure review, require the applicable Candidate Definition, current Evidence Ledger, and handoff defined by the contract-closure Skill. For holistic complete-diff or fresh-context closure review, require the Candidate Definition and current Candidate executed checks, but do not require or consume Ledger review entries, prior findings, specialist conclusions, claimed resolutions, implementation conclusions, or a previous Closure Map. If required evidence is missing, report the gap instead of inventing it.
 - For specialist review, stay within the assigned lens and matrix cells. Follow a finding into sibling channels that share the same invariant family, but do not broaden into unrelated general bug hunting. Distinguish reviewed and unreviewed cells.
-- Treat checks and prior review evidence as valid only for the exact Candidate and immutable Evidence Ledger entry they name. Require the resolved base commit OID, base tree OID, source identity mode, creation recipe and authority, and read-only verification recipe recorded at Candidate creation. Never run `read-tree`, `write-tree`, `hash-object -w`, `update-index`, or another command that writes the Git index, object database, or worktree. Use `git --no-optional-locks` or an equivalent `GIT_OPTIONAL_LOCKS=0` process setting for verification Git queries so `status` and similar commands cannot refresh the index as a side effect. Require revision peel expressions to be passed as a single quoted argument and verify exit code, single-OID output, and object type. For `manifest-digest`, recompute the declared manifest and digest with read-only operations. For `creator-tree`, require the creator-generated tree OID, verify that the existing object is readable and is a tree, and regenerate the manifest and raw diff from the recorded base commit and candidate tree OIDs without recreating either object. Never re-resolve or substitute the informational base ref label. Ref-label drift alone is not a Candidate mismatch. Do not assume a digest algorithm, record framing, path encoding, filters, or normalization. If the supplied source identity, resolved base OIDs, diff, path manifest, accepted anchors, accepted contract meaning, supported contract scope, Invariant IDs or definitions, matrix cell definitions, or lens scope does not match, stop and report the mismatch.
-- Adding check or review results, updating existing-cell coverage status, or updating the structural-gate result does not change the Candidate Definition. Record those changes in the Evidence Ledger and do not supersede otherwise-current reviews.
-- Evaluate source identity before the review contract. After a source-identity change, including a simultaneous review-contract change, treat every prior Candidate review and source-dependent check as superseded; do not mark or re-associate any of that evidence as unconfirmed or current. When source identity is unchanged but the review contract changes, keep every old entry bound to its origin Candidate and exclude it from the new Candidate's completion evidence. Mark affected cells on the new Candidate unconfirmed. The holistic review target includes the exact source state and complete raw diff plus accepted anchors, their contract meaning, Invariants, and supported scope; if any of those change, holistic review must be executed again on the new Candidate. Do not carry unaffected review-contract-only evidence forward. Accept it only through a new `definition-delta non-impact confirmation` entry on the new Candidate that records the origin entry ID and Candidate ID, the reviewed definition delta, and the non-impact rationale.
-- After a specialist finding changes source, the finding lens must target the repaired invariant family and resulting delta on the new Candidate; every other triggered lens must produce new review evidence on that Candidate confirming that the delta does not affect its assigned cells before the Candidate can enter holistic review. This confirmation is not re-association of prior-Candidate evidence.
+- For Candidate-bound work, interpret Candidate fields, source identity, invalidation, Evidence Ledger status, verification result, and handoff only as defined by the contract-closure Skill. Verify the supplied Candidate by executing its declared read-only verification recipe. Do not derive a replacement identity, reclassify evidence, mutate Ledger entries, or invent missing handoff data. Return the canonical `verified`, `mismatch`, or `validation-gap` verification result. Continue into substantive review only for `verified`. For `mismatch` or `validation-gap`, stop before substantive review, report only the verification failure or gap, set reviewed cells to `none`, and do not produce Candidate-bound review evidence or an approval result.
+- Never run `read-tree`, `write-tree`, `hash-object -w`, `update-index`, or another command that writes the Git index, object database, or worktree. For verification Git queries, disable replacement objects and lazy fetch; also disable optional locks for commands such as `status` that could refresh the index. Do not re-resolve an informational base ref label, fetch or recreate a missing Candidate object, or continue when the recorded commit does not resolve to the recorded tree under these process settings. If the declared read-only recipe cannot be completed inside the reviewer sandbox, stop and report the validation gap.
 - Check that user-facing deliverables do not include expressions unsuited to the artifact's purpose, audience, or requested tone, such as unintended persona voice, first-person framing, catchphrases, roleplay framing, or casual tone.
 - Do not suggest broad rewrites unless needed to fix a concrete risk.
 - For each finding, include severity, proposed classification (blocking / risk-candidate / non-material / invalid), violated requirement or contract, reachability or preconditions, impact and blast radius, evidence, and minimal remediation direction. For risk candidates, also include detectability and recoverability.
@@ -48,20 +46,12 @@ Rules:
 - Check that enforceable behavior and invariants live in tests, types, schemas, or static checks, and that documents do not duplicate current implementation details.
 - Check that consequential decisions have an ADR and that architecture documents are limited to non-local context spanning multiple subsystems, processes, repositories, or external services that cannot be recovered from code and executable contracts.
 - Call out validation gaps.
-- If no blocking issues are found, say so clearly.
+- For substantive review only, if no blocking issues are found, say so clearly.
 
-Output:
+Output for a substantive review:
 - Overall judgment: approve / approve with non-blocking findings / changes requested
 - Review kind: initial / specialist / targeted re-review / holistic complete-diff / fresh-context closure
-- Candidate ID and assigned lens
-- Candidate Definition status: current / mismatch / not applicable
-- Evidence entry ID, evidence kind, and executed-on Candidate ID
-- Origin entry ID and Candidate ID: required for a definition-delta non-impact confirmation; otherwise not applicable
-- Evidence result
-- Reviewed definition delta and non-impact rationale: required for a definition-delta non-impact confirmation; otherwise not applicable
-- Evidence Ledger entry status: current / superseded / unconfirmed / not applicable
 - Review scope and included / excluded paths; complete updated diff reviewed: yes/no
-- Matrix cells reviewed and matrix cells unreviewed
 - Blocking finding status: remaining / none
 - Findings ordered by severity, each with proposed classification
 - Hardening candidates separated from blocking findings
@@ -70,4 +60,24 @@ Output:
 - Accepted-risk candidates
 - Validation gaps
 - Residual risks
+
+Verified Candidate output extension:
+- Candidate ID, assigned lens, and Candidate verification result: `verified`
+- Review Entry ID echoed from the handoff, or `unassigned` when the handoff did not allocate one; never invent an ID
+- Evidence kind, executed-on Candidate ID, and immutable review result; do not assign or update the Evidence Ledger status
+- Origin entry ID and Candidate ID, reviewed definition delta, and non-impact rationale when the evidence kind is a definition-delta non-impact confirmation
+- Matrix cells reviewed and matrix cells unreviewed
+
+Nonverified Candidate validation-only output:
+- Overall judgment: `not assessed — mismatch` or `not assessed — validation-gap`
+- Review kind echoed from the handoff
+- Review scope: `Candidate verification only`
+- Complete updated diff reviewed: `no`
+- Blocking finding status: `not assessed`
+- Candidate ID and Candidate verification result: `mismatch` or `validation-gap`
+- Review Entry ID echoed from the handoff, or `unassigned` when the handoff did not allocate one; never invent an ID or create a Ledger entry
+- Verification evidence
+- Validation gap
+- Reviewed cells: `none`
+- Do not emit substantive findings, hardening candidates, contract closure, accepted-risk candidates, residual risks, cell coverage, review evidence, or an approval result.
 '''

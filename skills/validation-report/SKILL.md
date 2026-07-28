@@ -13,7 +13,10 @@ description: 実装後に、変更したsourceと実行可能な契約、実行�
 ## 出力
 
 - 報告を作る前に `references/template.md` を全文読み、その構造を使う。
-- `references/template.md` を出力形式の正本とし、該当事項がない欄も省略しない。
+- `references/template.md` を出力形式の正本とする。
+- Candidate Definitionを使わない作業では通常作業用テンプレートだけを使い、Candidate、Evidence Ledger、origin、lens、matrix cellの欄や空表を出力しない。
+- Candidate-boundな作業でCandidate verification resultが`verified`の場合は、通常作業用テンプレートにverified Candidate拡張を追加する。task-localなEvidence Ledgerは省略せず維持し、user-facingな報告では現行Candidateの完了判断に使うevidenceとgapを要約する。
+- Candidate verification resultが`mismatch`または`validation-gap`の場合は、通常作業用テンプレートやverified Candidate拡張を使わず、validation-onlyテンプレートだけを使う。substantive finding、approval、completion evidence、structural gate、Matrix coverage、review coverage、accepted risk、residual riskを表示しない。
 
 ## ルール
 
@@ -24,9 +27,10 @@ description: 実装後に、変更したsourceと実行可能な契約、実行�
 - pure refactorや機械変更では、新規testを一律に要求せず、既存の実行可能な契約が維持されることを確認する。
 - docs / policy-only変更では、構文、参照、残存語彙、責務整合などの代替checkを示す。
 - reviewを実施した場合はreview kind、scope、complete diffの確認有無、full-diff review回数、`blocking` status、accepted risk、validation gapを示す。
-- Candidate-boundなcheckとreview stepでは、Candidate DefinitionとEvidence Ledgerを分けて記録する。Entry ID、kind、実行Candidate ID、immutable result、source identity modeとvalue、Candidate作成時に固定したbase commit / tree OID、read-only verification recipe、creator tree OIDの有無、review contract、specialist lens、review済み・未確認matrix cell、ledger statusを各stepへ対応付ける。`definition-delta non-impact confirmation`では元entryのEntry IDとCandidate ID、reviewed definition delta、non-impact rationaleも独立fieldとして示す。説明用のbase ref labelを再解決して完了証拠を生成しない。
-- checkやreview結果の追加、既存cellのcoverage status更新、構造収束gateの結果更新だけではCandidate IDを変更しない。source identityを先に判定し、source identity変更ではreview contractも同時に変わった場合を含め、旧Candidateのreviewとsource依存checkを`superseded`として示し、`unconfirmed`への移行や再関連付けをしない。source identityが変わらないreview contractだけの変更では、旧entryを元Candidateに保持し、影響するcellを新Candidate上で`unconfirmed`として示す。holistic review対象にはexact source stateとcomplete raw diffに加え、accepted anchor、その契約上の意味、Invariant、supported scopeを含め、この対象が変わる場合は新Candidate上でholistic reviewを再実行した証拠を示す。影響しないreview-contract-only evidenceも自動継承せず、元entryのEntry IDとCandidate ID、確認した定義差分、非影響の根拠を持つ独立した確認entryを新Candidate上の行として示す。source identity変更後のdelta非影響確認も、新Candidate上で新しく得たreview evidenceとして示す。完了根拠には現行Candidateへ紐付く`current`の行だけを使う。
-- Candidateを使わない通常reviewでは、Candidate、Candidate Definition、Evidence Ledger、matrix cellの欄を`not applicable — review not Candidate-bound`とする。reviewを実施不要と判断した場合は理由を示す。
+- Candidate固有のfield、source identity、失効判定、evidence status、review handoffの意味は`contract-closure` Skillを参照し、このSkillで再定義または再計算しない。
+- verified Candidate拡張では、現行Candidateを識別するsource identityとraw diff digest、review contract、Candidate verification result、structural convergence gate / result、完了根拠となるcheck / review Entry ID、実行Candidate、origin、ledger status、definition delta、non-impact rationale、Matrix cellごとのcoverage status、lens、review済み・未確認cell、complete-diff reviewの有無を表示する。非現行entryは、gapまたはcurrent evidenceの由来を説明するために必要なものだけ要約する。
+- validation-only出力では、overall judgment、review scope、complete-diff確認、blocking finding status、Candidate ID、Candidate verification result、handoffで割り当てられたReview Entry ID、verification evidence、validation gap、reviewed cells `none`だけを表示する。Review Entry IDを新規作成したり、Evidence Ledger entryとして扱ったりしない。
+- Candidateを使わない通常reviewでは、reviewの要否、scope、結果、`blocking` status、accepted risk、validation gapだけを示す。reviewを実施不要と判断した場合は理由を示す。
 - sourceと実行可能な契約が食い違う場合はalignedとせず、意図確認と残作業を報告する。
 - ADRとarchitecture文書の判定規則は`AGENTS.md`を正本とし、このSkillへ条件を複製しない。
 - 実行していないcheckを成功扱いせず、生log、大きなdiff、repo外pathを出力しない。

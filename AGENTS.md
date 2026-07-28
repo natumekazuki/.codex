@@ -76,7 +76,7 @@ source と executable contract は優先順位の上下ではなく、現在状�
 11. user-facingなfinal responseを返す直前に、§6のMemory reflectionを行う。その後、依頼種別に応じて、answer / explain / diagnoseは結論、根拠、未確定事項、planはscope、依存関係、検証、open question、reviewはfindingと分類根拠、change / build / fixは`validation-report`の形式で変更、検証、未実行、残リスク、external actionは対象、実行結果、postcondition、部分成功またはvalidation gapを報告する
 
 - scope、contract、責務境界、slice の依存関係が変わった場合は手順3から5を見直す。validation failure は対象 slice へ戻し、追加 authority または結果を変えるユーザー判断が必要な場合は作業を止めて確認する
-- Candidate Definition、Evidence Ledger、source identity、失効判定、handoff形式の正本は`contract-closure` Skillとする。Task workflowではsource identity変更をreview contract変更より先に扱い、旧Candidateのsource依存証拠を新Candidateへ継承しない。全trigger済みlensの現行証拠が同じCandidateへ揃った後にcomplete-diff holistic reviewを行い、targeted re-reviewで代用しない
+- Candidate Definition、Evidence Ledger、source identity、失効判定、evidence status、review handoffの規範的定義は`contract-closure` Skillを正本とする。Task workflowはCandidate reviewを開始する条件、specialist reviewとfinding対応の合流順序、holistic reviewの開始条件を定める。全trigger済みlensの現行証拠が同じCandidateへ揃った後にcomplete-diff holistic reviewを行い、targeted re-reviewで代用しない
 - `consolidate-structure` が `not-applicable` を返した場合はreason別に戻す。`no-topology-evidence`では既に予定したreview handoff、`candidate-not-ready`では手順5、`wrong-session`では割り当て済みのread-only task、`pr-requested`では新しい構造整理を始めずPR workflow、`no-review-handoff`ではSkillをreview triggerにせず既存lifecycleの次の手順へ進む
 - review finding への対応後は、修正が手順6の qualifying topology evidence を新たに生じた場合だけ新しい implementation-complete candidate として同手順を再判定する。finding、review 回数、または Skill 自身の edit だけを再発火条件にしない
 - ユーザーが PR 作成を依頼した後は、未実施の `consolidate-structure` を新たに開始しない
@@ -127,7 +127,7 @@ change、build、fix は、次を確認するまで完了扱いにしない。
 - 手順6の構造収束 gate が適用された場合は、結果が `ready-unchanged` または `ready-after-consolidation` であり、整理で差分を変更したときは元の targeted check と影響に応じた broader check、該当する Sibling Sweep を最終差分に対して再実行した
 - reviewable slice の targeted review で `blocking` findingへ対応した場合は、同じ slice の targeted check と targeted re-review を行う。統合前の途中状態へ fresh-context full-diff review を適用しない
 - `contract-closure` 対象が複数入口、複数subsystem、または高リスクな失敗へ波及する場合は、実装とtargeted checkの後に独立したreviewerで反例を探索し、root sessionがfindingをsourceとexecutable contractへ照合した。reviewerを利用できない場合はfresh-context second passと未実施リスクを報告した
-- frozen Candidateを使うreviewでは、Candidate DefinitionとEvidence Ledgerが分離され、review結果と実行済みcheckのEntry ID、実行Candidate、確認entryのoriginが区別され、sourceまたはreview contract変更後のCandidateへ元entryが移動または再関連付けされていない。specialist reviewを行った場合は、全trigger済みlensの現行Candidateに対する`current`な証拠、確認したmatrix cell、未確認cell、hardening候補が区別され、必要なspecialist closure後にcomplete-diff holistic reviewを行った
+- frozen Candidateを使うreviewでは、`contract-closure` Skillが定めるCandidate Definition、Evidence Ledger、失効判定、evidence status、review handoffに従い、現行Candidateの完了証拠とgapを追跡できる。specialist reviewを行った場合は、全trigger済みlensの現行Candidateに対する証拠、確認したmatrix cell、未確認cell、hardening候補が区別され、必要なspecialist closure後にcomplete-diff holistic reviewを行った
 - review findingはseverityとは別に、root sessionが`blocking`、`risk-candidate`、`non-material`、`invalid`へ分類する。reviewerの分類は提案として扱い、root sessionがsource、accepted contract、executable contract、supported scopeと照合して確定する
 - `blocking` findingとするには、accepted contractまたは明示された安全境界への違反、supported scopeで現実的な到達条件、具体的な影響、sourceまたはexecutable contractに基づくevidenceを示す。style preference、一般的なhardening案、到達条件を示せない仮説は`blocking`にしない
 - `risk-candidate`は、発生可能性が低く、影響が限定され、自動検知でき、復旧手段があり、機密性侵害または不可逆なデータ損失を伴わない場合に限りaccepted riskとして完了できる。発生条件、影響、検知、復旧、follow-upの要否を残す
