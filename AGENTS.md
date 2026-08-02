@@ -77,6 +77,7 @@ source と executable contract は優先順位の上下ではなく、現在状�
 
 - scope、contract、責務境界、slice の依存関係が変わった場合は手順3から5を見直す。validation failure は対象 slice へ戻し、追加 authority または結果を変えるユーザー判断が必要な場合は作業を止めて確認する
 - Candidate Definition、Evidence Ledger、source identity、失効判定、evidence status、review handoffの規範的定義は`contract-closure` Skillを正本とする。Task workflowはCandidate reviewを開始する条件、specialist reviewとfinding対応の合流順序、holistic reviewの開始条件を定める。全trigger済みlensの現行証拠が同じCandidateへ揃った後にcomplete-diff holistic reviewを行い、targeted re-reviewで代用しない
+- 独立したcomplete-diff reviewを追加で開始する前に、root sessionが現在のsource、accepted contract、実行済みcheck、既存review evidenceから`Full-review gate`を判定する。既定は`skip`とし、手順9または「Validation and Review Completion Gates」が独立reviewを明示的に要求する場合、high-riskまたはnon-localな境界、複数subsystem / slice間の未確認interaction、targeted checkでは直接検証できないcross-cutting contract、または統合後の変更によって既存complete-diff evidenceが失効した具体的な証拠がある場合だけ`run`とする。PR作成依頼、file数、diff量、review回数、finding数、未使用のreviewer、過去に別sessionでfindingが出た事実、または「念のため」をtriggerにしない。必要性を判定するためだけにreviewerを起動せず、root sessionが`run`または`skip`、根拠、`run`時の対象scopeをfinalで報告する
 - `consolidate-structure` が `not-applicable` を返した場合はreason別に戻す。`no-topology-evidence`では既に予定したreview handoff、`candidate-not-ready`では手順5、`wrong-session`では割り当て済みのread-only task、`pr-requested`では新しい構造整理を始めずPR workflow、`no-review-handoff`ではSkillをreview triggerにせず既存lifecycleの次の手順へ進む
 - review finding への対応後は、修正が手順6の qualifying topology evidence を新たに生じた場合だけ新しい implementation-complete candidate として同手順を再判定する。finding、review 回数、または Skill 自身の edit だけを再発火条件にしない
 - Finding Promotionで新しいsemantic ownerまたは別subsystemの変更が必要になった場合は、`boundary prerequisite`として独立したaccepted contractと完了gateを持つ先行論理変更へ分ける。各logical changeが自身のsourceとcontractを閉じても、どの適用・deploy順序にも有効な中間境界状態を作れず、現在のaccepted contractが横断変更を明示要求する場合だけ同じ論理変更へ残す。通常のsource / test編集順、Candidate維持、review再実行、commit、PR、branchの都合を理由に抱き合わせない
@@ -125,6 +126,7 @@ change、build、fix は、次を確認するまで完了扱いにしない。
 - ADR gate を判定し、required なら ADR が存在する
 - architecture document gate を判定し、今回の変更が直接影響する文書に不要な仕様複製や陳腐化した説明を残していない
 - 実行できない検証は、理由、代替確認、未検証リスクを明示した。実行していない検証を成功扱いしていない
+- `Full-review gate`を判定し、`skip`では通常ターン内のreviewと直接的な検証で必要十分である根拠、`run`では具体的なtriggerと対象scopeが示されている。PR作成自体を`run`の根拠にしていない
 - 手順6の構造収束 gate が適用された場合は、結果が `ready-unchanged` または `ready-after-consolidation` であり、整理で差分を変更したときは元の targeted check と影響に応じた broader check、該当する Sibling Sweep を最終差分に対して再実行した
 - reviewable slice の targeted review で `blocking` findingへ対応した場合は、同じ slice の targeted check と targeted re-review を行う。統合前の途中状態へ fresh-context full-diff review を適用しない
 - `contract-closure` 対象が複数入口、複数subsystem、または高リスクな失敗へ波及する場合は、実装とtargeted checkの後に独立したreviewerで反例を探索し、root sessionがfindingをsourceとexecutable contractへ照合した。reviewerを利用できない場合はfresh-context second passと未実施リスクを報告した
