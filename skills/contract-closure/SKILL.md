@@ -46,6 +46,8 @@ Failure points:
 Owner / scope / projections:
 Resource scopes:
 Counterexamples:
+Reachability / occurrence evidence:
+Promotion span / disposition:
 Executable contracts:
 Independent review evidence:
 Uncovered risks:
@@ -161,7 +163,33 @@ Invariant Matrixからtriggerされた1から3個のlensを同じCandidate Defin
 
 ## Finding Promotion
 
-review findingやbugを受けたら、指摘されたcall pathだけを直さない。
+review findingやbugを受けたら、root sessionの最終分類とSibling Sweepの前に比例性を判定する。reviewerの分類提案だけでsourceを広げず、指摘されたcall pathだけを直すことも、理論上の兄弟caseを無条件に現在の論理変更へ取り込むこともしない。
+
+### Proportionality Gate
+
+root sessionは、sourceを広げる前に次をtask-localに固定する。
+
+1. findingが違反するaccepted contractとsupported scope
+2. 通常操作または明示された前提からの到達経路と、実発生・再現・外部仕様の根拠
+3. 影響、既存の検知・復旧、局所boundaryで閉じられる可能性
+4. risk acceptanceできずsource repairが必要な場合だけ、promotion先が同じsemantic owner / subsystemか、新しいowner / subsystemか
+5. 現在のaccepted contractを閉じるための修正か、明示した条件で将来再調査するhardeningか
+
+accepted contractとの関係または現実的な到達性が未確定なら`investigation-pending`として最終分類を保留し、sourceを広げる前に必要な証拠を追加調査する。証拠が揃った後、source展開の扱いを次のpromotion dispositionへ分ける。このdispositionは`AGENTS.md`の`blocking`、`risk-candidate`、`non-material`、`invalid`とは別軸であり、dispositionを先に、root sessionの最終分類を後に確定する。`accepted risk`をsource repairのowner判定より先に評価し、修正が必要なfindingだけを`current-scope repair`または`boundary prerequisite`へ分ける。
+
+- `accepted risk`: 現在のaccepted contract違反がsupported scopeで現実的に到達するが、`AGENTS.md`の`risk-candidate`条件をすべて満たし、source repairを行わず完了できる。semantic ownerをまたぐ可能性があっても現在のsource、test、Candidate Definition、review contractを広げず、最終分類は`risk-candidate`とする。将来source repairへ進む場合は、その時点でFinding Promotionを再適用する。
+- `current-scope repair`: 現在のaccepted contract違反がsupported scopeで現実的に到達し、risk acceptanceできず、必要なsource repairが同じsemantic ownerに属する。同じowner内の別責務境界であることだけではprerequisiteへ分けず、supported scopeに属する兄弟経路を現在の論理変更で扱う。最終分類は`blocking`とし、Sibling Sweepと修正へ進む。
+- `boundary prerequisite`: 現在のaccepted contract違反がsupported scopeで現実的に到達し、risk acceptanceできず、修正に新しいsemantic ownerまたは別subsystemの契約変更を要する。現在のfeatureへ抱き合わせず、独立したaccepted contract、source、executable contract、reviewを持つ先行論理変更へ分ける。依存するfeatureの完了条件は先行変更が閉じるまで満たさず、最終分類は`blocking`とする。
+- `hardening follow-up`: 必要な証拠調査後、現在のaccepted contract違反ではない、またはsupported scopeで現実的に到達しないと確認したうえで、契約との具体的な関係、反証可能な仮説、再調査を開始する条件の三つをすべて満たす。現在のsource、test、Candidate Definition、review contractを広げず、current reviewでは`non-material`としてfollow-up候補へ分離する。単なる到達証拠不足はこのdispositionにせず、`investigation-pending`とする。
+- `dismissed`: 必要な証拠調査を終えても、`hardening follow-up`の三要件を一つ以上満たさない。実装対象にせず、最終分類は`invalid`とする。追加調査で不足要件を確定できる間だけ`investigation-pending`に残す。
+
+別owner / subsystemでも、各logical changeが自身のsourceとexecutable contractを閉じた後でなお、どの適用・deploy順序でもaccepted contractへ違反し、独立して有効な中間境界状態を作れず、かつ現在のaccepted contractが横断変更を明示的に要求する場合だけ、同じ論理変更へ残せる。その場合は、分割不能なatomicityの根拠と含める責務を記録する。通常のtest-before-code、sourceとtestの編集順、Candidate失効、review再実行、commitやPR作成の手間、同じbranchに既に変更があることは、抱き合わせの根拠にしない。
+
+auth bypass、secretまたはpersonal dataの露出、現実的なinjection、不可逆なdata lossは、supported scopeで現実的に到達するなら現在の完了をblockする。影響が大きいことだけで到達根拠を省略せず、不明ならsourceを広げる前に追加調査して分類する。
+
+### Sibling Sweep
+
+`current-scope repair`だけを、次の順で同じ不変条件familyへ展開する。
 
 1. 観測されたfailureを一文で固定する。
 2. failureを許した不変条件の欠落を一文で表す。
@@ -170,7 +198,7 @@ review findingやbugを受けたら、指摘されたcall pathだけを直さな
 5. targeted regression testと、可能なら共有境界のtype / schema / validation / static checkを更新する。
 6. 過去findingと同じfamilyなら、局所再発ではなくworkflow gapとして報告する。
 
-Findingへのreply、thread resolve、対象testの追加だけをSibling Sweepの代わりにしない。
+Findingへのreply、thread resolve、対象testの追加だけをSibling Sweepの代わりにしない。`boundary prerequisite`または`hardening follow-up`を、Sibling Sweepの名目で現在の論理変更へ戻さない。
 
 ## Finding Classification and Review Convergence
 
@@ -189,7 +217,7 @@ targeted review、specialist finding対応、holistic review、fresh-context clo
 - holistic complete-diff reviewとblocking修正後のfresh-context full-diff closure reviewでは、利用可能なら`fork_turns="none"`を使い、Candidate Definition、rootがtask-localに割り当てたreview Entry IDまたは未割当である事実、現行Candidateに対する実行済みcheck、goalとaccepted contract、更新後raw diff、canonical anchorsだけを渡す。過去finding、specialist reviewの結論、claimed resolution、実装者の結論、既存Closure Mapを渡さず、reviewerが不変条件と反例を再構築する。
 - reviewerは割り当て済みのreview Entry IDがあればその値をechoし、未割当なら`unassigned`と返して自分で生成しない。reviewerはimmutableなreview resultだけを返し、Evidence Ledger statusを選択または更新しない。rootがresultを受け取った後にentryとstatusをLedgerへ記録する。
 - reviewerはfinding-firstで、反例、同じ契約を持つ兄弟経路、failure timing、owner / scope、欠けたexecutable contractを根拠付きで返し、各findingの分類を提案する。
-- rootはfindingをsourceとexecutable contractへ照合して分類を確定し、採用した`blocking` findingを同じ不変条件familyへ展開してから修正・再検証する。
+- rootはfindingへFinding Promotionを適用し、source、accepted contract、executable contract、supported scopeと照合して最終分類する。`current-scope repair`だけを同じ不変条件familyへ展開して修正・再検証し、`boundary prerequisite`は独立した先行論理変更へ戻す。
 - reviewerを利用できない場合は、実装時の推論を引き継がないfresh-context second passを行い、独立review未実施を残リスクとして報告する。
 
 pure refactorや局所的な機械変更へ独立reviewを義務化しない。変更規模ではなく、契約の非局所性と失敗時の影響で判定する。
