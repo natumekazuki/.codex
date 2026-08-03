@@ -1,14 +1,14 @@
 # ADR-0007: frozen Candidateと不変条件lensでhigh-risk reviewを収束させる
 
-- Status: accepted, amended by ADR-0008 and ADR-0012
+- Status: accepted, amended by ADR-0008, ADR-0012, and ADR-0013
 - Date: 2026-07-26
 - Amends: ADR-0004, ADR-0005
 - Related: ADR-0006
-- Amended by: ADR-0008 (2026-07-27), ADR-0012 (2026-08-03)
+- Amended by: ADR-0008 (2026-07-27), ADR-0012 (2026-08-03), ADR-0013 (2026-08-03)
 
 ## Amendment
 
-ADR-0012は、specialist review後のholistic complete-diff reviewを`Full-review gate=run`の場合の一度に限定し、そのfinding修正後のfresh-context full-diff closure reviewを廃止する。specialist lens、Candidate、Evidence Ledger、同一Candidateへ証拠を揃える決定は維持する。
+ADR-0012は、specialist review後のholistic complete-diff reviewを`Full-review gate=run`の場合の一度に限定し、そのfinding修正後のfresh-context full-diff closure reviewを廃止する。specialist lens、Candidate、Evidence Ledger、同一Candidateへ証拠を揃える決定は維持する。ADR-0013は、実運用で確認された観点混在を受け、初期導入の単一`reviewer` roleをholistic専用`reviewer`とtargeted / specialist / closure専用`targeted_reviewer`へ分割する。lensごとの専用roleは追加しない。
 
 ## Context
 
@@ -50,8 +50,9 @@ genericなcomplete-diff reviewを直列に追加すると新しい反例は見�
 ## Policy Anchors
 
 - Lifecycle and holistic join: `AGENTS.md`
-- Candidate Definition, Evidence Ledger, identity, invalidation, Invariant Matrix, lens selection, and review handoff: `skills/contract-closure/SKILL.md`
+- Candidate Definition, Evidence Ledger, identity, invalidation, Invariant Matrix, lens selection, and Review Brief: `skills/contract-closure/SKILL.md`
 - Reusable counterexample axes: `skills/contract-closure/references/trigger-matrices.md`
-- Reviewer responsibility and output: `agents/reviewer.toml`
+- Holistic reviewer responsibility and output: `agents/reviewer.toml`
+- Targeted, specialist, and closure reviewer responsibility and output: `agents/targeted_reviewer.toml`
 - Structural convergence boundary: `skills/consolidate-structure/SKILL.md`
 - Runtime executable contract: なし。review cycleを機械制御するruntimeを導入する場合だけ、その状態遷移を別のexecutable contractとして追加する

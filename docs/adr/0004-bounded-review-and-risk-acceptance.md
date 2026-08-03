@@ -1,13 +1,13 @@
 # ADR-0004: reviewをblocking findingと明示的なrisk acceptanceで収束させる
 
-- Status: accepted, amended by ADR-0012
+- Status: accepted, amended by ADR-0012 and ADR-0013
 - Date: 2026-07-18
 - Supersedes: ADR-0003
-- Amended by: ADR-0012 (2026-08-03)
+- Amended by: ADR-0012 (2026-08-03), ADR-0013 (2026-08-03)
 
 ## Amendment
 
-ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一つの論理変更につき3回の上限を、単一のholistic complete-diff reviewとfinding family / resulting deltaのtargeted closureへ置き換える。本ADRのfinding分類、risk acceptance、reviewable slice、重大な安全問題を回数だけで受容しない決定は維持する。
+ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一つの論理変更につき3回の上限を、単一のholistic complete-diff reviewとfinding family / resulting deltaのtargeted closureへ置き換える。ADR-0013は、holistic reviewを`reviewer`、targeted review、specialist review、targeted closureを`targeted_reviewer`へ分離する。本ADRのfinding分類、risk acceptance、reviewable slice、重大な安全問題を回数だけで受容しない決定は維持する。
 
 ## Context
 
@@ -18,7 +18,7 @@ ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一�
 
 ## Decision
 
-- reviewerはfindingごとにseverityと`blocking`、`risk-candidate`、`non-material`、`invalid`の分類を提案し、root sessionがsource、accepted contract、executable contract、supported scopeと照合して分類を確定する
+- `reviewer`と`targeted_reviewer`はfindingごとにseverityと`blocking`、`risk-candidate`、`non-material`、`invalid`の分類を提案し、root sessionがsource、accepted contract、executable contract、supported scopeと照合して分類を確定する。`risk-candidate`を提案する場合は、発生条件と可能性、影響、検知可能性、復旧可能性、follow-upの要否を示す
 - `blocking`には、accepted contractまたは明示された安全境界への違反、現実的な到達条件、具体的な影響、sourceまたはexecutable contractに基づくevidenceを要求する
 - 低頻度の異常系は、影響が限定され、自動検知でき、復旧手段があり、機密性侵害または不可逆なデータ損失を伴わない場合に限りaccepted riskとして完了できる
 - auth bypass、secretまたはpersonal dataの露出、現実的なinjection、不可逆なデータ破損は自動的にrisk acceptanceせず、未修正で残す場合はユーザー判断を求める
@@ -30,7 +30,7 @@ ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一�
 - 修正が高リスク境界を拡張した場合または具体的な新証拠が確認済み範囲を再度開く場合だけfull-diff reviewを追加し、一つの論理変更につき3回を上限とする
 - 3回目の後も`blocking`が残る場合は完了扱いにせず、要求、設計、責務境界、contractまたはユーザー判断へ戻る。同一論理変更の4回目のfull-diff reviewは行わず、高リスクなscope拡張を続ける場合はユーザー確認後に新しいaccepted contractを持つ別の論理変更として切り出す
 - 完了条件はfinding総数が0であることではなく、未解決の`blocking`がなく、その他のfinding、accepted risk、validation gap、残リスクが根拠付きで分類されていることである
-- review運用は`AGENTS.md`、reviewerの責務と出力は`agents/reviewer.toml`、contract-closure時の展開は`skills/contract-closure/SKILL.md`を正本とする。自然言語ポリシーの完全一致はstatic checkで固定しない
+- review運用は`AGENTS.md`、holistic reviewerの責務と出力は`agents/reviewer.toml`、targeted review、specialist review、targeted closureの責務と出力は`agents/targeted_reviewer.toml`、contract-closure時の展開は`skills/contract-closure/SKILL.md`を正本とする。自然言語ポリシーの完全一致はstatic checkで固定しない
 - `hooks/test-subagent-routing.ps1`は`subagent-routing.ps1`と`set-spark-routing.ps1`を実行し、runtime mode、fallback、state precedence、出力だけを検証する。review cycleを機械制御するruntimeを導入した場合は、その状態遷移を別のexecutable contractとして検証する
 
 ## Alternatives
@@ -56,5 +56,5 @@ ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一�
 
 ## Policy Anchors
 
-- Source: `AGENTS.md`、`agents/reviewer.toml`、`agents/fast_reviewer.toml`、`skills/contract-closure/SKILL.md`
+- Source: `AGENTS.md`、`agents/reviewer.toml`、`agents/targeted_reviewer.toml`、`agents/fast_reviewer.toml`、`skills/contract-closure/SKILL.md`
 - Executable contract: なし。現在のreview分類と収束は自然言語の運用契約であり、`hooks/test-subagent-routing.ps1`の責務には含めない

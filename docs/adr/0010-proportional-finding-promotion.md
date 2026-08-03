@@ -41,5 +41,5 @@ Candidateを凍結した後は、sourceまたはreview contractの拡大に再�
 
 - Finding Promotion semantics and Sibling Sweep boundary: `skills/contract-closure/SKILL.md`
 - Logical-change lifecycle, prerequisite ordering, and completion gates: `AGENTS.md`
-- Reviewer evidence and hardening separation: `agents/reviewer.toml`
+- Reviewer evidence and hardening separation: `agents/reviewer.toml`, `agents/targeted_reviewer.toml`
 - Runtime executable contract: なし。policy scenarioをtask-localに照合し、固定文言を検証するtestは追加しない

@@ -22,7 +22,7 @@ review contractだけを変更した後に旧evidenceを新Candidateへ再関連
 - Source Identityの標準方式は、Git metadataへ書き込まず作成側とread-only reviewerが同じ状態を再現できる方式とする。treeを使う方式は作成側に必要なauthorityがある場合だけ選び、reviewerには生成を要求しない
 - Evidence LedgerにはCandidateの定義を変えずに追加できる完了証拠と、その出自を記録する。field、status、Candidate間の扱いは`skills/contract-closure/SKILL.md`だけで定義する
 - source identityまたはreview contractが変わった場合のCandidate失効とevidenceの扱いは`skills/contract-closure/SKILL.md`、specialist reviewからholistic reviewへの合流順序は`AGENTS.md`だけで定義する
-- Candidate Definition、Evidence Ledger、失効条件、生成・検証手順、review handoffの詳細は`skills/contract-closure/SKILL.md`を正本とする
+- Candidate Definition、Evidence Ledger、失効条件、生成・検証手順、Review Briefの詳細は`skills/contract-closure/SKILL.md`を正本とする
 
 ## Alternatives
 
@@ -53,8 +53,8 @@ review contractだけを変更した後に旧evidenceを新Candidateへ再関連
 ## Policy Anchors
 
 - Lifecycle and holistic join: `AGENTS.md`
-- Candidate Definition, Evidence Ledger, invalidation, and handoff: `skills/contract-closure/SKILL.md`
+- Candidate Definition, Evidence Ledger, invalidation, and Review Brief: `skills/contract-closure/SKILL.md`
 - Reusable counterexamples: `skills/contract-closure/references/trigger-matrices.md`
-- Reviewer read-only boundary, accepted input, and output: `agents/reviewer.toml`
+- Reviewer read-only boundary, accepted input, and output: `agents/reviewer.toml`, `agents/targeted_reviewer.toml`
 - User-facing validation projection: `skills/validation-report/SKILL.md`
 - Runtime executable contract: なし。状態管理を実装する場合だけ、その実装の観測可能な振る舞いを検証する

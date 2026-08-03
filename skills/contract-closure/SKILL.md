@@ -86,7 +86,7 @@ high-risk / non-localな変更でIndependent Closure Reviewを行う場合は、
 
 - Candidate Definitionのfieldと意味、source identityの生成・read-only検証、Candidate preflight、Candidate失効、Evidence Ledgerのentryとstatus、Invariant Matrix、lens選択、Review BriefはこのSkillだけで規範的に定義する。
 - `AGENTS.md`はCandidate reviewの開始条件、specialist reviewとfinding対応の合流順序、holistic reviewの開始条件、finding分類、review回数、完了gateを定め、この節のfieldや失効アルゴリズムを再定義しない。
-- `agents/reviewer.toml`はreviewerのread-only安全境界、review kindごとに受け取れる情報、findingとcoverageの出力を定める。reviewerはこの節のReview Briefを検証し、CandidateやLedgerの意味を独自に補完または変更しない。
+- `agents/reviewer.toml`はholistic complete-diff review、`agents/targeted_reviewer.toml`はtargeted review、specialist review、targeted closureのread-only安全境界、受け取れる情報、findingとcoverageの出力を定める。どちらのreviewerもこの節のReview Briefを検証し、CandidateやLedgerの意味を独自に補完または変更しない。
 - `skills/validation-report/`はtask-localなCandidate evidenceをuser-facingな完了報告へ投影する。表示のためにCandidate identityやevidence statusを再計算しない。
 
 ```text

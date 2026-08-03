@@ -35,5 +35,8 @@ config_file = "agents/fast_validator.toml"
 [agents.reviewer]
 config_file = "agents/reviewer.toml"
 
+[agents.targeted_reviewer]
+config_file = "agents/targeted_reviewer.toml"
+
 [agents.fast_reviewer]
 config_file = "agents/fast_reviewer.toml"

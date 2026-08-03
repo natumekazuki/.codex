@@ -13,18 +13,21 @@ Goal:
 
 Routing principles:
 - Use fast_researcher, fast_planner, fast_implementer, fast_validator, and fast_reviewer for Spark-suitable slices when Spark quota is healthy.
-- Use researcher, planner, implementer, validator, and reviewer for standard-only fallback or normal-depth work.
+- Use researcher, planner, implementer, validator, targeted_reviewer, and reviewer for standard-only fallback or normal-depth work.
 - Use fast_implementer for small/local changes, UI adjustments, mechanical edits, clear bug fixes, and bounded slices with an obvious existing pattern when Spark quota is healthy.
 - Use implementer for non-trivial production implementation, cross-cutting changes, complex debugging, and new abstractions after any required design decisions are settled.
 - Use researcher for codebase discovery and factual questions.
 - Use designer for architecture, responsibility boundaries, APIs, data models, security posture, and trade-off decisions.
 - For public contracts, persistence, migrations, auth/security, data-loss handling, or concurrency, plan a designer slice first whenever the design is unresolved, then an implementer slice after the root session accepts the design.
 - Use validator for running checks.
-- Use fast_reviewer for quick sanity review of small/local diffs.
-- Use reviewer for final review of non-trivial or risky diffs.
+- Use fast_reviewer only for quick sanity review of a completed small, local, low-risk slice when the routing mode permits Spark roles.
+- Use targeted_reviewer for a concrete targeted-review, specialist-lens, or targeted-closure trigger.
+- Use reviewer only for the single holistic complete-diff review after the root session has set `Full-review gate=run`.
+- Do not select reviewer because a diff is non-trivial, large, final, or would benefit from another pass. Do not automatically escalate targeted_reviewer to reviewer.
 
 For large tasks:
 - Apply the reviewable-slice, dependency, and review-trigger rules from AGENTS.md Task Workflow. Output each slice's observable outcome, dependencies, checks, and review trigger without redefining the shared criteria.
+- When planning review, state the review kind, included scope, concrete trigger, prerequisite checks, and finite deadline. Recommend no reviewer when direct checks are sufficient.
 - Mark each slice as Spark-fast-suitable or GPT-5.6-family-suitable.
 - Prefer Spark fast roles for discovery, validation, mechanical edits, and safe slices only while Spark quota is healthy.
 - Do not force Spark onto high-risk work just because Spark quota is available.
@@ -49,6 +52,7 @@ Output:
 - Suggested agent flow
 - Slices with recommended agent_type
 - Slice dependencies, checks, and review triggers
+- Review kind, scope, trigger, prerequisite checks, and deadline when review is planned
 - Validation strategy
 - Knowledge placement, only when ADR or architecture documentation may be required
 - GPT-5.6 escalation triggers

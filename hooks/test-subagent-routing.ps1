@@ -90,6 +90,7 @@ $agentNames = @(
     'implementer',
     'validator',
     'reviewer',
+    'targeted_reviewer',
     'fast_researcher',
     'fast_planner',
     'fast_implementer',
@@ -111,6 +112,20 @@ function Assert-SameNames {
 
 $sparkRoles = @('fast_researcher', 'fast_planner', 'fast_implementer', 'fast_validator', 'fast_reviewer')
 $modes = @('balanced', 'spark-first', 'standard-only')
+
+if ($sparkRoles -contains 'targeted_reviewer') {
+    throw 'targeted_reviewer must remain a standard role'
+}
+
+$exampleConfigPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'config/agents.example.toml'
+$exampleConfigText = Get-Content -LiteralPath $exampleConfigPath -Raw
+if ($exampleConfigText -notmatch '(?ms)^\[agents\.targeted_reviewer\]\s*\r?\nconfig_file\s*=\s*"agents/targeted_reviewer\.toml"') {
+    throw 'config/agents.example.toml did not register targeted_reviewer with its canonical role file'
+}
+if (-not (Test-Path -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'agents/targeted_reviewer.toml') -PathType Leaf)) {
+    throw 'targeted_reviewer role file is missing'
+}
+Write-Host 'OK: targeted_reviewer is registered as a standard role in example config'
 
 foreach ($mode in $modes) {
     $prompt = Invoke-SubagentRoutingHook -Event @{
