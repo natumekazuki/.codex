@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import shutil
@@ -317,6 +318,87 @@ class CollectSessionEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(merged_repeat["sources"], ["codex-rollout", "withmate-v6"])
         self.assertEqual(result["truncation"]["deduplicated_messages"], 1)
+
+    def test_missing_optional_audit_table_reports_gap_and_collects_other_sources(self) -> None:
+        dropped = subprocess.run(
+            [self.sqlite, str(self.database)],
+            input="DROP TABLE audit_events_v6;",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        self.assertEqual(dropped.returncode, 0, dropped.stderr)
+
+        result = self.run_collector("--workspace", str(self.workspace), "--detail")
+
+        self.assertEqual(result["source_counts"]["withmate"]["audit_events"], 0)
+        self.assertIn(
+            "optional WithMate source unavailable: audit_events_v6",
+            result["data_gaps"],
+        )
+        self.assertGreater(result["source_counts"]["withmate"]["messages"], 0)
+
+    def test_present_optional_audit_table_with_missing_column_fails_schema_validation(self) -> None:
+        changed = subprocess.run(
+            [self.sqlite, str(self.database)],
+            input=(
+                "DROP TABLE audit_events_v6;"
+                "CREATE TABLE audit_events_v6 ("
+                "session_id TEXT, event_type TEXT NOT NULL, created_at TEXT NOT NULL);"
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        self.assertEqual(changed.returncode, 0, changed.stderr)
+
+        result = self.run_collector_process()
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unsupported WithMate schema", result.stderr)
+        self.assertIn("audit_events_v6", result.stderr)
+        self.assertIn("summary", result.stderr)
+
+    def test_missing_required_table_still_fails_schema_validation(self) -> None:
+        dropped = subprocess.run(
+            [self.sqlite, str(self.database)],
+            input="DROP TABLE session_turn_interims_v6;",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        self.assertEqual(dropped.returncode, 0, dropped.stderr)
+
+        result = self.run_collector_process()
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unsupported WithMate schema", result.stderr)
+        self.assertIn("session_turn_interims_v6", result.stderr)
+
+    def test_missing_required_column_still_fails_schema_validation(self) -> None:
+        changed = subprocess.run(
+            [self.sqlite, str(self.database)],
+            input=(
+                "DROP TABLE session_turn_interims_v6;"
+                "CREATE TABLE session_turn_interims_v6 ("
+                "turn_id INTEGER NOT NULL, seq INTEGER NOT NULL, created_at TEXT NOT NULL);"
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        self.assertEqual(changed.returncode, 0, changed.stderr)
+
+        result = self.run_collector_process()
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unsupported WithMate schema", result.stderr)
+        self.assertIn("session_turn_interims_v6", result.stderr)
+        self.assertIn("body", result.stderr)
 
     def test_session_filter_reports_missing_id_as_gap(self) -> None:
         result = self.run_collector("--session-id", "missing")
@@ -910,13 +992,21 @@ class CollectSessionEvidenceTests(unittest.TestCase):
         self.assertNotIn("content", provider_error)
         self.assertEqual(
             set(provider_error["metadata"]["error_evidence"]),
-            {"original_chars", "sha256"},
+            {"text", "original_chars", "truncated", "sha256"},
+        )
+        self.assertIn(
+            "PROVIDER_SECRET_SENTINEL",
+            provider_error["metadata"]["error_evidence"]["text"],
         )
         self.assertTrue(COLLECTOR.known_failure_event(provider_error))
         self.assertNotIn("content", rollout_error)
         self.assertEqual(
             set(rollout_error["metadata"]["error_evidence"]),
-            {"original_chars", "sha256"},
+            {"text", "original_chars", "truncated", "sha256"},
+        )
+        self.assertIn(
+            "ROLLOUT_SECRET_SENTINEL",
+            rollout_error["metadata"]["error_evidence"]["text"],
         )
         self.assertTrue(COLLECTOR.known_failure_event(rollout_error))
         failure_counts = collected["sessions"][0]["session_index"][
@@ -924,14 +1014,19 @@ class CollectSessionEvidenceTests(unittest.TestCase):
         ]
         self.assertEqual(failure_counts["provider_error"], 1)
         self.assertEqual(failure_counts["error"], 1)
-        for projection in (collected, detail):
-            serialized = json.dumps(projection, ensure_ascii=False)
-            self.assertNotIn("DO_NOT_EXPOSE", serialized)
-            self.assertNotIn("PROVIDER_SECRET_SENTINEL", serialized)
-            self.assertNotIn("ROLLOUT_SECRET_SENTINEL", serialized)
-            self.assertNotIn("TURN_ID_SECRET_SENTINEL", serialized)
-            self.assertNotIn("DURATION_SECRET_SENTINEL", serialized)
-            self.assertNotIn("STATUS_SECRET_SENTINEL", serialized)
+        index_serialized = json.dumps(collected, ensure_ascii=False)
+        detail_serialized = json.dumps(detail, ensure_ascii=False)
+        self.assertNotIn("PROVIDER_SECRET_SENTINEL", index_serialized)
+        self.assertNotIn("ROLLOUT_SECRET_SENTINEL", index_serialized)
+        self.assertIn("PROVIDER_SECRET_SENTINEL", detail_serialized)
+        self.assertIn("ROLLOUT_SECRET_SENTINEL", detail_serialized)
+        for secret in (
+            "DO_NOT_EXPOSE",
+            "TURN_ID_SECRET_SENTINEL",
+            "DURATION_SECRET_SENTINEL",
+            "STATUS_SECRET_SENTINEL",
+        ):
+            self.assertNotIn(secret, detail_serialized)
 
     def test_non_error_rollout_event_metadata_uses_safe_projection(self) -> None:
         with self.rollout.open("a", encoding="utf-8") as handle:
@@ -1069,7 +1164,10 @@ class CollectSessionEvidenceTests(unittest.TestCase):
         )
         self.assertEqual(
             set(turn_failure["metadata"]["error_evidence"]),
-            {"original_chars", "sha256"},
+            {"text", "original_chars", "truncated", "sha256"},
+        )
+        self.assertEqual(
+            turn_failure["metadata"]["error_evidence"]["text"], secret
         )
         self.assertTrue(COLLECTOR.known_failure_event(turn_failure))
         self.assertEqual(
@@ -1078,10 +1176,10 @@ class CollectSessionEvidenceTests(unittest.TestCase):
             ],
             1,
         )
-        for projection in (index, detail):
-            self.assertNotIn(secret, json.dumps(projection, ensure_ascii=False))
+        self.assertNotIn(secret, json.dumps(index, ensure_ascii=False))
+        self.assertIn(secret, json.dumps(detail, ensure_ascii=False))
 
-    def test_provider_object_type_and_summary_are_not_projected(self) -> None:
+    def test_provider_non_string_summary_is_typed_bounded_json_evidence(self) -> None:
         provider_timestamp = (
             self.utc_start + timedelta(minutes=47)
         ).isoformat().replace("+00:00", "Z")
@@ -1123,12 +1221,18 @@ class CollectSessionEvidenceTests(unittest.TestCase):
         self.assertNotIn("content", provider_error)
         self.assertEqual(
             provider_error["metadata"]["error_evidence"]["original_chars"],
-            len("safe summary"),
+            len('{"private": "SUMMARY_SECRET"}'),
+        )
+        self.assertEqual(
+            provider_error["metadata"]["error_evidence"]["source_type"], "dict"
+        )
+        self.assertEqual(
+            provider_error["metadata"]["error_evidence"]["encoding"], "json"
         )
         self.assertIsNone(provider_error["metadata"]["operation_type"])
         serialized = json.dumps(collected, ensure_ascii=False)
         self.assertNotIn("TYPE_SECRET", serialized)
-        self.assertNotIn("SUMMARY_SECRET", serialized)
+        self.assertIn("SUMMARY_SECRET", serialized)
         self.assertEqual(
             COLLECTOR.safe_provider_operation_type("command_execution"),
             "command_execution",
@@ -1139,6 +1243,358 @@ class CollectSessionEvidenceTests(unittest.TestCase):
             ),
             "",
         )
+
+    def test_provider_detail_uses_payload_summary_column_fallback_and_unknown_types(self) -> None:
+        rows: list[str] = []
+        fixtures = (
+            (
+                20,
+                "operation",
+                "column fallback PROVIDER_FALLBACK_SENTINEL",
+                {"value": {"type": "command_execution"}},
+            ),
+            (
+                21,
+                "operation",
+                "ignored column",
+                {
+                    "value": {
+                        "type": "command_execution",
+                        "summary": "payload summary PROVIDER_COMMAND_SENTINEL",
+                        "call_id": "provider-call",
+                        "tool": "exec_command",
+                        "exit_code": 1,
+                        "status": "failed",
+                        "private": "PROVIDER_PAYLOAD_PRIVATE_SENTINEL",
+                    }
+                },
+            ),
+            (
+                22,
+                "operation",
+                "ignored column",
+                {
+                    "value": {
+                        "type": "future_operation",
+                        "summary": "future summary PROVIDER_FUTURE_SENTINEL",
+                    }
+                },
+            ),
+            (
+                23,
+                "operation",
+                "ignored column",
+                {
+                    "value": {
+                        "type": "future_json",
+                        "summary": {"result": "PROVIDER_JSON_SENTINEL"},
+                    }
+                },
+            ),
+            (
+                24,
+                "operation",
+                "ignored column",
+                {
+                    "value": {
+                        "type": "error",
+                        "message": "operation error PROVIDER_ERROR_SENTINEL",
+                    }
+                },
+            ),
+        )
+        for offset, (sequence, kind, summary, payload) in enumerate(fixtures):
+            timestamp = (
+                self.utc_start + timedelta(minutes=50, seconds=offset)
+            ).isoformat().replace("+00:00", "Z")
+            rows.append(
+                f"(1,{sequence},{sql_text(kind)},{sql_text(summary)},"
+                f"{sql_text(json.dumps(payload, ensure_ascii=False))},"
+                f"{sql_text(timestamp)})"
+            )
+        inserted = subprocess.run(
+            [self.sqlite, str(self.database)],
+            input=(
+                "INSERT INTO session_turn_provider_outputs_v6 VALUES "
+                + ",".join(rows)
+                + ";"
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        self.assertEqual(inserted.returncode, 0, inserted.stderr)
+
+        index = self.run_collector("--workspace", str(self.workspace))
+        detail = self.run_collector(
+            "--workspace", str(self.workspace), "--detail"
+        )
+        events = detail["sessions"][0]["events"]
+        commands = [event for event in events if event["kind"] == "command_execution"]
+        fallback = next(
+            event
+            for event in commands
+            if "PROVIDER_FALLBACK_SENTINEL" in event.get("content", {}).get("text", "")
+        )
+        failed_command = next(
+            event
+            for event in commands
+            if event.get("metadata", {}).get("call_id") == "provider-call"
+        )
+        future = next(
+            event
+            for event in events
+            if event.get("metadata", {}).get("operation_type") == "future_operation"
+        )
+        future_json = next(
+            event
+            for event in events
+            if event.get("metadata", {}).get("operation_type") == "future_json"
+        )
+        operation_error = next(event for event in events if event["kind"] == "error")
+
+        self.assertEqual(fallback["metadata"]["failure_status"], "unknown")
+        self.assertEqual(failed_command["metadata"]["failure_status"], "known-failure")
+        self.assertEqual(failed_command["metadata"]["exit_code"], 1)
+        self.assertEqual(failed_command["metadata"]["status"], "failed")
+        self.assertEqual(failed_command["metadata"]["tool"], "exec_command")
+        self.assertIn("PROVIDER_COMMAND_SENTINEL", failed_command["content"]["text"])
+        self.assertIn("PROVIDER_FUTURE_SENTINEL", future["content"]["text"])
+        self.assertEqual(future["kind"], "provider_operation")
+        self.assertEqual(future["metadata"]["provider_kind"], "operation")
+        self.assertEqual(future_json["content"]["source_type"], "dict")
+        self.assertEqual(future_json["content"]["encoding"], "json")
+        self.assertIn("PROVIDER_JSON_SENTINEL", future_json["content"]["text"])
+        self.assertEqual(
+            operation_error["metadata"]["failure_status"], "known-failure"
+        )
+        self.assertIn(
+            "PROVIDER_ERROR_SENTINEL",
+            operation_error["metadata"]["error_evidence"]["text"],
+        )
+        self.assertNotIn(
+            "PROVIDER_PAYLOAD_PRIVATE_SENTINEL",
+            json.dumps(detail, ensure_ascii=False),
+        )
+        index_projection = json.dumps(index, ensure_ascii=False)
+        for sentinel in (
+            "PROVIDER_FALLBACK_SENTINEL",
+            "PROVIDER_COMMAND_SENTINEL",
+            "PROVIDER_FUTURE_SENTINEL",
+            "PROVIDER_JSON_SENTINEL",
+            "PROVIDER_ERROR_SENTINEL",
+        ):
+            self.assertNotIn(sentinel, index_projection)
+
+    def test_provider_non_object_values_are_typed_detail_evidence(self) -> None:
+        values = (
+            (["PROVIDER_LIST_SENTINEL", 2], "list", '["PROVIDER_LIST_SENTINEL", 2]'),
+            (7, "int", "7"),
+            (False, "bool", "false"),
+            (None, "NoneType", "null"),
+        )
+        rows: list[str] = []
+        for offset, (value, _source_type, _text) in enumerate(values):
+            timestamp = (
+                self.utc_start + timedelta(minutes=51, seconds=offset)
+            ).isoformat().replace("+00:00", "Z")
+            payload = json.dumps({"value": value}, ensure_ascii=False)
+            rows.append(
+                f"(1,{30 + offset},'operation','COLUMN_FALLBACK_MUST_NOT_WIN',"
+                f"{sql_text(payload)},{sql_text(timestamp)})"
+            )
+        invalid_envelope_timestamp = (
+            self.utc_start + timedelta(minutes=51, seconds=len(values))
+        ).isoformat().replace("+00:00", "Z")
+        rows.append(
+            f"(1,40,'operation','envelope fallback',{sql_text('[1,2]')},"
+            f"{sql_text(invalid_envelope_timestamp)})"
+        )
+        inserted = subprocess.run(
+            [self.sqlite, str(self.database)],
+            input=(
+                "INSERT INTO session_turn_provider_outputs_v6 VALUES "
+                + ",".join(rows)
+                + ";"
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        self.assertEqual(inserted.returncode, 0, inserted.stderr)
+
+        index = self.run_collector("--workspace", str(self.workspace))
+        detail = self.run_collector(
+            "--workspace", str(self.workspace), "--detail"
+        )
+        events = detail["sessions"][0]["events"]
+        for _value, source_type, text in values:
+            event = next(
+                event
+                for event in events
+                if event.get("content", {}).get("text") == text
+            )
+            self.assertEqual(event["content"]["source_type"], source_type)
+            self.assertEqual(event["content"]["encoding"], "json")
+        self.assertTrue(
+            any(
+                gap
+                == "withmate provider payload unavailable: expected object envelope"
+                for gap in detail["data_gaps"]
+            )
+        )
+        index_projection = json.dumps(index, ensure_ascii=False)
+        self.assertNotIn("PROVIDER_LIST_SENTINEL", index_projection)
+        self.assertNotIn("COLUMN_FALLBACK_MUST_NOT_WIN", index_projection)
+        self.assertNotIn(
+            "COLUMN_FALLBACK_MUST_NOT_WIN", json.dumps(detail, ensure_ascii=False)
+        )
+
+    def test_non_string_audit_summary_is_typed_detail_evidence_only(self) -> None:
+        timestamp = (
+            self.utc_start + timedelta(minutes=52)
+        ).isoformat().replace("+00:00", "Z")
+        replaced = subprocess.run(
+            [self.sqlite, str(self.database)],
+            input=(
+                "DROP TABLE audit_events_v6;"
+                "CREATE TABLE audit_events_v6 ("
+                "session_id TEXT NOT NULL, event_type TEXT NOT NULL, "
+                "summary BLOB NOT NULL, created_at TEXT NOT NULL);"
+                "INSERT INTO audit_events_v6 VALUES "
+                f"('launch-1','diagnostic',42424242,{sql_text(timestamp)});"
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        self.assertEqual(replaced.returncode, 0, replaced.stderr)
+
+        index = self.run_collector("--workspace", str(self.workspace))
+        detail = self.run_collector(
+            "--workspace", str(self.workspace), "--detail"
+        )
+        audit_event = next(
+            event
+            for event in detail["sessions"][0]["events"]
+            if event["kind"] == "audit_diagnostic"
+        )
+
+        self.assertEqual(audit_event["content"]["text"], "42424242")
+        self.assertEqual(audit_event["content"]["source_type"], "int")
+        self.assertEqual(audit_event["content"]["encoding"], "json")
+        self.assertNotIn("42424242", json.dumps(index, ensure_ascii=False))
+
+    def test_provider_operation_types_do_not_collide_with_internal_event_kinds(self) -> None:
+        reserved = (
+            "provider_error",
+            "tool_call",
+            "tool_result",
+            "user_message",
+            "assistant_message",
+        )
+        rows: list[str] = []
+        for offset, operation_type in enumerate(reserved):
+            timestamp = (
+                self.utc_start + timedelta(minutes=51, seconds=offset)
+            ).isoformat().replace("+00:00", "Z")
+            payload = {
+                "value": {
+                    "type": operation_type,
+                    "summary": f"reserved operation {operation_type}",
+                }
+            }
+            rows.append(
+                f"(1,{30 + offset},'operation','fallback',"
+                f"{sql_text(json.dumps(payload))},{sql_text(timestamp)})"
+            )
+        inserted = subprocess.run(
+            [self.sqlite, str(self.database)],
+            input=(
+                "INSERT INTO session_turn_provider_outputs_v6 VALUES "
+                + ",".join(rows)
+                + ";"
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        self.assertEqual(inserted.returncode, 0, inserted.stderr)
+
+        index = self.run_collector("--workspace", str(self.workspace))
+        detail = self.run_collector(
+            "--workspace", str(self.workspace), "--detail"
+        )
+        events = [
+            event
+            for event in detail["sessions"][0]["events"]
+            if event.get("metadata", {}).get("operation_type") in reserved
+        ]
+
+        self.assertEqual(len(events), len(reserved))
+        self.assertTrue(all(event["kind"] == "provider_operation" for event in events))
+        self.assertTrue(
+            all("failure_status" not in event["metadata"] for event in events)
+        )
+        session_index = index["sessions"][0]["session_index"]
+        self.assertEqual(session_index["event_kind_counts"]["provider_operation"], 5)
+        self.assertNotIn("provider_error", session_index["known_failure_kind_counts"])
+        self.assertTrue(
+            all(
+                cue["kind"] in {"user_message", "assistant_message"}
+                for cue in [
+                    *session_index["goal_cues"],
+                    *session_index["outcome_cues"],
+                ]
+            )
+        )
+
+    def test_index_does_not_hydrate_large_provider_payload_discarded_by_projection(self) -> None:
+        timestamp = (
+            self.utc_start + timedelta(minutes=52)
+        ).isoformat().replace("+00:00", "Z")
+        payload = {
+            "value": {
+                "type": "future_operation",
+                "summary": "small summary",
+                "private": "x" * 100_000,
+            }
+        }
+        inserted = subprocess.run(
+            [self.sqlite, str(self.database)],
+            input=(
+                "INSERT INTO session_turn_provider_outputs_v6 VALUES "
+                f"(1,40,'operation','small fallback',"
+                f"{sql_text(json.dumps(payload))},{sql_text(timestamp)});"
+            ),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        self.assertEqual(inserted.returncode, 0, inserted.stderr)
+
+        index = self.run_collector_process(
+            "--workspace",
+            str(self.workspace),
+            "--max-database-bytes",
+            "20000",
+        )
+        detail = self.run_collector_process(
+            "--workspace",
+            str(self.workspace),
+            "--detail",
+            "--max-database-bytes",
+            "20000",
+        )
+
+        self.assertEqual(index.returncode, 0, index.stderr)
+        self.assertEqual(detail.returncode, 2)
+        self.assertIn("SQLite output exceeded --max-database-bytes", detail.stderr)
 
     def test_workspace_filter_is_applied_before_canonical_session_merge(self) -> None:
         workspace_b = self.root / "workspace-b"
@@ -1214,6 +1670,8 @@ class CollectSessionEvidenceTests(unittest.TestCase):
                 "('launch-1',23,'user','bad hour','2026-01-01T24:00:00Z'),"
                 "('launch-1',24,'user','mixed slash','2026-01/01 00:00'),"
                 "('launch-1',25,'user','too precise','2026-01-01T00:00:00.1234567Z');"
+                "INSERT INTO audit_events_v6 VALUES "
+                "('launch-1','diagnostic','bad audit timestamp','not-a-time');"
             ),
             capture_output=True,
             text=True,
@@ -1225,7 +1683,7 @@ class CollectSessionEvidenceTests(unittest.TestCase):
         collected = self.run_collector("--detail")
 
         self.assertEqual(
-            collected["source_counts"]["withmate"]["invalid_timestamps"], 6
+            collected["source_counts"]["withmate"]["invalid_timestamps"], 7
         )
         self.assertTrue(
             any(
@@ -1233,6 +1691,13 @@ class CollectSessionEvidenceTests(unittest.TestCase):
                 for gap in collected["data_gaps"]
             )
         )
+        self.assertTrue(
+            any(
+                "audit_events_v6.created_at count=1" in gap
+                for gap in collected["data_gaps"]
+            )
+        )
+        self.assertEqual(collected["source_counts"]["withmate"]["audit_events"], 1)
 
     def test_naive_timestamp_timezone_failures_are_disclosed_before_filtering(
         self,
@@ -1633,6 +2098,8 @@ class CollectSessionEvidenceTests(unittest.TestCase):
             len(json.dumps(result, ensure_ascii=False, separators=(",", ":"))),
             len(json.dumps(detail, ensure_ascii=False, separators=(",", ":"))),
         )
+        self.assertNotIn("diagnostic event", json.dumps(result, ensure_ascii=False))
+        self.assertIn("diagnostic event", json.dumps(detail, ensure_ascii=False))
 
     def test_session_index_counts_known_failures_without_event_projection(self) -> None:
         successes = [
@@ -1726,6 +2193,260 @@ class CollectSessionEvidenceTests(unittest.TestCase):
         for key in ("exit_code", "isError", "status", "wall_time_seconds"):
             self.assertNotIn(key, invalid_metadata)
         self.assertEqual(invalid_metadata["failure_status"], "unknown")
+
+    def test_detail_projects_bounded_tool_command_output_error_and_stderr_only(self) -> None:
+        command = "python -m unittest TOOL_COMMAND_SENTINEL"
+        output = "tool output TOOL_OUTPUT_SENTINEL"
+        error = "raw error TOOL_ERROR_SENTINEL"
+        stderr = "stderr TOOL_STDERR_SENTINEL"
+        with self.rollout.open("a", encoding="utf-8") as handle:
+            for offset, payload in enumerate(
+                (
+                    {
+                        "type": "function_call",
+                        "call_id": "raw-tool-call",
+                        "name": "exec_command",
+                        "arguments": json.dumps({"cmd": command}),
+                    },
+                    {
+                        "type": "function_call_output",
+                        "call_id": "raw-tool-call",
+                        "output": json.dumps(
+                            {
+                                "exit_code": 1,
+                                "status": "failed",
+                                "output": output,
+                                "error": error,
+                                "stderr": stderr,
+                            }
+                        ),
+                    },
+                )
+            ):
+                handle.write(
+                    json.dumps(
+                        {
+                            "timestamp": (
+                                self.utc_start
+                                + timedelta(minutes=49, seconds=offset)
+                            ).isoformat(),
+                            "type": "response_item",
+                            "payload": payload,
+                        }
+                    )
+                    + "\n"
+                )
+
+        index = self.run_collector("--workspace", str(self.workspace))
+        detail = self.run_collector(
+            "--workspace", str(self.workspace), "--detail"
+        )
+        call = next(
+            event
+            for event in detail["sessions"][0]["events"]
+            if event["kind"] == "tool_call"
+            and event["metadata"].get("call_id") == "raw-tool-call"
+        )
+        result = next(
+            event
+            for event in detail["sessions"][0]["events"]
+            if event["kind"] == "tool_result"
+            and event["metadata"].get("call_id") == "raw-tool-call"
+        )
+
+        self.assertEqual(call["metadata"]["tool"], "exec_command")
+        self.assertEqual(call["metadata"]["command_evidence"]["text"], command)
+        self.assertEqual(result["metadata"]["failure_status"], "known-failure")
+        self.assertEqual(result["metadata"]["exit_code"], 1)
+        self.assertEqual(result["metadata"]["status"], "failed")
+        self.assertIn(
+            "TOOL_OUTPUT_SENTINEL", result["metadata"]["output_evidence"]["text"]
+        )
+        self.assertEqual(result["metadata"]["error_evidence"]["text"], error)
+        self.assertEqual(result["metadata"]["stderr_evidence"]["text"], stderr)
+        for sentinel in (
+            "TOOL_COMMAND_SENTINEL",
+            "TOOL_OUTPUT_SENTINEL",
+            "TOOL_ERROR_SENTINEL",
+            "TOOL_STDERR_SENTINEL",
+        ):
+            self.assertNotIn(sentinel, json.dumps(index, ensure_ascii=False))
+
+    def test_custom_tool_string_input_is_bounded_command_evidence_in_detail_only(self) -> None:
+        command = "echo CUSTOM_TOOL_COMMAND_SENTINEL"
+        json_command = '{"script":"echo CUSTOM_JSON_COMMAND_SENTINEL"}'
+        object_command = {"script": "echo CUSTOM_OBJECT_COMMAND_SENTINEL"}
+        falsy_commands = (False, 0, None, "", [], {})
+        with self.rollout.open("a", encoding="utf-8") as handle:
+            for offset, (call_id, raw_input) in enumerate(
+                (
+                    ("custom-string-call", command),
+                    ("custom-json-string-call", json_command),
+                    ("custom-object-call", object_command),
+                )
+            ):
+                handle.write(
+                    json.dumps(
+                        {
+                            "timestamp": (
+                                self.utc_start
+                                + timedelta(minutes=53, seconds=offset)
+                            ).isoformat(),
+                            "type": "response_item",
+                            "payload": {
+                                "type": "custom_tool_call",
+                                "call_id": call_id,
+                                "name": "shell",
+                                "input": raw_input,
+                            },
+                        }
+                    )
+                    + "\n"
+                )
+
+            for offset, raw_input in enumerate(falsy_commands, start=3):
+                handle.write(
+                    json.dumps(
+                        {
+                            "timestamp": (
+                                self.utc_start
+                                + timedelta(minutes=53, seconds=offset)
+                            ).isoformat(),
+                            "type": "response_item",
+                            "payload": {
+                                "type": "custom_tool_call",
+                                "call_id": f"custom-falsy-{offset}",
+                                "name": "shell",
+                                "input": raw_input,
+                            },
+                        }
+                    )
+                    + "\n"
+                )
+
+            handle.write(
+                json.dumps(
+                    {
+                        "timestamp": (
+                            self.utc_start + timedelta(minutes=53, seconds=9)
+                        ).isoformat(),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "call_id": "custom-both-fields",
+                            "name": "shell",
+                            "input": "CUSTOM_INPUT_OWNER_SENTINEL",
+                            "arguments": "CUSTOM_ARGUMENTS_WRONG_SENTINEL",
+                        },
+                    }
+                )
+                + "\n"
+            )
+
+        index = self.run_collector("--workspace", str(self.workspace))
+        detail = self.run_collector(
+            "--workspace", str(self.workspace), "--detail"
+        )
+        call = next(
+            event
+            for event in detail["sessions"][0]["events"]
+            if event.get("metadata", {}).get("call_id") == "custom-string-call"
+        )
+
+        self.assertEqual(call["metadata"]["command_evidence"]["text"], command)
+        json_call = next(
+            event
+            for event in detail["sessions"][0]["events"]
+            if event.get("metadata", {}).get("call_id") == "custom-json-string-call"
+        )
+        object_call = next(
+            event
+            for event in detail["sessions"][0]["events"]
+            if event.get("metadata", {}).get("call_id") == "custom-object-call"
+        )
+        self.assertEqual(
+            json_call["metadata"]["command_evidence"]["text"], json_command
+        )
+        self.assertEqual(
+            object_call["metadata"]["command_evidence"]["source_type"], "dict"
+        )
+        self.assertEqual(
+            object_call["metadata"]["command_evidence"]["encoding"], "json"
+        )
+        for offset, raw_input in enumerate(falsy_commands, start=3):
+            index_metadata = COLLECTOR.tool_call_metadata(
+                {"type": "custom_tool_call", "input": raw_input}
+            )
+            detail_metadata = COLLECTOR.tool_call_metadata(
+                {"type": "custom_tool_call", "input": raw_input},
+                raw_evidence_limit=100,
+            )
+            falsy_call = next(
+                event
+                for event in detail["sessions"][0]["events"]
+                if event.get("metadata", {}).get("call_id")
+                == f"custom-falsy-{offset}"
+            )
+            expected_text = (
+                raw_input
+                if isinstance(raw_input, str)
+                else json.dumps(raw_input, ensure_ascii=False, sort_keys=True)
+            )
+            self.assertEqual(
+                falsy_call["metadata"]["command_evidence"]["text"], expected_text
+            )
+            self.assertEqual(
+                index_metadata["command_evidence"]["sha256"],
+                detail_metadata["command_evidence"]["sha256"],
+            )
+            self.assertNotIn("text", index_metadata["command_evidence"])
+
+        both_fields_call = next(
+            event
+            for event in detail["sessions"][0]["events"]
+            if event.get("metadata", {}).get("call_id") == "custom-both-fields"
+        )
+        self.assertEqual(
+            both_fields_call["metadata"]["command_evidence"]["text"],
+            "CUSTOM_INPUT_OWNER_SENTINEL",
+        )
+        both_fields_index = COLLECTOR.tool_call_metadata(
+            {
+                "type": "custom_tool_call",
+                "input": "CUSTOM_INPUT_OWNER_SENTINEL",
+                "arguments": "CUSTOM_ARGUMENTS_WRONG_SENTINEL",
+            }
+        )
+        self.assertEqual(
+            both_fields_index["command_evidence"]["sha256"],
+            hashlib.sha256(b"CUSTOM_INPUT_OWNER_SENTINEL").hexdigest(),
+        )
+        index_projection = json.dumps(index, ensure_ascii=False)
+        for sentinel in (
+            "CUSTOM_TOOL_COMMAND_SENTINEL",
+            "CUSTOM_JSON_COMMAND_SENTINEL",
+            "CUSTOM_OBJECT_COMMAND_SENTINEL",
+            "CUSTOM_INPUT_OWNER_SENTINEL",
+            "CUSTOM_ARGUMENTS_WRONG_SENTINEL",
+        ):
+            self.assertNotIn(sentinel, index_projection)
+
+    def test_bounded_raw_evidence_truncates_and_discloses_conversion_gap(self) -> None:
+        text = "x" * 20
+        evidence = COLLECTOR.bounded_raw_evidence(text, 5)
+        self.assertEqual(evidence["text"], "x" * 5)
+        self.assertEqual(evidence["original_chars"], 20)
+        self.assertTrue(evidence["truncated"])
+        self.assertEqual(
+            evidence["sha256"], hashlib.sha256(text.encode("utf-8")).hexdigest()
+        )
+
+        gaps: list[str] = []
+        unavailable = COLLECTOR.bounded_raw_evidence(
+            {"not-json": {1, 2}}, 100, gaps=gaps, label="fixture payload"
+        )
+        self.assertIsNone(unavailable)
+        self.assertEqual(gaps, ["fixture payload unavailable: TypeError"])
 
     def test_unknown_executable_status_omission_is_disclosed(self) -> None:
         session = COLLECTOR.ensure_session({}, "unknown-status")

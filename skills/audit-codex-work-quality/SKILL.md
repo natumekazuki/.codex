@@ -30,7 +30,7 @@ description: 開始日時と終了日時で固定したCodexセッション区�
 - AGENTS、Skill、hook、repository policyを自動変更しない。恒久変更は提案に留める。
 - 既定出力はevent streamではなくsession indexとする。各sessionの時刻、workspace、source、event kind集計、known / unknown failure数、先頭・末尾から選んだ短いgoal / outcome cueだけを返し、`events`は投影しない。cueの省略数とevent-level detailを投影しなかった件数を開示する。
 - `--detail`のper-session / global出力上限は、`provider_error`、明示的なerror eventまたはturn error、構造化signalで失敗と確認できたtool resultを同じknown failure evidenceとして優先保持する。known failure evidenceだけで明示上限を超える場合は、暗黙に欠落させず停止する。tool call / resultは、同じcanonical sessionとsource内で非空stringのcall IDが双方に一つずつある場合だけ対応済みとする。sourceが成功・失敗を構造化していない実行証拠、対応resultがないcall、空・不正・重複IDで対応が曖昧なcallは推測で分類せず、indexでは件数、detailでは`unknown_failure_status_events`と`unknown_failure_status_omitted`へ開示する。
-- tool command、raw error、stderrの本文はindex / detailのどちらにも投影しない。toolの種類、call ID、構造化された成否、文字数、digestだけを保持し、監査JSONをraw実行出力の複製にしない。
+- session indexにはtool command、tool output、raw error、stderr、provider payload summary、audit event summaryの本文を投影しない。`--detail`では、明示されたtext / event / row / byte上限内の本文、元の文字数、truncation、SHA-256と、source kind、operation type、call ID、tool種別、構造化された成否を分析用evidenceとして保持する。非文字列payloadはsource typeを伴うbounded JSONに変換し、変換不能は`data_gaps`へ開示する。detail evidenceを最終レポートへ機械的に転載せず、ユーザーが保存を明示しない限り中間fileへ永続化しない。
 
 ## Workflow
 
@@ -61,7 +61,7 @@ description: 開始日時と終了日時で固定したCodexセッション区�
 - `--withmate-db`と`--codex-home`は環境差を明示するときだけ指定する。
 - `--workspace`は各sourceの証拠をcanonical sessionへ統合する前にworkspaceで絞る。大文字小文字を区別しないexact path比較である。
 - `--session-id`はindexで得たcanonical session IDを指定する。複数回指定できる。
-- `--detail`は対象sessionのbounded event evidenceと長いmessage previewを出すが、reasoning、usage、raw provider payload、tool command、raw error、stderrは出さない。既定の監査ではindexで対象を絞ってから`--session-id`と併用する。
+- `--detail`は対象sessionのbounded event evidence、長いmessage preview、tool command / output、raw error、stderr、provider summary、audit event summaryを出す。reasoning、usage、provider payload全体は出さない。既定の監査ではindexで対象を絞ってから`--session-id`と併用し、detailに含まれるraw evidenceを必要な分析だけに使う。
 - `--max-rollout-bytes`、`--max-rollout-line-bytes`、`--max-rollout-files`、`--max-tail-probe-bytes`、`--max-database-bytes`、`--max-database-rows`、`--max-collected-events`は収集処理のresource limitである。SQLiteのbyte上限はschema確認を含む全queryのstdout合計へ適用する。超過時は部分結果を成功扱いせず停止する。
 - `--max-events-per-session`と`--max-events`はdetail event出力だけの上限であり、`--detail`なしでは拒否する。明示した0や負数は既定値へ読み替えず拒否する。indexのcue上限はschema contractへ固定し、CLI optionを増やさない。
 - collectorが報告する`data_gaps`、`truncation`、`malformed_lines`を監査結果へ反映する。

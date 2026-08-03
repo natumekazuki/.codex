@@ -78,6 +78,8 @@ REQUIRED_COLUMNS = {
         "payload_json",
         "created_at",
     },
+}
+OPTIONAL_COLUMNS = {
     "audit_events_v6": {"session_id", "event_type", "summary", "created_at"},
 }
 ALLOWED_PROVIDER_KINDS = {"operation", "provider_error", "background_task"}
@@ -391,7 +393,7 @@ def validate_database(
     executable: str,
     database: Path,
     byte_budget: CountBudget,
-) -> None:
+) -> frozenset[str]:
     if not database.is_file():
         raise CollectorError(f"WithMate database not found: {database}")
 
@@ -404,7 +406,8 @@ def validate_database(
     if pragma != [{"query_only": 1}]:
         raise CollectorError("SQLite query_only preflight did not return 1")
 
-    table_list = ",".join(sql_literal(name) for name in sorted(REQUIRED_COLUMNS))
+    declared_columns = REQUIRED_COLUMNS | OPTIONAL_COLUMNS
+    table_list = ",".join(sql_literal(name) for name in sorted(declared_columns))
     rows = run_sqlite_json(
         executable,
         database,
@@ -421,8 +424,16 @@ def validate_database(
         for table, columns in REQUIRED_COLUMNS.items()
         if columns - found.get(table, set())
     }
+    missing.update(
+        {
+            table: sorted(columns - found[table])
+            for table, columns in OPTIONAL_COLUMNS.items()
+            if table in found and columns - found[table]
+        }
+    )
     if missing:
         raise CollectorError(f"unsupported WithMate schema; missing columns: {missing}")
+    return frozenset(table for table in OPTIONAL_COLUMNS if table in found)
 
 
 def sql_literal(value: str) -> str:
@@ -565,6 +576,7 @@ def collect_timestamp_domain_gaps(
     byte_budget: CountBudget,
     gaps: list[str],
     workspace_filter: str | None,
+    available_optional_tables: frozenset[str] = frozenset(OPTIONAL_COLUMNS),
 ) -> int:
     timestamp_columns = [
         (
@@ -607,13 +619,16 @@ def collect_timestamp_domain_gaps(
             "JOIN session_turns_v6 AS t ON t.id=p.turn_id "
             "JOIN sessions_v6 AS s ON s.id=t.session_id",
         ),
-        (
-            "audit_events_v6.created_at",
-            "a.created_at",
-            False,
-            "audit_events_v6 AS a JOIN sessions_v6 AS s ON s.id=a.session_id",
-        ),
     ]
+    if "audit_events_v6" in available_optional_tables:
+        timestamp_columns.append(
+            (
+                "audit_events_v6.created_at",
+                "a.created_at",
+                False,
+                "audit_events_v6 AS a JOIN sessions_v6 AS s ON s.id=a.session_id",
+            )
+        )
     selects: list[str] = []
     for field, column, nullable, from_clause in timestamp_columns:
         null_guard = f"{column} IS NOT NULL AND " if nullable else ""
@@ -823,10 +838,29 @@ def bounded_text(value: Any, limit: int) -> dict[str, Any]:
     }
 
 
+def bounded_raw_evidence(
+    value: Any,
+    limit: int,
+    *,
+    gaps: list[str] | None = None,
+    label: str = "raw evidence",
+) -> dict[str, Any] | None:
+    if isinstance(value, str):
+        return bounded_text(value, limit)
+    try:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError) as exc:
+        if gaps is not None:
+            gaps.append(f"{label} unavailable: {type(exc).__name__}")
+        return None
+    evidence = bounded_text(text, limit)
+    evidence["source_type"] = type(value).__name__
+    evidence["encoding"] = "json"
+    return evidence
+
+
 def content_fingerprint(value: Any) -> dict[str, Any]:
-    if value is None:
-        text = ""
-    elif isinstance(value, str):
+    if isinstance(value, str):
         text = value
     else:
         text = json.dumps(value, ensure_ascii=False, sort_keys=True)
@@ -960,6 +994,152 @@ def row_matches_workspace(
     )
 
 
+def provider_event_projection(
+    row: dict[str, Any],
+    *,
+    detail: bool,
+    text_limit: int,
+    gaps: list[str],
+) -> tuple[str, dict[str, Any] | None, dict[str, Any]]:
+    provider_kind = str(row.get("kind") or "")
+    payload_value: Any = None
+    payload_value_present = False
+    raw_payload = row.get("payload_json")
+    if isinstance(raw_payload, str) and raw_payload:
+        try:
+            decoded_payload = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            gaps.append("withmate provider payload JSON unavailable: invalid JSON")
+        else:
+            if isinstance(decoded_payload, dict):
+                if "value" in decoded_payload:
+                    payload_value = decoded_payload.get("value")
+                    payload_value_present = True
+            else:
+                gaps.append(
+                    "withmate provider payload unavailable: expected object envelope"
+                )
+    elif not detail and row.get("indexed_payload_valid") == 0:
+        gaps.append("withmate provider payload JSON unavailable: invalid JSON")
+    value_object = payload_value if isinstance(payload_value, dict) else {}
+    if not detail:
+        value_object = {
+            "type": row.get("indexed_operation_type"),
+            "call_id": row.get("indexed_call_id"),
+            "tool": row.get("indexed_tool"),
+            "exit_code": row.get("indexed_exit_code"),
+            "status": row.get("indexed_status"),
+            "wall_time_seconds": row.get("indexed_wall_time_seconds"),
+        }
+        if row.get("indexed_is_error_type") in {"true", "false"}:
+            value_object["isError"] = bool(row.get("indexed_is_error"))
+        payload_value = value_object
+        payload_value_present = True
+    operation_type = safe_provider_operation_type(value_object.get("type"))
+    is_provider_error = provider_kind == "provider_error"
+
+    error_value: Any = None
+    error_value_present = False
+    if is_provider_error or operation_type == "error":
+        if isinstance(payload_value, dict):
+            if value_object.get("message") not in (None, ""):
+                error_value = value_object.get("message")
+                error_value_present = True
+            elif value_object.get("error") not in (None, ""):
+                error_value = value_object.get("error")
+                error_value_present = True
+        elif payload_value_present:
+            error_value = payload_value
+            error_value_present = True
+    summary_value: Any = None
+    summary_value_present = False
+    if (
+        isinstance(payload_value, dict)
+        and "summary" in value_object
+        and value_object.get("summary") not in (None, "")
+    ):
+        summary_value = value_object.get("summary")
+        summary_value_present = True
+    elif (
+        detail
+        and payload_value_present
+        and not isinstance(payload_value, (dict, str))
+    ):
+        summary_value = payload_value
+        summary_value_present = True
+    elif row.get("summary") not in (None, ""):
+        summary_value = row.get("summary")
+        summary_value_present = True
+    if error_value_present:
+        source_value = error_value
+        source_value_present = True
+    else:
+        source_value = summary_value
+        source_value_present = summary_value_present
+
+    metadata: dict[str, Any] = {
+        "provider_kind": provider_kind,
+        "operation_type": operation_type or None,
+        "sequence": row.get("seq"),
+    }
+    call_id = safe_tool_identifier(value_object.get("call_id"))
+    tool = safe_tool_identifier(value_object.get("tool") or value_object.get("name"))
+    if call_id is not None:
+        metadata["call_id"] = call_id
+    if tool is not None:
+        metadata["tool"] = tool
+
+    if is_provider_error or operation_type == "error":
+        metadata["failure_status"] = "known-failure"
+        if source_value_present:
+            metadata["error_evidence"] = (
+                bounded_raw_evidence(
+                    source_value,
+                    text_limit,
+                    gaps=gaps,
+                    label="withmate provider error evidence",
+                )
+                if detail
+                else content_fingerprint(source_value)
+            )
+    elif operation_type == "command_execution":
+        signal_metadata = tool_output_metadata(
+            {"call_id": call_id, "output": payload_value},
+            raw_evidence_limit=text_limit if detail else None,
+        )
+        for key in (
+            "exit_code",
+            "isError",
+            "status",
+            "wall_time_seconds",
+            "failure_status",
+        ):
+            if key in signal_metadata:
+                metadata[key] = signal_metadata[key]
+
+    content = None
+    if (
+        detail
+        and source_value_present
+        and not (is_provider_error or operation_type == "error")
+    ):
+        content = bounded_raw_evidence(
+            source_value,
+            text_limit,
+            gaps=gaps,
+            label="withmate provider summary evidence",
+        )
+    if is_provider_error:
+        kind = "provider_error"
+    elif operation_type in {"command_execution", "error"}:
+        kind = operation_type
+    elif provider_kind == "operation" and operation_type:
+        kind = "provider_operation"
+    else:
+        kind = provider_kind or "operation"
+    return kind, content, metadata
+
+
 def collect_database(
     executable: str,
     database: Path,
@@ -972,6 +1152,8 @@ def collect_database(
     row_budget: CountBudget,
     byte_budget: CountBudget,
     event_budget: CountBudget,
+    available_optional_tables: frozenset[str],
+    detail: bool = False,
 ) -> dict[str, int]:
     tz = resolve_timezone(window.timezone_name)
     counts: dict[str, int] = {
@@ -983,8 +1165,12 @@ def collect_database(
             byte_budget,
             gaps,
             workspace_filter,
+            available_optional_tables,
         )
     }
+    counts["audit_events"] = 0
+    if "audit_events_v6" not in available_optional_tables:
+        gaps.append("optional WithMate source unavailable: audit_events_v6")
     session_projection = (
         "s.id AS withmate_session_id, s.thread_id, s.title, "
         "s.workspace_path, s.state"
@@ -1068,7 +1254,11 @@ def collect_database(
         }
         if error_summary:
             metadata["failure_status"] = "known-failure"
-            metadata["error_evidence"] = content_fingerprint(error_summary)
+            metadata["error_evidence"] = (
+                bounded_raw_evidence(error_summary, text_limit)
+                if detail
+                else content_fingerprint(error_summary)
+            )
         add_event(
             session,
             occurred_at=occurred,
@@ -1120,23 +1310,43 @@ def collect_database(
         )
 
     kind_list = ",".join(sql_literal(kind) for kind in sorted(ALLOWED_PROVIDER_KINDS))
+    provider_json = (
+        "(CASE WHEN json_valid(p.payload_json) THEN p.payload_json ELSE '{}' END)"
+    )
+    provider_payload_projection = (
+        "p.payload_json, json_valid(p.payload_json) AS indexed_payload_valid, "
+        "NULL AS indexed_operation_type, NULL AS indexed_call_id, "
+        "NULL AS indexed_tool, NULL AS indexed_exit_code, "
+        "NULL AS indexed_is_error_type, NULL AS indexed_is_error, "
+        "NULL AS indexed_status, NULL AS indexed_wall_time_seconds"
+        if detail
+        else (
+            f"NULL AS payload_json, json_valid(p.payload_json) AS indexed_payload_valid, "
+            f"CASE WHEN json_type({provider_json},'$.value.type')='text' "
+            f"THEN json_extract({provider_json},'$.value.type') END AS indexed_operation_type, "
+            f"CASE WHEN json_type({provider_json},'$.value.call_id')='text' "
+            f"THEN json_extract({provider_json},'$.value.call_id') END AS indexed_call_id, "
+            f"coalesce(CASE WHEN json_type({provider_json},'$.value.tool')='text' "
+            f"THEN json_extract({provider_json},'$.value.tool') END, "
+            f"CASE WHEN json_type({provider_json},'$.value.name')='text' "
+            f"THEN json_extract({provider_json},'$.value.name') END) AS indexed_tool, "
+            f"CASE WHEN json_type({provider_json},'$.value.exit_code')='integer' "
+            f"THEN json_extract({provider_json},'$.value.exit_code') END AS indexed_exit_code, "
+            f"json_type({provider_json},'$.value.isError') AS indexed_is_error_type, "
+            f"CASE WHEN json_type({provider_json},'$.value.isError') IN ('true','false') "
+            f"THEN json_extract({provider_json},'$.value.isError') END AS indexed_is_error, "
+            f"CASE WHEN json_type({provider_json},'$.value.status')='text' "
+            f"THEN json_extract({provider_json},'$.value.status') END AS indexed_status, "
+            f"CASE WHEN json_type({provider_json},'$.value.wall_time_seconds') "
+            f"IN ('integer','real') THEN json_extract("
+            f"{provider_json},'$.value.wall_time_seconds') END AS indexed_wall_time_seconds"
+        )
+    )
     outputs = run_budgeted_sqlite_json(
         executable,
         database,
-        f"SELECT {session_projection}, p.seq, p.kind, p.summary, p.created_at, "
-        "CASE WHEN json_type(p.payload_json,'$.value.type')='text' "
-        "THEN json_extract(p.payload_json,'$.value.type') END AS operation_type, "
-        "CASE WHEN json_type(p.payload_json,'$.value.summary')='text' "
-        "THEN json_extract(p.payload_json,'$.value.summary') END "
-        "AS operation_summary, "
-        "CASE WHEN p.kind='provider_error' THEN coalesce("
-        "CASE WHEN json_type(p.payload_json,'$.value.message')='text' "
-        "THEN json_extract(p.payload_json,'$.value.message') END, "
-        "CASE WHEN json_type(p.payload_json,'$.value.error')='text' "
-        "THEN json_extract(p.payload_json,'$.value.error') END, "
-        "CASE WHEN json_type(p.payload_json,'$.value')='text' "
-        "THEN json_extract(p.payload_json,'$.value') END) ELSE NULL END "
-        "AS provider_error_message "
+        f"SELECT {session_projection}, p.seq, p.kind, p.summary, "
+        f"{provider_payload_projection}, p.created_at "
         "FROM session_turn_provider_outputs_v6 AS p "
         "JOIN session_turns_v6 AS t ON t.id=p.turn_id "
         "JOIN sessions_v6 AS s ON s.id=t.session_id "
@@ -1159,76 +1369,69 @@ def collect_database(
         if not in_window(occurred, window):
             continue
         session = session_from_row(sessions, row)
-        provider_kind = str(row.get("kind") or "")
-        operation_type = safe_provider_operation_type(row.get("operation_type"))
-        source_text = (
-            row.get("provider_error_message")
-            or row.get("operation_summary")
-            or row.get("summary")
-            or ""
+        kind, content, metadata = provider_event_projection(
+            row,
+            detail=detail,
+            text_limit=text_limit,
+            gaps=gaps,
         )
-        is_provider_error = provider_kind == "provider_error"
-        metadata: dict[str, Any] = {
-            "provider_kind": provider_kind,
-            "operation_type": operation_type or None,
-            "sequence": row.get("seq"),
-        }
-        if is_provider_error:
-            metadata["failure_status"] = "known-failure"
-            if source_text:
-                metadata["error_evidence"] = content_fingerprint(source_text)
-        elif operation_type == "command_execution":
-            metadata["failure_status"] = "unknown"
         add_event(
             session,
             occurred_at=occurred,
-            kind=(
-                "provider_error"
-                if is_provider_error
-                else operation_type or provider_kind or "operation"
-            ),
+            kind=kind,
             source="withmate-v6",
-            text=(
-                bounded_text(source_text, text_limit)
-                if source_text and not is_provider_error
-                else None
-            ),
+            text=content,
             metadata=metadata,
             budget=event_budget,
         )
 
-    audit = run_budgeted_sqlite_json(
-        executable,
-        database,
-        f"SELECT {session_projection}, a.event_type, a.summary, a.created_at "
-        "FROM audit_events_v6 AS a JOIN sessions_v6 AS s ON s.id=a.session_id "
-        "WHERE a.event_type IN ('session_turn','diagnostic') "
-        f"AND {timestamp_predicate('a.created_at', window)} ORDER BY a.created_at;",
-        row_budget,
-        byte_budget,
-        "audit events",
-    )
-    counts["audit_events"] = 0
-    for row in audit:
-        if not row_matches_workspace(row, workspace_filter):
-            continue
-        counts["audit_events"] += 1
-        try:
-            occurred = parse_timestamp(str(row["created_at"]), slash_timezone=tz)
-        except (ValueError, TypeError) as exc:
-            gaps.append(f"withmate audit timestamp skipped: {exc}")
-            continue
-        if not in_window(occurred, window):
-            continue
-        session = session_from_row(sessions, row)
-        add_event(
-            session,
-            occurred_at=occurred,
-            kind=f"audit_{row.get('event_type')}",
-            source="withmate-v6",
-            text=bounded_text(str(row.get("summary") or ""), text_limit),
-            budget=event_budget,
+    if "audit_events_v6" in available_optional_tables:
+        audit = run_budgeted_sqlite_json(
+            executable,
+            database,
+            f"SELECT {session_projection}, a.event_type, a.summary, a.created_at "
+            "FROM audit_events_v6 AS a JOIN sessions_v6 AS s ON s.id=a.session_id "
+            "WHERE a.event_type IN ('session_turn','diagnostic') "
+            f"AND {timestamp_predicate('a.created_at', window)} ORDER BY a.created_at;",
+            row_budget,
+            byte_budget,
+            "audit events",
         )
+        for row in audit:
+            if not row_matches_workspace(row, workspace_filter):
+                continue
+            try:
+                occurred = parse_timestamp(str(row["created_at"]), slash_timezone=tz)
+            except (ValueError, TypeError) as exc:
+                gaps.append(f"withmate audit timestamp skipped: {exc}")
+                continue
+            if not in_window(occurred, window):
+                continue
+            counts["audit_events"] += 1
+            session = session_from_row(sessions, row)
+            if "summary" not in row:
+                gaps.append("withmate audit summary unavailable: missing value")
+                summary_evidence = None
+            else:
+                audit_summary = row.get("summary")
+                summary_evidence = (
+                    bounded_raw_evidence(
+                        audit_summary,
+                        text_limit,
+                        gaps=gaps,
+                        label="withmate audit summary evidence",
+                    )
+                    if detail
+                    else content_fingerprint(audit_summary)
+                )
+            add_event(
+                session,
+                occurred_at=occurred,
+                kind=f"audit_{row.get('event_type')}",
+                source="withmate-v6",
+                text=summary_evidence,
+                budget=event_budget,
+            )
 
     return counts
 
@@ -1310,26 +1513,46 @@ def last_rollout_timestamp(
     return "known", timestamp, len(data)
 
 
-def tool_call_metadata(payload: dict[str, Any]) -> dict[str, Any]:
-    raw = payload.get("arguments", payload.get("input", ""))
-    parsed: Any = raw
-    if isinstance(raw, str):
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            parsed = raw
-    command = parsed.get("cmd") if isinstance(parsed, dict) else None
+def tool_call_metadata(
+    payload: dict[str, Any], *, raw_evidence_limit: int | None = None
+) -> dict[str, Any]:
+    if payload.get("type") == "custom_tool_call":
+        command_present = "input" in payload
+        command = payload.get("input")
+    else:
+        if "arguments" in payload:
+            raw = payload.get("arguments")
+        else:
+            raw = payload.get("input", "")
+        parsed: Any = raw
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = raw
+        command = (
+            parsed.get("cmd")
+            if isinstance(parsed, dict)
+            else parsed if isinstance(parsed, str) else None
+        )
+        command_present = bool(command)
     metadata = {
         "call_id": safe_tool_identifier(payload.get("call_id")),
         "tool": safe_tool_identifier(payload.get("name")),
         "namespace": safe_tool_identifier(payload.get("namespace")),
     }
-    if command:
-        metadata["command_evidence"] = content_fingerprint(command)
+    if command_present:
+        metadata["command_evidence"] = (
+            bounded_raw_evidence(command, raw_evidence_limit)
+            if raw_evidence_limit is not None
+            else content_fingerprint(command)
+        )
     return metadata
 
 
-def tool_output_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+def tool_output_metadata(
+    payload: dict[str, Any], *, raw_evidence_limit: int | None = None
+) -> dict[str, Any]:
     raw = payload.get("output", "")
     parsed: Any = raw
     if isinstance(raw, str):
@@ -1340,6 +1563,12 @@ def tool_output_metadata(payload: dict[str, Any]) -> dict[str, Any]:
     metadata: dict[str, Any] = {
         "call_id": safe_tool_identifier(payload.get("call_id"))
     }
+    if raw not in (None, ""):
+        metadata["output_evidence"] = (
+            bounded_raw_evidence(raw, raw_evidence_limit)
+            if raw_evidence_limit is not None
+            else content_fingerprint(raw)
+        )
     failure_status = "unknown"
     if isinstance(parsed, dict):
         raw_exit_code = parsed.get("exit_code")
@@ -1376,9 +1605,17 @@ def tool_output_metadata(payload: dict[str, Any]) -> dict[str, Any]:
         explicit_error = parsed.get("error")
         stderr = parsed.get("stderr")
         if explicit_error:
-            metadata["error_evidence"] = content_fingerprint(explicit_error)
+            metadata["error_evidence"] = (
+                bounded_raw_evidence(explicit_error, raw_evidence_limit)
+                if raw_evidence_limit is not None
+                else content_fingerprint(explicit_error)
+            )
         if stderr:
-            metadata["stderr_evidence"] = content_fingerprint(stderr)
+            metadata["stderr_evidence"] = (
+                bounded_raw_evidence(stderr, raw_evidence_limit)
+                if raw_evidence_limit is not None
+                else content_fingerprint(stderr)
+            )
         if is_error is True:
             failure_status = "known-failure"
         elif exit_code is not None and exit_code != 0:
@@ -1443,6 +1680,7 @@ def collect_rollouts(
     workspace_filter: str | None,
     gaps: list[str],
     event_budget: CountBudget,
+    detail: bool = False,
 ) -> dict[str, Any]:
     candidates, total_bytes, uncertain_tail_files, probed_bytes = candidate_rollouts(
         codex_sessions, window, max_bytes, max_files, max_tail_probe_bytes
@@ -1580,8 +1818,10 @@ def collect_rollouts(
                         }
                         error_text = native_text(payload)
                         if error_text:
-                            metadata["error_evidence"] = content_fingerprint(
-                                error_text
+                            metadata["error_evidence"] = (
+                                bounded_raw_evidence(error_text, text_limit)
+                                if detail
+                                else content_fingerprint(error_text)
                             )
                     else:
                         metadata = rollout_event_metadata(payload)
@@ -1600,7 +1840,10 @@ def collect_rollouts(
                         occurred_at=occurred,
                         kind="tool_call",
                         source="codex-rollout",
-                        metadata=tool_call_metadata(payload),
+                        metadata=tool_call_metadata(
+                            payload,
+                            raw_evidence_limit=text_limit if detail else None,
+                        ),
                         budget=event_budget,
                     )
                 else:
@@ -1609,7 +1852,10 @@ def collect_rollouts(
                         occurred_at=occurred,
                         kind="tool_result",
                         source="codex-rollout",
-                        metadata=tool_output_metadata(payload),
+                        metadata=tool_output_metadata(
+                            payload,
+                            raw_evidence_limit=text_limit if detail else None,
+                        ),
                         budget=event_budget,
                     )
         parsed_files += 1
@@ -1731,6 +1977,8 @@ def correlation_call_id(event: dict[str, Any]) -> str | None:
 def mark_unmatched_tool_calls(events: list[dict[str, Any]]) -> None:
     call_counts: dict[tuple[str, str], int] = {}
     result_counts: dict[tuple[str, str], int] = {}
+    calls: dict[tuple[str, str], dict[str, Any]] = {}
+    results: dict[tuple[str, str], dict[str, Any]] = {}
     for event in events:
         if event.get("kind") not in {"tool_call", "tool_result"}:
             continue
@@ -1740,6 +1988,19 @@ def mark_unmatched_tool_calls(events: list[dict[str, Any]]) -> None:
         key = (str(event.get("source") or ""), call_id)
         counts = call_counts if event.get("kind") == "tool_call" else result_counts
         counts[key] = counts.get(key, 0) + 1
+        targets = calls if event.get("kind") == "tool_call" else results
+        targets[key] = event
+
+    for key, call in calls.items():
+        if call_counts.get(key) != 1 or result_counts.get(key) != 1:
+            continue
+        call_metadata = call.get("metadata")
+        result_metadata = results[key].get("metadata")
+        if not isinstance(call_metadata, dict) or not isinstance(result_metadata, dict):
+            continue
+        for field in ("tool", "namespace"):
+            if call_metadata.get(field) is not None:
+                result_metadata[field] = call_metadata[field]
 
     for event in events:
         if event.get("kind") != "tool_call":
@@ -2117,7 +2378,9 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
     database_byte_budget = CountBudget(
         "--max-database-bytes", int(args.max_database_bytes)
     )
-    validate_database(sqlite_executable, database, database_byte_budget)
+    available_optional_tables = validate_database(
+        sqlite_executable, database, database_byte_budget
+    )
 
     sessions: dict[str, dict[str, Any]] = {}
     gaps: list[str] = []
@@ -2135,6 +2398,8 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
         row_budget=row_budget,
         byte_budget=database_byte_budget,
         event_budget=event_budget,
+        available_optional_tables=available_optional_tables,
+        detail=args.detail,
     )
     rollout_counts = collect_rollouts(
         codex_sessions,
@@ -2148,6 +2413,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
         workspace_filter=args.workspace,
         gaps=gaps,
         event_budget=event_budget,
+        detail=args.detail,
     )
     finalized, truncation = finalize_sessions(
         sessions,
