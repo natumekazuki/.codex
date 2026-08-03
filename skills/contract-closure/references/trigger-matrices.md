@@ -169,7 +169,7 @@
 - provenanceとして分離したbase ref label
 - source identityを構成するmode、resolved base commit / tree OID、changed / untracked manifest、file mode、object type、content identity、削除marker、作成recipe、read-only verification recipe
 - accepted anchor、Invariant ID、matrix cell定義、trigger済みlens scope、review contract revision / recipe
-- targeted / broader check、specialist / targeted re-review / holistic review、coverage status、構造収束gate
+- targeted / broader check、specialist / targeted closure / holistic review、coverage status、構造収束gate
 - Candidate ID、evidence status、通常index、一時index
 
 反例:
@@ -188,7 +188,7 @@
 - review entryまたはvalidation reportのprojectionからentry固有のresultが欠け、複数entryの結果を区別できなくなっていないか
 - 定義差分非影響確認のprojectionからreviewed definition deltaまたはnon-impact rationaleが欠け、origin参照だけで`current`になっていないか
 - 旧entryを元Candidateに保持せず、新しい確認entryの代わりに同じentryを`current`として移動していないか
-- specialist findingの修正後、finding lensのtargeted re-reviewと他lensのdelta非影響確認より先にholistic reviewへ進んでいないか
+- specialist findingの修正後、finding lensのtargeted closureと他lensのdelta非影響確認より先にholistic reviewへ進んでいないか
 - holistic reviewがCandidate IDを問わず、Ledger review entryまたはspecialist evidenceを入力として消費していないか
 - Candidate treeを作るために通常のGit indexまたは既存staged変更を変更していないか
 - `.git`またはobject databaseへのwrite authorityがない作成側へCandidate tree生成を要求し、`manifest-digest`へ切り替えずreview lifecycleを停止させていないか

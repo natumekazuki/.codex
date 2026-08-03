@@ -1,10 +1,14 @@
 # ADR-0007: frozen Candidateと不変条件lensでhigh-risk reviewを収束させる
 
-- Status: accepted, amended by ADR-0008
+- Status: accepted, amended by ADR-0008 and ADR-0012
 - Date: 2026-07-26
 - Amends: ADR-0004, ADR-0005
 - Related: ADR-0006
-- Amended by: ADR-0008 (2026-07-27)
+- Amended by: ADR-0008 (2026-07-27), ADR-0012 (2026-08-03)
+
+## Amendment
+
+ADR-0012は、specialist review後のholistic complete-diff reviewを`Full-review gate=run`の場合の一度に限定し、そのfinding修正後のfresh-context full-diff closure reviewを廃止する。specialist lens、Candidate、Evidence Ledger、同一Candidateへ証拠を揃える決定は維持する。
 
 ## Context
 

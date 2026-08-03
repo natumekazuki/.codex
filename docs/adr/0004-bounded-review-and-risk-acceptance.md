@@ -1,8 +1,13 @@
 # ADR-0004: reviewをblocking findingと明示的なrisk acceptanceで収束させる
 
-- Status: accepted
+- Status: accepted, amended by ADR-0012
 - Date: 2026-07-18
 - Supersedes: ADR-0003
+- Amended by: ADR-0012 (2026-08-03)
+
+## Amendment
+
+ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一つの論理変更につき3回の上限を、単一のholistic complete-diff reviewとfinding family / resulting deltaのtargeted closureへ置き換える。本ADRのfinding分類、risk acceptance、reviewable slice、重大な安全問題を回数だけで受容しない決定は維持する。
 
 ## Context
 

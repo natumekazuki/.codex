@@ -26,10 +26,11 @@ description: 実装後に、変更したsourceと実行可能な契約、実行�
 - 実装を通すために既存のtestやcontractを弱めていないことを確認し、意図したcontract変更は理由を明示する。
 - pure refactorや機械変更では、新規testを一律に要求せず、既存の実行可能な契約が維持されることを確認する。
 - docs / policy-only変更では、構文、参照、残存語彙、責務整合などの代替checkを示す。
-- reviewを実施した場合はreview kind、scope、complete diffの確認有無、full-diff review回数、`blocking` status、accepted risk、validation gapを示す。
-- Candidate固有のfield、source identity、失効判定、evidence status、review handoffの意味は`contract-closure` Skillを参照し、このSkillで再定義または再計算しない。
-- verified Candidate拡張では、現行Candidateを識別するsource identityとraw diff digest、review contract、Candidate verification result、structural convergence gate / result、完了根拠となるcheck / review Entry ID、実行Candidate、origin、ledger status、definition delta、non-impact rationale、Matrix cellごとのcoverage status、lens、review済み・未確認cell、complete-diff reviewの有無を表示する。非現行entryは、gapまたはcurrent evidenceの由来を説明するために必要なものだけ要約する。
-- validation-only出力では、overall judgment、review scope、complete-diff確認、blocking finding status、Candidate ID、Candidate verification result、handoffで割り当てられたReview Entry ID、verification evidence、validation gap、reviewed cells `none`だけを表示する。Review Entry IDを新規作成したり、Evidence Ledger entryとして扱ったりしない。
+- reviewを実施した場合はreview kind、scope、complete diffの確認有無、full-diff review回数、`blocking` status、accepted risk、validation gapを示す。full-diff review回数の正常値は一つの論理変更につき0回または1回とする。
+- Candidate固有のfield、source identity、Candidate preflight、失効判定、evidence status、Review Briefの意味は`contract-closure` Skillを参照し、このSkillで再定義または再計算しない。
+- reviewを実施または開始した場合は、Review Briefのdeadline、deadline内の完了または超過、review再試行の有無と理由を区別して示す。Candidate-bound reviewではCandidate preflightも示す。timeoutをtoolまたはtransport failureとして扱わない。
+- verified Candidate拡張では、現行Candidateを識別するsource identityとraw diff digest、review contract、Candidate preflight、Candidate verification result、structural convergence gate / result、完了根拠となるcheck / review Entry ID、実行Candidate、origin、ledger status、definition delta、non-impact rationale、Matrix cellごとのcoverage status、lens、review済み・未確認cell、complete-diff reviewの有無を表示する。holistic findingでCandidateが変わった場合は、旧Candidateのholistic discovery Entry IDとimmutable resultをreview-cycle recordとして示し、現行Candidateのdirect check、targeted closure、影響するspecialist cellのcurrent Entry IDをFinal Candidate closure chainとして分ける。旧holistic entryを現行Candidateのcompletion evidenceとして表示しない。その他の非現行entryは、gapまたはcurrent evidenceの由来を説明するために必要なものだけ要約する。
+- validation-only出力では、overall judgment、review scope、complete-diff確認、blocking finding status、Candidate ID、Candidate preflight、Candidate verification result、Review Briefで割り当てられたReview Entry ID、verification evidence、validation gap、reviewed cells `none`だけを表示する。Review Entry IDを新規作成したり、Evidence Ledger entryとして扱ったりしない。
 - Candidateを使わない通常reviewでは、reviewの要否、scope、結果、`blocking` status、accepted risk、validation gapだけを示す。reviewを実施不要と判断した場合は理由を示す。
 - sourceと実行可能な契約が食い違う場合はalignedとせず、意図確認と残作業を報告する。
 - ADRとarchitecture文書の判定規則は`AGENTS.md`を正本とし、このSkillへ条件を複製しない。

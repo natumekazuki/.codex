@@ -33,6 +33,8 @@ Candidate Definitionを使わない作業では、このテンプレートだけ
 - Result: <review kind, scope, result, or not run>
 - Complete diff reviewed: yes | no
 - Full-diff review count: <number or 0>
+- Review deadline: <deadline and completed within deadline / exceeded / not started / not used>
+- Review retry: none | <tool or transport failure and preserved Candidate / review contract>
 - Blocking status: none | remaining — <detail>
 - Accepted risk: <risk and rationale, or none>
 - Validation gap: <gap or none>
@@ -60,8 +62,11 @@ Candidate verification resultが`verified`の作業では、通常作業用テ�
 - Candidate ID: <ID>
 - Source identity: <mode, value, resolved base OIDs, read-only verification recipe, raw diff command / digest, and creator tree OID when applicable>
 - Review contract: <revision / recipe, accepted anchors and contract meaning, Invariant IDs, supported scope, cell definitions, and lens scope>
+- Candidate preflight: verified — <local verification evidence>
 - Candidate verification result: verified
 - Structural convergence gate / result: <canonical gate result from the task-local Ledger>
+- Holistic discovery provenance: <Entry ID / executed-on Candidate / immutable result, or not run; do not relabel as current evidence for this Candidate>
+- Final Candidate closure chain: <current direct-check / targeted-closure / affected-specialist Entry IDs>
 
 | Entry ID | Evidence kind | Executed-on Candidate | Origin entry / Candidate | Ledger status | Result / current-evidence basis | Reviewed definition delta / non-impact rationale |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -89,13 +94,14 @@ Candidate verification resultが`mismatch`または`validation-gap`の場合は�
 # Candidate Verification
 
 - Overall judgment: not assessed — mismatch | not assessed — validation-gap
-- Review kind: <kind echoed from the handoff>
+- Review kind: <kind echoed from the Review Brief>
 - Review scope: Candidate verification only
 - Complete updated diff reviewed: no
 - Blocking finding status: not assessed
 - Candidate ID: <ID>
 - Candidate verification result: mismatch | validation-gap
-- Review Entry ID: <ID echoed from the handoff, or unassigned; not a Ledger entry>
+- Candidate preflight: verified
+- Review Entry ID: <ID echoed from the Review Brief, or unassigned; not a Ledger entry>
 - Verification evidence: <mismatch evidence or completed verification steps>
 - Validation gap: <missing field, object, query, or sandbox capability, or none for a confirmed mismatch>
 - Reviewed cells: none

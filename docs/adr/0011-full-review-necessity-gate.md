@@ -1,9 +1,14 @@
 # ADR-0011: complete-diff reviewを具体的な必要性で発火する
 
-- Status: accepted
+- Status: accepted, amended by ADR-0012
 - Date: 2026-08-02
 - Amends: ADR-0004, ADR-0005
 - Related: ADR-0007, ADR-0008, ADR-0010
+- Amended by: ADR-0012 (2026-08-03)
+
+## Amendment
+
+ADR-0012は、`Full-review gate=run`で開始するholistic complete-diff reviewを一つの論理変更につき一度に限定する。`skip`を既定とする本ADRのtrigger判定は最初のholistic reviewを開始する前にだけ適用し、holistic findingによるsource修正や旧Candidateのreview evidence失効を同じ論理変更の再`run` triggerにしない。
 
 ## Context
 
@@ -13,11 +18,11 @@
 
 ## Decision
 
-- 独立したcomplete-diff reviewを追加で開始する前に、root sessionが`Full-review gate`を判定する。既定値は`skip`とする。
-- `AGENTS.md`または適用されるSkillが独立reviewを明示的に要求する場合、または現在の変更にhigh-risk / non-localな境界、未確認のsubsystem / slice間interaction、targeted checkで直接検証できないcross-cutting contract、既存のcomplete-diff review evidenceを失効させる統合後変更の具体的な証拠がある場合だけ`run`とする。
-- PR作成依頼、file数、diff量、review回数、finding数、未使用のreviewer、過去に別sessionでfindingが出た事実、または「念のため」は`run`の根拠にしない。
+- 独立したcomplete-diff reviewを開始する前に、root sessionが`Full-review gate`を判定する。既定値は`skip`とする。
+- `AGENTS.md`または適用されるSkillが独立reviewを明示的に要求する場合、または現在の変更にhigh-risk / non-localな境界、未確認のsubsystem / slice間interaction、targeted checkで直接検証できないcross-cutting contractがある場合だけ`run`とする。
+- PR作成依頼、file数、diff量、review回数、finding数、未使用のreviewer、過去に別sessionでfindingが出た事実、holistic findingによるsource修正、旧Candidateのcomplete-diff review evidence失効、または「念のため」は再`run`の根拠にしない。
 - gateの判定だけを目的としてreviewerを起動しない。root sessionが`run`または`skip`、その根拠、`run`の場合は対象scopeを報告する。
-- `run`と判定したreviewには、ADR-0004とADR-0007が定めるreview回数、closure、handoffの規則を引き続き適用する。本ADRはhigh-riskまたはnon-localな変更に必要なreviewを弱めない。
+- `run`と判定したreviewには、ADR-0012が定める単一holistic review、targeted closure、Review Brief、停止条件を適用する。本ADRはhigh-riskまたはnon-localな変更に必要な最初の発見フェーズを弱めない。
 
 ## Alternatives
 
@@ -53,7 +58,7 @@ review costは最小になるが、複数境界にまたがるinteractionやhigh
 ## Policy Anchors
 
 - gateの判定条件と報告: `AGENTS.md`
-- high-risk / non-localなCandidate reviewとhandoff: `skills/contract-closure/SKILL.md`
+- high-risk / non-localなCandidate reviewとReview Brief: `skills/contract-closure/SKILL.md`
 - reviewerの責務: `agents/reviewer.toml`
 
 本決定に固定文言を検査するexecutable contractは置かない。変更ごとのriskと未確認interactionを入力にする判断であり、静的な文言testは現在の表現を固定するだけになるためである。
