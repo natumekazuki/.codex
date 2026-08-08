@@ -2,7 +2,7 @@
 # Copy only the agents you actually want to register.
 
 [agents]
-max_threads = 5
+max_concurrent_threads_per_session = 5
 max_depth = 1
 
 [agents.researcher]
@@ -23,6 +23,9 @@ config_file = "agents/designer.toml"
 [agents.implementer]
 config_file = "agents/implementer.toml"
 
+[agents.focused_implementer]
+config_file = "agents/focused_implementer.toml"
+
 [agents.fast_implementer]
 config_file = "agents/fast_implementer.toml"
 
@@ -37,6 +40,9 @@ config_file = "agents/reviewer.toml"
 
 [agents.targeted_reviewer]
 config_file = "agents/targeted_reviewer.toml"
+
+[agents.slice_reviewer]
+config_file = "agents/slice_reviewer.toml"
 
 [agents.fast_reviewer]
 config_file = "agents/fast_reviewer.toml"

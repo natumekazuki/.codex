@@ -15,7 +15,7 @@
     ],
     "SubagentStart": [
       {
-        "matcher": "^(fast_researcher|fast_planner|fast_implementer|fast_validator|fast_reviewer|researcher|planner|designer|implementer|validator|reviewer)$",
+        "matcher": "^(fast_researcher|fast_planner|fast_implementer|fast_validator|fast_reviewer|researcher|planner|designer|implementer|focused_implementer|validator|reviewer|targeted_reviewer|slice_reviewer)$",
         "hooks": [
           {
             "type": "command",
