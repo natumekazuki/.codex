@@ -122,6 +122,10 @@ class ReviewBriefTests(unittest.TestCase):
 
     def ordinary(self) -> dict:
         request = self.common("targeted-review", "slice_reviewer", risk="ordinary-slice")
+        request["evidenceLedgerNotRequiredReason"] = (
+            "Candidate-independent targeted review does not use a Frozen Candidate or Candidate-bound Evidence Ledger "
+            "under skills/contract-closure/SKILL.md Review Brief."
+        )
         request["completedSlice"] = {
             "status": "completed",
             "observableOutcome": "valid ordinary input renders a bounded brief",
@@ -136,6 +140,19 @@ class ReviewBriefTests(unittest.TestCase):
         request["candidateId"] = "candidate-1"
         request["candidateSnapshot"] = self.snapshot()
         request["executedChecks"][0]["executedOnCandidateId"] = "candidate-1"
+        if kind in {"targeted-review", "specialist-review", "targeted-closure"}:
+            request["evidenceLedger"] = {
+                "candidateId": "candidate-1",
+                "entries": [
+                    {
+                        "id": "check-1",
+                        "kind": "check",
+                        "candidateId": "candidate-1",
+                        "status": "current",
+                        "result": "passed",
+                    }
+                ],
+            }
         if kind == "targeted-review":
             request["completedSlice"] = {
                 "status": "completed",
@@ -145,17 +162,6 @@ class ReviewBriefTests(unittest.TestCase):
             }
         elif kind == "specialist-review":
             request.update(
-                evidenceLedger={
-                    "entries": [
-                        {
-                            "id": "check-1",
-                            "kind": "check",
-                            "candidateId": "candidate-1",
-                            "status": "current",
-                            "result": "passed",
-                        }
-                    ]
-                },
                 assignedLens="review-candidate-evidence-convergence",
                 closureMap={"supportedScope": ["src", "tests"]},
             )
@@ -182,6 +188,10 @@ class ReviewBriefTests(unittest.TestCase):
                 if record.get("untracked") is True
             ]
             request.update(
+                evidenceLedgerNotRequiredReason=(
+                    "Holistic complete-diff review receives current executed checks but not prior Ledger review evidence "
+                    "under skills/contract-closure/SKILL.md Review Brief."
+                ),
                 fullReviewGate="run",
                 completeRawDiff={"command": identity["rawDiffCommand"], "digest": identity["rawDiffDigest"]},
                 verifiedUntrackedContent=untracked,
@@ -255,6 +265,104 @@ class ReviewBriefTests(unittest.TestCase):
                     self.assertNotEqual(result["status"], "ready")
                     self.assertIn("executedChecks-result-not-passed", self.codes(result))
                     self.assertIsNone(result["reviewBrief"])
+
+    def test_ordinary_checks_require_exact_string_passed_without_invariant_inheritance(self) -> None:
+        for label, check_result in (
+            ("missing", object()),
+            ("null", None),
+            ("empty", ""),
+            ("integer", 1),
+            ("boolean", True),
+        ):
+            with self.subTest(result=label):
+                request = self.ordinary()
+                request.pop("preImplementationInvariants")
+                if label == "missing":
+                    request["executedChecks"][0].pop("result")
+                else:
+                    request["executedChecks"][0]["result"] = check_result
+                result = self.build(request)
+                self.assertNotEqual(result["status"], "ready")
+                self.assertIn("executedChecks-result-not-passed", self.codes(result))
+                self.assertIsNone(result["reviewBrief"])
+
+    def test_candidate_bound_review_kinds_require_and_render_current_passed_ledger(self) -> None:
+        for kind in ("targeted-review", "specialist-review", "targeted-closure"):
+            with self.subTest(kind=kind, condition="missing"):
+                missing = self.candidate_request(kind)
+                del missing["evidenceLedger"]
+                missing_result = self.build(missing)
+                self.assertNotEqual(missing_result["status"], "ready")
+                self.assertIn("evidence-ledger-required", self.codes(missing_result))
+
+            with self.subTest(kind=kind, condition="valid-render"):
+                request = self.candidate_request(kind)
+                result = self.build(request)
+                self.assertEqual(result["status"], "ready", result)
+                rendered = json.loads(result["reviewBrief"].removeprefix("Review Brief\n\n"))
+                self.assertEqual(rendered["evidenceLedger"], request["evidenceLedger"])
+
+    def test_ledger_not_required_reason_is_explicit_and_rendered_for_sibling_kinds(self) -> None:
+        for kind, request_factory in (
+            ("ordinary-targeted", self.ordinary),
+            ("holistic", lambda: self.candidate_request("holistic-complete-diff-review", "reviewer")),
+        ):
+            with self.subTest(kind=kind, condition="missing"):
+                missing = request_factory()
+                del missing["evidenceLedgerNotRequiredReason"]
+                missing_result = self.build(missing)
+                self.assertNotEqual(missing_result["status"], "ready")
+                self.assertIn("evidence-ledger-not-required-reason-required", self.codes(missing_result))
+
+            with self.subTest(kind=kind, condition="valid-render"):
+                request = request_factory()
+                result = self.build(request)
+                self.assertEqual(result["status"], "ready", result)
+                rendered = json.loads(result["reviewBrief"].removeprefix("Review Brief\n\n"))
+                self.assertEqual(
+                    rendered["evidenceLedgerNotRequiredReason"],
+                    request["evidenceLedgerNotRequiredReason"],
+                )
+
+    def test_candidate_ledger_rejects_noncurrent_wrong_candidate_and_nonpassing_entries(self) -> None:
+        mutations = {
+            "stale": {"status": "stale"},
+            "superseded": {"status": "superseded"},
+            "wrong-candidate": {"candidateId": "another-candidate"},
+            "failed": {"result": "failed"},
+        }
+        for kind in ("targeted-review", "specialist-review", "targeted-closure"):
+            for label, mutation in mutations.items():
+                with self.subTest(kind=kind, condition=label):
+                    request = self.candidate_request(kind)
+                    request["evidenceLedger"]["entries"][0].update(mutation)
+                    result = self.build(request)
+                    self.assertNotEqual(result["status"], "ready")
+                    self.assertIsNone(result["reviewBrief"])
+
+    def test_executed_checks_and_ledger_cannot_disagree_on_passed_semantics(self) -> None:
+        request = self.candidate_request("specialist-review")
+        self.assertEqual(request["executedChecks"][0]["result"], "passed")
+        request["evidenceLedger"]["entries"][0]["result"] = "failed"
+        result = self.build(request)
+        self.assertNotEqual(result["status"], "ready")
+        self.assertIn("evidence-ledger-entry-result-not-passed", self.codes(result))
+        self.assertIsNone(result["reviewBrief"])
+
+    def test_candidate_ledger_entry_ids_are_unique_within_the_review_brief(self) -> None:
+        for kind in ("targeted-review", "specialist-review", "targeted-closure"):
+            with self.subTest(kind=kind):
+                request = self.candidate_request(kind)
+                request["evidenceLedger"]["entries"].append(
+                    {
+                        **request["evidenceLedger"]["entries"][0],
+                        "kind": "review",
+                    }
+                )
+                result = self.build(request)
+                self.assertNotEqual(result["status"], "ready")
+                self.assertIn("evidence-ledger-entry-id-duplicate", self.codes(result))
+                self.assertIsNone(result["reviewBrief"])
 
     def test_candidate_bound_checks_require_current_candidate_provenance(self) -> None:
         for kind, role in (
