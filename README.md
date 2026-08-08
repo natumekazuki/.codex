@@ -67,6 +67,7 @@
 - role の選択基準と risk gate は `AGENTS.md` を正本とする
 - 各 role の model、reasoning effort、sandbox、静的契約は `agents/*.toml` を正本とする
 - Spark の利用状態は `hooks/set-spark-routing.ps1` で切り替え、操作方法は `hooks/subagent-routing-modes.md` を参照する
+- model変更の比較方法は `docs/runbooks/compare-subagent-roles.md` を参照し、単一runのtoken差だけで既定roleを置き換えない
 
 ## Hook 方針
 
