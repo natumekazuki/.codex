@@ -926,6 +926,19 @@ def update_run(database: Path, raw_request: Any, operation: str) -> dict[str, An
                 raise HistoryError(
                     f"cannot complete a run in status {row['status']}"
                 )
+            if row["lease_expires_at_utc"] <= now_text:
+                connection.execute(
+                    """
+                    UPDATE audit_runs SET status = 'abandoned', finished_at_utc = ?,
+                      failure_code = 'lease-expired',
+                      failure_summary = 'claim lease expired'
+                    WHERE run_id = ? AND status = 'in_progress'
+                    """,
+                    (now_text, request["run_id"]),
+                )
+                enforce_database_size(connection)
+                connection.commit()
+                raise HistoryError("claim lease expired before completion")
             connection.execute(
                 """
                 UPDATE audit_runs SET status = 'completed', finished_at_utc = ?,
