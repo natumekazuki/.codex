@@ -251,6 +251,29 @@ class AuditHistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(HISTORY.HistoryError, "status abandoned"):
             self.complete(first)
 
+    def test_expired_complete_is_rejected_and_abandons_claim(self) -> None:
+        claimed = self.claim()
+        later = self.now + timedelta(seconds=HISTORY.LEASE_SECONDS)
+
+        with mock.patch.object(HISTORY, "utc_now", return_value=later):
+            with self.assertRaisesRegex(HISTORY.HistoryError, "lease expired"):
+                self.complete(claimed)
+
+        connection = sqlite3.connect(self.database)
+        connection.row_factory = sqlite3.Row
+        try:
+            run = connection.execute(
+                "SELECT status, failure_code, result_json FROM audit_runs WHERE run_id = ?",
+                (claimed["run"]["run_id"],),
+            ).fetchone()
+        finally:
+            connection.close()
+
+        assert run is not None
+        self.assertEqual(run["status"], "abandoned")
+        self.assertEqual(run["failure_code"], "lease-expired")
+        self.assertIsNone(run["result_json"])
+
     def test_heartbeat_extends_lease(self) -> None:
         claimed = self.claim()
         later = self.now + timedelta(hours=1)
