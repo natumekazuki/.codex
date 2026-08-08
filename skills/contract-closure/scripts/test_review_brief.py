@@ -135,6 +135,7 @@ class ReviewBriefTests(unittest.TestCase):
         request = self.common(kind, role, risk=risk)
         request["candidateId"] = "candidate-1"
         request["candidateSnapshot"] = self.snapshot()
+        request["executedChecks"][0]["executedOnCandidateId"] = "candidate-1"
         if kind == "targeted-review":
             request["completedSlice"] = {
                 "status": "completed",
@@ -240,6 +241,43 @@ class ReviewBriefTests(unittest.TestCase):
                 self.assertIn('"reviewTarget":', result["reviewBrief"])
                 rendered = json.loads(result["reviewBrief"].removeprefix("Review Brief\n\n"))
                 self.assertEqual(rendered["candidateVerificationInput"], self.candidate_request(kind, role)["candidateSnapshot"])
+
+    def test_non_passing_checks_block_review_brief_issuance(self) -> None:
+        for review_scope, request_factory in (
+            ("ordinary", self.ordinary),
+            ("candidate-bound", lambda: self.candidate_request("specialist-review")),
+        ):
+            for check_result in ("failed", "unconfirmed", "superseded"):
+                with self.subTest(review_scope=review_scope, result=check_result):
+                    request = request_factory()
+                    request["executedChecks"][0]["result"] = check_result
+                    result = self.build(request)
+                    self.assertNotEqual(result["status"], "ready")
+                    self.assertIn("executedChecks-result-not-passed", self.codes(result))
+                    self.assertIsNone(result["reviewBrief"])
+
+    def test_candidate_bound_checks_require_current_candidate_provenance(self) -> None:
+        for kind, role in (
+            ("targeted-review", "targeted_reviewer"),
+            ("specialist-review", "targeted_reviewer"),
+            ("targeted-closure", "targeted_reviewer"),
+            ("holistic-complete-diff-review", "reviewer"),
+        ):
+            with self.subTest(kind=kind, provenance="missing"):
+                missing = self.candidate_request(kind, role)
+                del missing["executedChecks"][0]["executedOnCandidateId"]
+                missing_result = self.build(missing)
+                self.assertNotEqual(missing_result["status"], "ready")
+                self.assertIn("executedChecks-candidate-required", self.codes(missing_result))
+                self.assertIsNone(missing_result["reviewBrief"])
+
+            with self.subTest(kind=kind, provenance="mismatch"):
+                mismatched = self.candidate_request(kind, role)
+                mismatched["executedChecks"][0]["executedOnCandidateId"] = "another-candidate"
+                mismatched_result = self.build(mismatched)
+                self.assertNotEqual(mismatched_result["status"], "ready")
+                self.assertIn("executedChecks-candidate-mismatch", self.codes(mismatched_result))
+                self.assertIsNone(mismatched_result["reviewBrief"])
 
     def test_ready_render_is_deterministic(self) -> None:
         request = self.ordinary()
