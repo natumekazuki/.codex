@@ -1,6 +1,6 @@
 ---
 name: audit-codex-work-quality
-description: 開始日時と終了日時で固定したCodexセッション区間、実行証拠、明示的に関連付けられるPR成果を読み取り専用で収集し、成果物品質、レビュー収束、ユーザー誘導負荷、検証の直接性、変更規模と異常系対策の比例性、過剰な恒久ルール化を振り返る。ユーザーが「今日・昨日・夜間のCodex作業を振り返る」「日付をまたぐ作業を監査する」「レビューが収束しない原因を調べる」「オーバーエンジニアリングを監査する」「成果物品質の改善点を出す」と依頼したときに使う。通常のcode review、単一taskのvalidation report、session handoffには使わない。
+description: 開始日時と終了日時で固定したCodexセッション区間、実行証拠、明示的に関連付けられるPR成果を読み取り専用で収集し、観点別の監査結果を専用SQLite履歴へ記録して重複分析を避けながら、成果物品質、レビュー収束、ユーザー誘導負荷、検証の直接性、変更規模と異常系対策の比例性、過剰な恒久ルール化を振り返る。ユーザーが「今日・昨日・夜間のCodex作業を振り返る」「日付をまたぐ作業を監査する」「前回その観点を分析したのはいつか確認する」「レビューが収束しない原因を調べる」「オーバーエンジニアリングを監査する」「成果物品質の改善点を出す」と依頼したときに使う。通常のcode review、単一taskのvalidation report、session handoffには使わない。
 ---
 
 # Codex Work Quality Audit
@@ -31,27 +31,36 @@ description: 開始日時と終了日時で固定したCodexセッション区�
 - 既定出力はevent streamではなくsession indexとする。各sessionの時刻、workspace、source、event kind集計、known / unknown failure数、先頭・末尾から選んだ短いgoal / outcome cueだけを返し、`events`は投影しない。cueの省略数とevent-level detailを投影しなかった件数を開示する。
 - `--detail`のper-session / global出力上限は、`provider_error`、明示的なerror eventまたはturn error、構造化signalで失敗と確認できたtool resultを同じknown failure evidenceとして優先保持する。known failure evidenceだけで明示上限を超える場合は、暗黙に欠落させず停止する。tool call / resultは、同じcanonical sessionとsource内で非空stringのcall IDが双方に一つずつある場合だけ対応済みとする。sourceが成功・失敗を構造化していない実行証拠、対応resultがないcall、空・不正・重複IDで対応が曖昧なcallは推測で分類せず、indexでは件数、detailでは`unknown_failure_status_events`と`unknown_failure_status_omitted`へ開示する。
 - session indexにはtool command、tool output、raw error、stderr、provider payload summary、audit event summaryの本文を投影しない。`--detail`では、明示されたtext / event / row / byte上限内の本文、元の文字数、truncation、SHA-256と、source kind、operation type、call ID、tool種別、構造化された成否を分析用evidenceとして保持する。非文字列payloadはsource typeを伴うbounded JSONに変換し、変換不能は`data_gaps`へ開示する。detail evidenceを最終レポートへ機械的に転載せず、ユーザーが保存を明示しない限り中間fileへ永続化しない。
+- WithMate DB、Codex rollout、repository、GitHubは引き続きread-onlyで扱う。書き込みはこのSkillが所有する監査履歴DBだけへ限定し、collectorへ履歴writeを追加しない。
+- 監査履歴の同一性は、UTC半開区間、正規化したworkspace scope、`focus_key`、正規化した`focus_question`、analysis contract versionの組で決める。類義語や意味の近さを推測して統合しない。同じ区間でも観点または具体的な問いが違えば別分析として扱う。
+- `complete`な固定区間で完了した同一観点の結果だけを再利用する。`partial`、`failed`、`abandoned`は履歴へ残しても後続分析を抑止しない。
+- 履歴へ保存する結果はboundedなuser-facing要約、confidence、finding family、良かった判断、data gap、介入候補、outcome context確認時刻だけとする。保存CLIはfield、型、件数、長さ、全体byte数を機械検証するが、許可済み自由文が要約かraw引用かは判定できない。呼び出す監査workflowがprojection boundaryを所有し、session/event本文、cue、command/output、raw error、stderr、PR diff、review/comment本文、absolute workspace pathを許可済みfieldへ転載しない。
+- 監査開始前に観点単位でclaimし、同じ対象の未期限切れclaimがある場合は重複分析を開始しない。期限切れclaimを置換した後のlate completionは拒否する。長時間の監査ではclaimをheartbeatする。
+- 完了結果はユーザーへ最終報告する前に履歴へ確定する。履歴writeに失敗した場合は分析成功と重複抑止成功を分け、履歴未記録を開示する。
 
 ## Workflow
 
 1. ユーザーの開始・終了時刻を絶対local datetimeへ一度だけ解決し、`start`、`end`、`timezone`、local interval、UTC intervalを先に表示する。時刻が指定されず結果が変わる場合は一度確認し、暦日へ暗黙補完しない。
-2. `sqlite3 --version`、WithMate DB、`.codex/sessions`の存在を確認する。欠けた入力を成功扱いしない。
-3. まず既定のsession index modeで収集する。
+2. `references/audit-history.md`を全文読み、依頼された観点を安定した`focus_key`と具体的な`focus_question`へ分ける。観点ごとに履歴をlookupして、前回日時、結果、関連する別questionを確認する。
+3. 観点ごとに履歴をclaimする。`reuse`は保存済み結果を提示してその観点を再分析せず、`busy`は重複着手せずactive claimを開示し、`claimed`だけを今回の分析対象にする。明示的に再分析する場合だけboundedな`force_reason`を渡す。
+4. `sqlite3 --version`、WithMate DB、`.codex/sessions`の存在を確認する。欠けた入力を成功扱いせず、開始済みclaimを`fail`で閉じる。
+5. claimedな観点がある場合だけ、まず既定のsession index modeで収集する。
 
    ```powershell
    python scripts/collect_session_evidence.py --start 2026-08-01T20:00 --end 2026-08-02T04:00 --timezone Asia/Tokyo
    ```
 
-4. indexのgoal / outcome cue、failure集計、event kind集計から、論理変更、review finding、検証失敗、ユーザーによる方向修正が集中したsessionだけ、`--detail --session-id <id>`で掘る。全sessionのevent detailを一括でcontextへ入れない。
-5. `references/quality-rubric.md`を全文読み、session単位ではなく論理変更単位へ証拠を統合する。
-6. session evidenceからPR URL / number、repository、branch、commit OIDを抽出し、Accepted contractの関連付け規則を満たすPRだけを候補にする。repository identity、base / head、commitをread-backして誤関連付けがないことを確認する。
-7. 関連PRごとに、state、base / head、created / updated / merged時刻、merge commit、commit数、changed filesと行数、review decision、check resultをread-onlyで取得する。final diffは先にfile別統計と構造を確認し、監査対象のcontractと複雑性判断に必要な範囲を読む。区間終了後の状態はoutcome contextへ分離する。
-8. PR evidenceをGoal / Artifact / Contract / Validation / Review / Outcomeへ統合し、`references/quality-rubric.md`の比例性と異常系到達性を評価する。PRがない論理変更、local-only成果、明示的にPRを作らないtaskを未完了扱いにしない。
-9. 同じfindingをInvariant / failure familyで束ねる。review回数やtool call数だけで品質を判定しない。
-10. materialなfinding familyごとに因果timelineを作り、`symptom -> proximate mechanism -> enabling condition -> systemic cause -> origin decision -> reinforcing / balancing feedback`を、該当する深さまで追う。途中の層を証拠なしで補完しない。
-11. 少なくとも二つの競合仮説を置き、各仮説を支持する証拠、反証、説明できない事実、confidenceを比較する。複数要因の相互作用が必要なら、一つの主因へ強制的に縮約しない。
-12. 既存の防止策が何だったか、その防止策がなぜ検出・停止・縮小に失敗したかを確認する。成功した変更または反例となるsessionとも比較し、単発事故から因果を一般化しない。
-13. 介入案は因果分析と分離する。ユーザーが改善提案または実験を求めた場合だけ、confidenceが十分な因果linkについて局所・構造・policyの候補を同じ因果層ごとに比較する。最小差分を分析の目的または既定の結論にしない。
+6. indexのgoal / outcome cue、failure集計、event kind集計から、論理変更、review finding、検証失敗、ユーザーによる方向修正が集中したsessionだけ、`--detail --session-id <id>`で掘る。全sessionのevent detailを一括でcontextへ入れない。
+7. `references/quality-rubric.md`を全文読み、session単位ではなく論理変更単位へ証拠を統合する。
+8. session evidenceからPR URL / number、repository、branch、commit OIDを抽出し、Accepted contractの関連付け規則を満たすPRだけを候補にする。repository identity、base / head、commitをread-backして誤関連付けがないことを確認する。
+9. 関連PRごとに、state、base / head、created / updated / merged時刻、merge commit、commit数、changed filesと行数、review decision、check resultをread-onlyで取得する。final diffは先にfile別統計と構造を確認し、監査対象のcontractと複雑性判断に必要な範囲を読む。区間終了後の状態はoutcome contextへ分離する。
+10. PR evidenceをGoal / Artifact / Contract / Validation / Review / Outcomeへ統合し、`references/quality-rubric.md`の比例性と異常系到達性を評価する。PRがない論理変更、local-only成果、明示的にPRを作らないtaskを未完了扱いにしない。
+11. 同じfindingをInvariant / failure familyで束ねる。review回数やtool call数だけで品質を判定しない。
+12. materialなfinding familyごとに因果timelineを作り、`symptom -> proximate mechanism -> enabling condition -> systemic cause -> origin decision -> reinforcing / balancing feedback`を、該当する深さまで追う。途中の層を証拠なしで補完しない。
+13. 少なくとも二つの競合仮説を置き、各仮説を支持する証拠、反証、説明できない事実、confidenceを比較する。複数要因の相互作用が必要なら、一つの主因へ強制的に縮約しない。
+14. 既存の防止策が何だったか、その防止策がなぜ検出・停止・縮小に失敗したかを確認する。成功した変更または反例となるsessionとも比較し、単発事故から因果を一般化しない。
+15. 介入案は因果分析と分離する。ユーザーが改善提案または実験を求めた場合だけ、confidenceが十分な因果linkについて局所・構造・policyの候補を同じ因果層ごとに比較する。最小差分を分析の目的または既定の結論にしない。
+16. 各claimed観点についてboundedな構造化結果を`complete`する。途中で監査を完了できなかった観点は`fail`し、`completed`以外を分析済みとして扱わない。
 
 ## Collector usage
 
