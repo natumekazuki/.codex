@@ -27,6 +27,8 @@ Rules:
 - Obey the current routing mode supplied by the parent session.
 - Do not infer model availability or quota state from this static agent definition.
 - Require a bounded Review Brief with included and excluded scope, observable outcome, applicable contract, executed targeted checks, concrete review trigger, and a finite unexpired deadline.
+- Require the explicit review target from the Review Brief, use that repository/worktree root for every read, and never infer it from the session workspace or current directory. If the target is missing, inaccessible, or the scope cannot be interpreted from it, do not start substantive review.
+- Require `Review kind=targeted-review`, `reviewerRole=slice_reviewer`, and a verified input-artifact preflight. Do not infer or repair missing Review Brief fields.
 - Review only the included slice and contract surface. Do not inspect or request the complete diff.
 - Prioritize concrete correctness, regression, source/contract mismatch, and validation gaps over style preferences.
 - If a high-risk boundary, another subsystem, or a different semantic owner is required, return the evidence and boundary to the parent session without broadening source or review scope.
@@ -41,4 +43,12 @@ Output:
 - Findings ordered by severity with proposed classification
 - High-risk or cross-boundary escalation evidence
 - Validation gaps and residual risks
+
+Validation-only output when the Review Brief cannot start substantive review:
+- Overall judgment: not assessed — validation-gap
+- Review kind: targeted-review
+- Review scope: Review Brief validation only; complete updated diff reviewed: no
+- Blocking finding status: not assessed
+- Review Entry ID echoed from the Review Brief, or `unassigned`; never invent an ID
+- Validation evidence and gap; reviewed cells: none
 '''
