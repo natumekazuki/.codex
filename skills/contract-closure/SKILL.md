@@ -86,7 +86,7 @@ high-risk / non-localな変更でIndependent Closure Reviewを行う場合は、
 
 - Candidate Definitionのfieldと意味、source identityの生成・read-only検証、Candidate preflight、Candidate失効、Evidence Ledgerのentryとstatus、Invariant Matrix、lens選択、Review BriefはこのSkillだけで規範的に定義する。
 - `AGENTS.md`はCandidate reviewの開始条件、specialist reviewとfinding対応の合流順序、holistic reviewの開始条件、finding分類、review回数、完了gateを定め、この節のfieldや失効アルゴリズムを再定義しない。
-- `agents/reviewer.toml`はholistic complete-diff review、`agents/targeted_reviewer.toml`はtargeted review、specialist review、targeted closureのread-only安全境界、受け取れる情報、findingとcoverageの出力を定める。どちらのreviewerもこの節のReview Briefを検証し、CandidateやLedgerの意味を独自に補完または変更しない。
+- `agents/slice_reviewer.toml`は通常sliceのbounded targeted review、`agents/targeted_reviewer.toml`は高リスクtargeted review、specialist review、targeted closure、`agents/reviewer.toml`はholistic complete-diff reviewのread-only安全境界、受け取れる情報、findingとcoverageの出力を定める。各reviewerはこの節のReview Briefを検証し、CandidateやLedgerの意味を独自に補完または変更しない。
 - `skills/validation-report/`はtask-localなCandidate evidenceをuser-facingな完了報告へ投影する。表示のためにCandidate identityやevidence statusを再計算しない。
 
 ```text
@@ -185,7 +185,7 @@ Retry: none | <toolまたはtransport failureと維持したCandidate / review c
 - Logical change IDは一つのaccepted contractとreview cycleを識別し、Candidate IDと区別する。source repairでCandidateを更新しても同じ論理変更なら維持し、`boundary prerequisite`またはユーザー確認後の別のaccepted contractへ分けた場合だけ新しいIDを使う。
 - deadline、Review Entry ID、transport指定、同じ内容のartifact配置などReview Briefのenvelopeだけを変更してもCandidateを変更しない。accepted anchor、その意味、supported scope、Invariant定義、matrix cell定義、lens scope、review contract revision / recipeを変更した場合はreview contract変更として新Candidateを発行する。source identityの変更はCandidate Transitionに従う。
 - deadlineは有限の絶対時刻としてreviewer起動前に固定する。deadline未指定または起動時点で期限切れのReview Briefを発行しない。
-- targeted reviewでは、完了したslice、観測可能な契約、適用可能なexecutable contractまたは理由付き代替確認、targeted check、含めるcontract surfaceを渡す。
+- targeted reviewでは、完了したslice、観測可能な契約、適用可能なexecutable contractまたは理由付き代替確認、targeted check、含めるcontract surfaceを渡す。通常sliceは`slice_reviewer`、高リスクtriggerまたは本Skillが要求するIndependent Closure Reviewは`targeted_reviewer`へ割り当てる。
 - specialist reviewでは、現行Evidence Ledger、割り当てたlens、対象matrix cell、Closure Mapを渡し、同じlensの一般的な再探索へ広げない。
 - targeted closureでは、rootがFinding Promotionを適用したfinding family、accepted contractとの関係、修正delta、direct check、含める兄弟経路、除外scopeを渡す。reviewerは指定familyとresulting deltaだけを確認し、complete diffを新規探索しない。
 - holistic complete-diff reviewでは、complete raw diff、検証済みuntracked content、accepted contract、canonical anchors、現行Candidateの実行済みcheckを渡す。過去finding、specialist reviewの結論、claimed resolution、実装者の結論、既存Closure Mapを渡さず、reviewerが不変条件と反例を再構築する。

@@ -16,10 +16,12 @@ Use for:
 - Authentication, authorization, security, privacy, payments, secrets, or data loss risk.
 - Complex state machines, concurrency, async workflows, or performance-sensitive algorithms.
 - Broad refactors or unclear product behavior.
-- Deciding whether Spark implementation is safe for a slice.
+- Defining the settled design boundary and implementation risks for a slice.
 
 Rules:
 - Do not edit production code, tests, configs, lockfiles, or generated files.
+- Obey the current routing mode supplied by the parent session.
+- Do not infer model availability or quota state from this static agent definition.
 - Prefer the smallest design that solves the problem.
 - State trade-offs and rejected alternatives.
 - Define invariants and validation expectations.
@@ -27,12 +29,12 @@ Rules:
 - Place observable behavior and invariants in tests, types, schemas, or static checks; place local rationale in code comments.
 - Require an ADR for consequential decisions with alternatives, high reversal cost, external constraints, or long-term trade-offs.
 - Recommend an architecture document only for non-local responsibilities or constraints spanning multiple subsystems, processes, repositories, or external services that cannot be recovered from code and executable contracts.
-- When appropriate, apply the slice rules from AGENTS.md Task Workflow and output each implementation slice's observable outcome, dependencies, validation expectation, review trigger, and Spark-suitable or GPT-5.6-suitable recommendation without redefining the shared criteria.
+- When appropriate, apply the slice rules from AGENTS.md Task Workflow and output each implementation slice's observable outcome, dependencies, validation expectation, review trigger, settled design state, and risk without selecting a model-specific role.
 
 Output:
 - Recommended design
 - Invariants and contracts
-- Implementation slices with recommended agent_type
+- Implementation slices with scope and settled design state
 - Slice dependencies, validation expectations, and review triggers
 - Validation strategy
 - Knowledge placement: executable anchors, local comments, ADR, architecture document, or task-local note
