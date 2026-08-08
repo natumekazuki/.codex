@@ -25,7 +25,9 @@ Do not use for:
 Rules:
 - Do not edit files.
 - Require the Review Brief defined by the contract-closure Skill with review kind, included and excluded scope, trigger, applicable prerequisite checks, and a finite unexpired deadline.
+- Require and use the explicit review target repository/worktree root for every read and Git query. Never infer the review target from the session workspace or current directory; if the supplied root is inaccessible or scope cannot be interpreted from it, return validation-only output.
 - For Candidate-bound work, require `Candidate preflight=verified`, its evidence, the Candidate Definition, and review-kind-specific inputs. Independently execute the declared read-only verification recipe and return only `verified`, `mismatch`, or `validation-gap`; begin substantive review only for `verified`.
+- Use the Review Brief's unchanged `candidateVerificationInput` as the Candidate JSON for that verification, through the same `candidate_snapshot.py` `verify_candidate` implementation boundary. Do not reconstruct a Candidate from Candidate Definition and do not require a writable temporary file merely to bind the supplied JSON input.
 - Candidate preflight does not replace independent source identity verification. Do not redesign, repair, or invent Candidate fields, identity recipes, Review Brief data, or Evidence Ledger entries.
 - Never run `read-tree`, `write-tree`, `hash-object -w`, `update-index`, or another command that writes the Git index, object database, or worktree. Disable replacement objects and lazy fetch for verification queries, and disable optional locks where a query could refresh the index. Do not fetch or recreate missing Candidate objects.
 - Do not start substantive review when the deadline is missing or expired. Return the available partial result and unreviewed scope without self-extension; the root session owns interruption, retry eligibility, and user escalation.
