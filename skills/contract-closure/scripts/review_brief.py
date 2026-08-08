@@ -53,6 +53,7 @@ MISMATCH_DIAGNOSTIC_CODES = {
     "closure-invariant-check-mismatch",
     "executedChecks-candidate-mismatch",
     "evidence-ledger-candidate-mismatch",
+    "evidence-ledger-logical-change-mismatch",
     "evidence-ledger-entry-candidate-mismatch",
     "full-review-gate-not-run",
     "holistic-input-contamination",
@@ -241,10 +242,12 @@ def validate_executed_checks(
     *,
     candidate_bound: bool,
     candidate_id: Any,
+    logical_change_id: Any,
     validation: BriefValidation,
-) -> None:
+) -> set[str]:
+    check_ids: set[str] = set()
     if not isinstance(value, list):
-        return
+        return check_ids
     for index, item in enumerate(value):
         if not isinstance(item, dict):
             continue
@@ -256,6 +259,30 @@ def validate_executed_checks(
             )
         if not candidate_bound:
             continue
+        check_logical_change_id = item.get("logicalChangeId")
+        if not text(check_logical_change_id):
+            validation.add(
+                "executedChecks-logical-change-required",
+                f"executedChecks[{index}].logicalChangeId must be a non-empty string for Candidate-bound review",
+            )
+        elif not text(logical_change_id) or check_logical_change_id != logical_change_id:
+            validation.add(
+                "executedChecks-logical-change-mismatch",
+                f"executedChecks[{index}].logicalChangeId must match the Review Brief logicalChangeId",
+            )
+        check_id = item.get("id")
+        if not text(check_id):
+            validation.add(
+                "executedChecks-id-required",
+                f"executedChecks[{index}].id must be a non-empty string for Candidate-bound review",
+            )
+        elif check_id in check_ids:
+            validation.add(
+                "executedChecks-id-duplicate",
+                f"executedChecks[{index}].id must be task-local unique: {check_id}",
+            )
+        else:
+            check_ids.add(check_id)
         executed_on_candidate_id = item.get("executedOnCandidateId")
         if not text(executed_on_candidate_id):
             validation.add(
@@ -267,6 +294,7 @@ def validate_executed_checks(
                 "executedChecks-candidate-mismatch",
                 f"executedChecks[{index}] must have been executed on the current Candidate",
             )
+    return check_ids
 
 
 def validate_evidence_ledger(
@@ -274,6 +302,8 @@ def validate_evidence_ledger(
     *,
     candidate_bound: bool,
     candidate_id: Any,
+    logical_change_id: Any,
+    executed_check_ids: set[str],
     validation: BriefValidation,
 ) -> bool:
     kind = request.get("reviewKind")
@@ -309,14 +339,32 @@ def validate_evidence_ledger(
             "evidence-ledger-candidate-mismatch",
             "evidenceLedger.candidateId must identify the current Candidate",
         )
+    ledger_logical_change_id = ledger.get("logicalChangeId")
+    if not text(ledger_logical_change_id):
+        validation.add(
+            "evidence-ledger-logical-change-required",
+            "evidenceLedger.logicalChangeId must be a non-empty string",
+        )
+    elif not text(logical_change_id) or ledger_logical_change_id != logical_change_id:
+        validation.add(
+            "evidence-ledger-logical-change-mismatch",
+            "evidenceLedger.logicalChangeId must match the Review Brief logicalChangeId",
+        )
     entries = ledger.get("entries")
     if not isinstance(entries, list) or not entries:
         validation.add(
             "evidence-ledger-entries-required",
             f"Candidate-bound {kind} requires non-empty Evidence Ledger entries",
         )
+        for check_id in sorted(executed_check_ids):
+            validation.add(
+                "evidence-ledger-check-missing",
+                f"Evidence Ledger is missing the current passed check entry for executedChecks ID: {check_id}",
+            )
         return True
     entry_ids: set[str] = set()
+    ledger_check_ids: set[str] = set()
+    confirmation_origin_entry_ids: list[tuple[int, str]] = []
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             validation.add("evidence-ledger-entry-invalid", f"evidenceLedger.entries[{index}] must be an object")
@@ -331,8 +379,67 @@ def validate_evidence_ledger(
             )
         else:
             entry_ids.add(entry_id)
-        if not text(entry.get("kind")):
+        entry_kind = entry.get("kind")
+        if not text(entry_kind):
             validation.add("evidence-ledger-entry-kind-required", f"evidenceLedger.entries[{index}].kind is required")
+        elif entry_kind not in {"check", "review", "definition-delta non-impact confirmation"}:
+            validation.add(
+                "evidence-ledger-entry-kind-unknown",
+                f"evidenceLedger.entries[{index}].kind must identify a supported Evidence Ledger entry kind",
+            )
+        elif entry_kind == "check" and text(entry_id):
+            ledger_check_ids.add(entry_id)
+        elif entry_kind == "review":
+            if entry.get("reviewKind") not in REVIEW_KINDS:
+                validation.add(
+                    "evidence-ledger-review-kind-invalid",
+                    f"evidenceLedger.entries[{index}].reviewKind must identify a supported review kind",
+                )
+            if not text(entry.get("lens")):
+                validation.add(
+                    "evidence-ledger-review-lens-required",
+                    f"evidenceLedger.entries[{index}].lens must be a non-empty string",
+                )
+            if not string_list(entry.get("reviewedCells")):
+                validation.add(
+                    "evidence-ledger-review-cells-required",
+                    f"evidenceLedger.entries[{index}].reviewedCells must be a non-empty string list",
+                )
+            unreviewed_cells = entry.get("unreviewedCells")
+            if not isinstance(unreviewed_cells, list) or not all(text(cell) for cell in unreviewed_cells):
+                validation.add(
+                    "evidence-ledger-review-unreviewed-cells-invalid",
+                    f"evidenceLedger.entries[{index}].unreviewedCells must be a string list; an empty list is valid",
+                )
+        elif entry_kind == "definition-delta non-impact confirmation":
+            for field, code, description in (
+                ("originEntryId", "evidence-ledger-confirmation-origin-entry-required", "origin Entry ID"),
+                ("originCandidateId", "evidence-ledger-confirmation-origin-candidate-required", "origin Candidate ID"),
+                (
+                    "reviewedDefinitionDelta",
+                    "evidence-ledger-confirmation-definition-delta-required",
+                    "reviewed definition delta",
+                ),
+                (
+                    "nonImpactRationale",
+                    "evidence-ledger-confirmation-non-impact-rationale-required",
+                    "non-impact rationale",
+                ),
+            ):
+                if not text(entry.get(field)):
+                    validation.add(
+                        code,
+                        f"evidenceLedger.entries[{index}].{field} must identify the {description}",
+                    )
+            origin_candidate_id = entry.get("originCandidateId")
+            if text(origin_candidate_id) and origin_candidate_id == candidate_id:
+                validation.add(
+                    "evidence-ledger-confirmation-origin-candidate-current",
+                    f"evidenceLedger.entries[{index}].originCandidateId must identify a prior Candidate",
+                )
+            origin_entry_id = entry.get("originEntryId")
+            if text(origin_entry_id):
+                confirmation_origin_entry_ids.append((index, origin_entry_id))
         if not isinstance(entry.get("result"), str) or entry["result"] != PASSED_CHECK_RESULT:
             validation.add(
                 "evidence-ledger-entry-result-not-passed",
@@ -350,6 +457,22 @@ def validate_evidence_ledger(
                 "evidence-ledger-entry-candidate-mismatch",
                 f"evidenceLedger.entries[{index}] must belong to the current Candidate",
             )
+    for index, origin_entry_id in confirmation_origin_entry_ids:
+        if origin_entry_id in entry_ids:
+            validation.add(
+                "evidence-ledger-confirmation-origin-entry-current",
+                f"evidenceLedger.entries[{index}].originEntryId must identify an entry from a prior Candidate",
+            )
+    for check_id in sorted(ledger_check_ids - executed_check_ids):
+        validation.add(
+            "evidence-ledger-check-unexpected",
+            f"Evidence Ledger check entry does not correspond to executedChecks: {check_id}",
+        )
+    for check_id in sorted(executed_check_ids - ledger_check_ids):
+        validation.add(
+            "evidence-ledger-check-missing",
+            f"Evidence Ledger is missing the current passed check entry for executedChecks ID: {check_id}",
+        )
     return True
 
 
@@ -836,16 +959,19 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
             validation,
             require_contract_fields=require_contract_fields,
         )
-    validate_executed_checks(
+    executed_check_ids = validate_executed_checks(
         request.get("executedChecks"),
         candidate_bound=candidate_bound,
         candidate_id=request.get("candidateId"),
+        logical_change_id=request.get("logicalChangeId"),
         validation=validation,
     )
     ledger_required = validate_evidence_ledger(
         request,
         candidate_bound=candidate_bound,
         candidate_id=request.get("candidateId"),
+        logical_change_id=request.get("logicalChangeId"),
+        executed_check_ids=executed_check_ids,
         validation=validation,
     )
     deadline = parse_deadline(request.get("deadline"), now, validation)
