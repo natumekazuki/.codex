@@ -51,12 +51,14 @@ MISMATCH_DIAGNOSTIC_CODES = {
     "closure-invariant-candidate-mismatch",
     "closure-invariant-matrix-mismatch",
     "closure-invariant-check-mismatch",
+    "executedChecks-candidate-mismatch",
     "full-review-gate-not-run",
     "holistic-input-contamination",
     "assigned-lens-mismatch",
     "holistic-raw-diff-mismatch",
     "holistic-untracked-content-mismatch",
 }
+PASSED_CHECK_RESULT = "passed"
 HOLISTIC_FORBIDDEN_FIELDS = {
     "priorFindings",
     "specialistConclusions",
@@ -225,6 +227,39 @@ def normalize_record_scopes(
         if root is not None:
             validate_scope_roots(root, scope, [], validation)
         validate_declared_scope_containment(scope, supported, f"{field}-scope", validation)
+
+
+def validate_executed_checks(
+    value: Any,
+    *,
+    candidate_bound: bool,
+    candidate_id: Any,
+    validation: BriefValidation,
+) -> None:
+    if not isinstance(value, list):
+        return
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            continue
+        result = item.get("result")
+        if text(result) and result != PASSED_CHECK_RESULT:
+            validation.add(
+                "executedChecks-result-not-passed",
+                f"executedChecks[{index}].result must be {PASSED_CHECK_RESULT} to issue a Review Brief",
+            )
+        if not candidate_bound:
+            continue
+        executed_on_candidate_id = item.get("executedOnCandidateId")
+        if not text(executed_on_candidate_id):
+            validation.add(
+                "executedChecks-candidate-required",
+                f"executedChecks[{index}].executedOnCandidateId is required for Candidate-bound review",
+            )
+        elif not text(candidate_id) or executed_on_candidate_id != candidate_id:
+            validation.add(
+                "executedChecks-candidate-mismatch",
+                f"executedChecks[{index}] must have been executed on the current Candidate",
+            )
 
 
 def parse_deadline(value: Any, now: datetime, validation: BriefValidation) -> str | None:
@@ -742,6 +777,12 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
             validation,
             require_contract_fields=require_contract_fields,
         )
+    validate_executed_checks(
+        request.get("executedChecks"),
+        candidate_bound=candidate_bound,
+        candidate_id=request.get("candidateId"),
+        validation=validation,
+    )
     deadline = parse_deadline(request.get("deadline"), now, validation)
     review_entry_id = request.get("reviewEntryId", "unassigned")
     if review_entry_id is None or review_entry_id == "":
