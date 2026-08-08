@@ -1,4 +1,4 @@
-# ADR-0014: 観点別の作業品質監査履歴を専用SQLiteへ保存する
+# ADR-0015: 観点別の作業品質監査履歴を専用SQLiteへ保存する
 
 - Status: accepted
 - Date: 2026-08-08
