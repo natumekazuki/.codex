@@ -223,7 +223,9 @@ foreach ($roleName in @('planner', 'fast_planner', 'designer', 'implementer', 'r
 foreach ($plannerName in @('planner', 'fast_planner')) {
     $plannerText = Get-Content -LiteralPath (Join-Path $repoRoot "agents/$plannerName.toml") -Raw
     if ($plannerText -notmatch 'focused_implementer.*takes precedence' -or
-        $plannerText -notmatch 'Use implementer only when a specific condition makes the slice unsuitable for focused_implementer') {
+        $plannerText -notmatch 'Use implementer only when a specific condition makes the slice unsuitable for focused_implementer' -or
+        $plannerText -notmatch 'After the root session accepts the design, apply the normal focused_implementer / implementer eligibility rules above' -or
+        $plannerText -match 'then an implementer slice after the root session accepts the design') {
         throw "$plannerName does not define mutually exclusive focused and Sol implementer eligibility"
     }
 }
