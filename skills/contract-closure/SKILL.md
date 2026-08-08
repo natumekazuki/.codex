@@ -10,24 +10,48 @@ description: 境界、public API、永続化、migration、外部副作用、認
 ## Workflow
 
 1. 変更またはfindingを、観測されたcaseと、その背後の不変条件へ分ける。
-2. 関連するsource、test、type、schema、static check、accepted ADRを読み、accepted contractの根拠、supported scope、観測可能なfailure、canonical owner、兄弟入口、executable anchorを固定する。
-3. capability、operation、owner、状態、resource scopeが同じ兄弟経路を検索する。
+2. 関連するsource、test、type、schema、static check、accepted ADR、外部consumerを読み、accepted contractの根拠とexact anchorを特定する。
+3. capability、operation、owner、状態、resource scopeが同じ兄弟経路を検索し、supported scopeと対象外を分ける。
 4. 単独では妥当でも組合せで不正になるfield、version、generation、owner / scopeを一つの複合不変条件として列挙する。
-5. 該当triggerの展開軸を `references/trigger-matrices.md` から選ぶ。複数該当する場合は必要な節を組み合わせる。
-6. task-localなClosure MapとInvariant Matrixを作り、反例を先に列挙する。
-7. 各不変条件を最も強い実行可能な場所へ置く。type / schema / shared validation / static checkで強制できる契約をtestだけへ退避しない。
-8. 実装または修正後、targeted checkに加えてSibling Sweepを行う。
-9. 非局所的または高リスクな変更にはCandidate Definitionを凍結し、Evidence Ledgerへcheckとreviewを記録しながら、triggerされたreview lensでIndependent Closure Reviewを行う。
-10. 未確認cell、意図的な例外、実行不能なcheckを残リスクとして報告する。
+5. 該当triggerの展開軸を `references/trigger-matrices.md` から選ぶ。複数該当する場合は必要な節だけを組み合わせ、選ばなかった高リスク軸には短い理由を付ける。
+6. sourceまたはexecutable contractを編集する前に、task-localなClosure Mapと選択したInvariant Matrixの行をPre-Implementation Closure Planとして固定する。主要なfailure mode、consumerへの観測可能な影響、最も直接的な確認方法を対応付け、Accepted Contract Gateを`ready`または`unresolved`と判定する。
+7. `ready`の場合だけ編集へ進み、Pre-Implementation Closure PlanのInvariant IDとmatrix行を後続工程でも維持する。
+8. 各不変条件を最も強い実行可能な場所へ置く。type / schema / shared validation / static checkで強制できる契約をtestだけへ退避しない。
+9. 実装または修正後、Pre-Implementation Closure Planで選んだfailure modeのtargeted checkとSibling Sweepを行う。
+10. 非局所的または高リスクな変更にはCandidate Definitionを凍結し、Evidence Ledgerへcheckとreviewを記録しながら、triggerされたreview lensでIndependent Closure Reviewを行う。
+11. 未確認cell、意図的な例外、実行不能なcheckを残リスクとして報告する。
 
 ## Accepted Contract Gate
 
-実装前に、契約の根拠と適用範囲を確定する。
+実装前に、契約の根拠、適用範囲、主要なfailure mode、直接検証を確定する。この判定は`contract-closure`をtriggerするchange / build / fixだけに適用し、pure refactor、局所的な機械変更、文言変更には適用しない。
 
 - 根拠は、明示されたユーザー要求、public protocol / schema、accepted ADR、外部consumer、または根拠を確認できる既存のexecutable contractに置く。
 - external schemaやprotocolへ依存する場合は、version、revision、checksum、JSON pointerなど、requiredness、default、enum、failure semanticsを再確認できるexact anchorを残す。
 - 現在のsourceやtestが存在することだけをaccepted contractにしない。
-- 根拠が競合し、required / optional、default、failure semantics、supported scopeなどの結論が変わる場合は、reviewerに選択させず、consumer影響と選択肢を確認して`unresolved`のまま停止する。
+- 既存のClosure MapとInvariant Matrixから今回の変更がtriggerする軸だけを選ぶ。関係しない高リスク軸を空欄埋めのために展開しない。
+- 根拠が競合し、required / optional、default、failure semantics、supported scope、外部consumer互換性、後戻り困難な永続化・migration・security上の選択、または業務ルールの結論が変わる場合は、reviewerに選択させず`unresolved`とする。
+- `unresolved`ではsourceとexecutable contractを編集しない。ユーザーには、確定できない問い、確認した根拠、選択肢ごとのconsumer影響、根拠がある場合の推奨案だけを短く示し、自由記述のチェックリストや承認作業を求めない。
+- 調査量が多い、内部実装方法が未確定、複数の内部実装案がある、または追加情報があると便利という理由だけで`unresolved`にしない。既存の正本から安全に解決できる内容はCodexが判断する。
+- 必要な情報が揃っている場合は、ユーザーによる記入や承認を要求せず`ready`とし、実装へ進む。
+
+## Pre-Implementation Closure Plan
+
+sourceまたはexecutable contractを編集する前に、会話または既存のtask-local artifactへ必要な項目だけを固定する。Pre-Implementation Closure Planは、Accepted Contract Gateの状態、下記のClosure Map、選択したInvariant Matrixの行をまとめたtask-localな見方であり、同じ情報を持つ別のartifactではない。独立したplan fileや恒久文書を既定にしない。
+
+```text
+Pre-Implementation Closure Plan:
+Gate status: ready | unresolved
+Unresolved contract decisions:
+Closure Map: <下記の必要なfield>
+Invariant Matrix: <今回選んだ行>
+```
+
+- failure modeごとに、現実的な到達条件、consumerから観測できる影響、最も直接検出するexecutable contractまたは理由付きの代替確認を対応付ける。
+- mock、spy、metadata、static checkを選ぶ場合は、それが対象failureを最も直接検出する安定境界である理由を示す。build成功や内部callの確認だけで、利用者から観測可能なfailureの検証を代用しない。
+- `Gate status: ready`は、accepted contractとexact anchor、supported scopeと対象外、変更する不変条件とcanonical owner、同じ不変条件を共有する兄弟経路、主要なfailure mode、consumer影響、直接検証、未確定判断の有無を確定できた状態とする。
+- `Gate status: unresolved`は、信頼できる根拠が不足または競合し、選択によってaccepted behaviorが変わる状態に限る。read-only調査とユーザー確認を続け、`ready`へ更新するまでsourceとexecutable contractを編集しない。
+- 実装中にaccepted contract、supported scope、canonical owner、外部consumerのいずれかが変わった場合は、新たな編集を止めてこのゲートを再判定する。既存のworktree変更は巻き戻さず、`unresolved`なら回答を得るまで追加編集しない。
+- Pre-Implementation Closure Planで固定したInvariant ID、scope、failure mode、consumer影響、直接検証を、test設計、targeted check、Invariant Matrix、specialist review、Review Brief、validation reportへ同じ意味のまま引き継ぐ。実装後に新しい契約軸が判明した場合もreviewだけへ追加せず、このゲートへ戻る。
 
 ## Closure Map
 
@@ -35,20 +59,22 @@ description: 境界、public API、永続化、migration、外部副作用、認
 
 ```text
 Accepted contract / exact anchor:
-Supported scope:
-Invariant:
+Supported scope / excluded scope:
+Invariant ID / definition / canonical owner:
 Coupled invariants / valid combinations:
 Trigger:
 Canonical anchors:
 Sibling channels:
 State / operation sequences:
-Failure points:
+Failure modes / reachability:
+Consumer impacts / public projections:
 Owner / scope / projections:
 Resource scopes:
 Counterexamples:
 Reachability / occurrence evidence:
 Promotion span / disposition:
-Executable contracts:
+Direct verifications / executable contracts / stable boundaries:
+Unresolved contract decisions:
 Independent review evidence:
 Uncovered risks:
 ```
@@ -64,17 +90,20 @@ Invariant ID:
 Accepted anchor:
 Canonical owner:
 
-| Sibling channel | Coupled values | State / evidence order | Failure timing | Owner / effect certainty | Public projection | Executable anchor | Cell status |
+| Sibling channel | Coupled values | State / evidence order | Failure mode / timing | Consumer impact / public projection | Owner / effect certainty | Direct verification / executable anchor | Cell status |
 ```
 
 `Cell status`は次のいずれかにする。
 
+- `planned`: Pre-Implementation Closure Planでfailure modeと直接検証を対応付け、実装と確認の実行前である
 - `covered`: sourceとexecutable contractまたは理由付きの直接確認で閉じた
 - `anchored-exception`: accepted contractの根拠を持つ意図的な例外
 - `residual-risk`: 発生条件、影響、検知、復旧、follow-up要否を分類した
 - `unresolved`: 契約または反例の確認が不足し、Candidateをreviewへ渡せない
 
 Candidate Definitionにはcellの軸と判定条件を含むmatrix cell definitionを固定し、`Cell status`はEvidence Ledgerのcoverage statusとして更新する。`unconfirmed`はEvidence Ledgerのcheck / review entry専用であり、Matrix cellへ設定しない。
+
+Pre-Implementation Closure Planで選んだcellは`planned`から開始し、実装と直接検証の結果で`covered`、`anchored-exception`、`residual-risk`、`unresolved`のいずれかへ更新する。Candidateをreviewへ渡す時点では`planned`を残さない。
 
 観測されたcaseを閉じただけで同じInvariant IDの兄弟cellを未確認にしない。無関係なoperation、platform、既存負債へ無制限に広げず、同じcapability、owner、state、resource scope、public projectionを共有する範囲へ限定する。
 
