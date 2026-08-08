@@ -140,12 +140,14 @@ class ReviewBriefTests(unittest.TestCase):
         request["candidateId"] = "candidate-1"
         request["candidateSnapshot"] = self.snapshot()
         request["executedChecks"][0]["executedOnCandidateId"] = "candidate-1"
+        request["executedChecks"][0]["logicalChangeId"] = request["logicalChangeId"]
         if kind in {"targeted-review", "specialist-review", "targeted-closure"}:
             request["evidenceLedger"] = {
+                "logicalChangeId": request["logicalChangeId"],
                 "candidateId": "candidate-1",
                 "entries": [
                     {
-                        "id": "check-1",
+                        "id": request["executedChecks"][0]["id"],
                         "kind": "check",
                         "candidateId": "candidate-1",
                         "status": "current",
@@ -363,6 +365,322 @@ class ReviewBriefTests(unittest.TestCase):
                 self.assertNotEqual(result["status"], "ready")
                 self.assertIn("evidence-ledger-entry-id-duplicate", self.codes(result))
                 self.assertIsNone(result["reviewBrief"])
+
+    def test_candidate_ledger_requires_matching_logical_review_cycle(self) -> None:
+        malformed_values = {
+            "missing": object(),
+            "null": None,
+            "empty": "",
+            "non-string": 1,
+            "wrong": "OTHER-CYCLE",
+        }
+        for kind in ("targeted-review", "specialist-review", "targeted-closure"):
+            for label, value in malformed_values.items():
+                with self.subTest(kind=kind, logical_change=label):
+                    request = self.candidate_request(kind)
+                    if label == "missing":
+                        request["evidenceLedger"].pop("logicalChangeId")
+                    else:
+                        request["evidenceLedger"]["logicalChangeId"] = value
+                    result = self.build(request)
+                    self.assertNotEqual(result["status"], "ready")
+                    expected = (
+                        "evidence-ledger-logical-change-mismatch"
+                        if label == "wrong"
+                        else "evidence-ledger-logical-change-required"
+                    )
+                    self.assertIn(expected, self.codes(result))
+                    self.assertIsNone(result["reviewBrief"])
+
+            with self.subTest(kind=kind, logical_change="matching-render"):
+                request = self.candidate_request(kind)
+                result = self.build(request)
+                self.assertEqual(result["status"], "ready", result)
+                rendered = json.loads(result["reviewBrief"].removeprefix("Review Brief\n\n"))
+                self.assertEqual(
+                    rendered["evidenceLedger"]["logicalChangeId"],
+                    request["logicalChangeId"],
+                )
+
+    def test_candidate_bound_executed_check_ids_are_nonempty_and_unique(self) -> None:
+        for kind, role in (
+            ("targeted-review", "targeted_reviewer"),
+            ("specialist-review", "targeted_reviewer"),
+            ("targeted-closure", "targeted_reviewer"),
+            ("holistic-complete-diff-review", "reviewer"),
+        ):
+            for label, value in (("missing", object()), ("empty", ""), ("non-string", 1)):
+                with self.subTest(kind=kind, check_id=label):
+                    request = self.candidate_request(kind, role)
+                    if label == "missing":
+                        request["executedChecks"][0].pop("id")
+                    else:
+                        request["executedChecks"][0]["id"] = value
+                    result = self.build(request)
+                    self.assertNotEqual(result["status"], "ready")
+                    self.assertIn("executedChecks-id-required", self.codes(result))
+                    self.assertIsNone(result["reviewBrief"])
+
+            with self.subTest(kind=kind, check_id="duplicate"):
+                request = self.candidate_request(kind, role)
+                request["executedChecks"].append(copy.deepcopy(request["executedChecks"][0]))
+                result = self.build(request)
+                self.assertNotEqual(result["status"], "ready")
+                self.assertIn("executedChecks-id-duplicate", self.codes(result))
+                self.assertIsNone(result["reviewBrief"])
+
+    def test_candidate_bound_checks_require_current_logical_review_cycle(self) -> None:
+        malformed_values = {
+            "missing": None,
+            "null": None,
+            "empty": "",
+            "non-string": 1,
+            "wrong": "OTHER-CYCLE",
+        }
+        for kind, role in (
+            ("targeted-review", "targeted_reviewer"),
+            ("specialist-review", "targeted_reviewer"),
+            ("targeted-closure", "targeted_reviewer"),
+            ("holistic-complete-diff-review", "reviewer"),
+        ):
+            for label, value in malformed_values.items():
+                with self.subTest(kind=kind, condition=label):
+                    request = self.candidate_request(kind, role)
+                    if label == "missing":
+                        request["executedChecks"][0].pop("logicalChangeId")
+                    else:
+                        request["executedChecks"][0]["logicalChangeId"] = value
+                    result = self.build(request)
+                    self.assertNotEqual(result["status"], "ready")
+                    expected = (
+                        "executedChecks-logical-change-mismatch"
+                        if label == "wrong"
+                        else "executedChecks-logical-change-required"
+                    )
+                    self.assertIn(expected, self.codes(result))
+                    self.assertIsNone(result["reviewBrief"])
+
+            with self.subTest(kind=kind, condition="matching"):
+                request = self.candidate_request(kind, role)
+                result = self.build(request)
+                self.assertEqual(result["status"], "ready", result)
+
+    def test_candidate_ledger_requires_exact_executed_check_coverage(self) -> None:
+        for kind in ("targeted-review", "specialist-review", "targeted-closure"):
+            with self.subTest(kind=kind, condition="unknown-kind"):
+                request = self.candidate_request(kind)
+                request["evidenceLedger"]["entries"][0]["kind"] = "arbitrary-unrelated-kind"
+                result = self.build(request)
+                self.assertNotEqual(result["status"], "ready")
+                self.assertIn("evidence-ledger-entry-kind-unknown", self.codes(result))
+                self.assertIn("evidence-ledger-check-missing", self.codes(result))
+
+            with self.subTest(kind=kind, condition="unrelated-check"):
+                request = self.candidate_request(kind)
+                request["evidenceLedger"]["entries"][0]["id"] = "not-an-executed-check"
+                result = self.build(request)
+                self.assertNotEqual(result["status"], "ready")
+                self.assertIn("evidence-ledger-check-unexpected", self.codes(result))
+                self.assertIn("evidence-ledger-check-missing", self.codes(result))
+
+            with self.subTest(kind=kind, condition="missing-check-entry"):
+                request = self.candidate_request(kind)
+                request["evidenceLedger"]["entries"] = [
+                    {
+                        "id": "review-1",
+                        "kind": "review",
+                        "reviewKind": "targeted-review",
+                        "lens": "contract-schema-projection",
+                        "reviewedCells": ["RB-EVIDENCE-CONVERGENCE/candidate-bound"],
+                        "unreviewedCells": [],
+                        "candidateId": "candidate-1",
+                        "status": "current",
+                        "result": "passed",
+                    }
+                ]
+                result = self.build(request)
+                self.assertNotEqual(result["status"], "ready")
+                self.assertIn("evidence-ledger-check-missing", self.codes(result))
+
+            with self.subTest(kind=kind, condition="review-does-not-substitute"):
+                request = self.candidate_request(kind)
+                check_id = request["executedChecks"][0]["id"]
+                request["evidenceLedger"]["entries"][0].update(
+                    kind="review",
+                    reviewKind="targeted-review",
+                    lens="contract-schema-projection",
+                    reviewedCells=["RB-EVIDENCE-CONVERGENCE/candidate-bound"],
+                    unreviewedCells=[],
+                )
+                self.assertEqual(request["evidenceLedger"]["entries"][0]["id"], check_id)
+                result = self.build(request)
+                self.assertNotEqual(result["status"], "ready")
+                self.assertIn("evidence-ledger-check-missing", self.codes(result))
+
+            with self.subTest(kind=kind, condition="review-with-matching-check"):
+                request = self.candidate_request(kind)
+                request["evidenceLedger"]["entries"].append(
+                    {
+                        "id": "review-1",
+                        "kind": "review",
+                        "reviewKind": "targeted-review",
+                        "lens": "contract-schema-projection",
+                        "reviewedCells": ["RB-EVIDENCE-CONVERGENCE/candidate-bound"],
+                        "unreviewedCells": [],
+                        "candidateId": "candidate-1",
+                        "status": "current",
+                        "result": "passed",
+                    }
+                )
+                result = self.build(request)
+                self.assertEqual(result["status"], "ready", result)
+
+    def test_candidate_ledger_review_entries_require_review_contract_fields(self) -> None:
+        review_entry = {
+            "id": "review-1",
+            "kind": "review",
+            "reviewKind": "targeted-review",
+            "lens": "contract-schema-projection",
+            "reviewedCells": ["RB-EVIDENCE-CONVERGENCE/candidate-bound"],
+            "unreviewedCells": [],
+            "candidateId": "candidate-1",
+            "status": "current",
+            "result": "passed",
+        }
+        for field, code in (
+            ("reviewKind", "evidence-ledger-review-kind-invalid"),
+            ("lens", "evidence-ledger-review-lens-required"),
+            ("reviewedCells", "evidence-ledger-review-cells-required"),
+            ("unreviewedCells", "evidence-ledger-review-unreviewed-cells-invalid"),
+        ):
+            with self.subTest(field=field):
+                request = self.candidate_request("specialist-review")
+                malformed = copy.deepcopy(review_entry)
+                malformed.pop(field)
+                request["evidenceLedger"]["entries"].append(malformed)
+                result = self.build(request)
+                self.assertNotEqual(result["status"], "ready")
+                self.assertIn(code, self.codes(result))
+                self.assertIsNone(result["reviewBrief"])
+
+    def test_candidate_ledger_accepts_well_formed_definition_delta_confirmations(self) -> None:
+        confirmation = {
+            "id": "confirmation-1",
+            "kind": "definition-delta non-impact confirmation",
+            "originEntryId": "prior-check-1",
+            "originCandidateId": "candidate-0",
+            "reviewedDefinitionDelta": "The check contract and covered matrix cell are unchanged.",
+            "nonImpactRationale": "Only an unrelated review-contract lens definition changed.",
+            "candidateId": "candidate-1",
+            "status": "current",
+            "result": "passed",
+        }
+        for kind in ("targeted-review", "specialist-review", "targeted-closure"):
+            with self.subTest(kind=kind):
+                request = self.candidate_request(kind)
+                request["evidenceLedger"]["entries"].append(copy.deepcopy(confirmation))
+                result = self.build(request)
+                self.assertEqual(result["status"], "ready", result)
+                rendered = json.loads(result["reviewBrief"].removeprefix("Review Brief\n\n"))
+                self.assertEqual(rendered["evidenceLedger"]["entries"][1], confirmation)
+
+    def test_candidate_ledger_confirmation_requires_immutable_origin_and_delta_fields(self) -> None:
+        confirmation = {
+            "id": "confirmation-1",
+            "kind": "definition-delta non-impact confirmation",
+            "originEntryId": "prior-check-1",
+            "originCandidateId": "candidate-0",
+            "reviewedDefinitionDelta": "The check contract and covered matrix cell are unchanged.",
+            "nonImpactRationale": "Only an unrelated review-contract lens definition changed.",
+            "candidateId": "candidate-1",
+            "status": "current",
+            "result": "passed",
+        }
+        fields = (
+            ("originEntryId", "evidence-ledger-confirmation-origin-entry-required"),
+            ("originCandidateId", "evidence-ledger-confirmation-origin-candidate-required"),
+            ("reviewedDefinitionDelta", "evidence-ledger-confirmation-definition-delta-required"),
+            ("nonImpactRationale", "evidence-ledger-confirmation-non-impact-rationale-required"),
+        )
+        for kind in ("targeted-review", "specialist-review", "targeted-closure"):
+            for field, code in fields:
+                for label, value in (("missing", None), ("empty", ""), ("non-string", 1)):
+                    with self.subTest(kind=kind, field=field, condition=label):
+                        request = self.candidate_request(kind)
+                        malformed = copy.deepcopy(confirmation)
+                        if label == "missing":
+                            malformed.pop(field)
+                        else:
+                            malformed[field] = value
+                        request["evidenceLedger"]["entries"].append(malformed)
+                        result = self.build(request)
+                        self.assertNotEqual(result["status"], "ready")
+                        self.assertIn(code, self.codes(result))
+                        self.assertIsNone(result["reviewBrief"])
+
+    def test_candidate_ledger_confirmation_does_not_substitute_for_executed_check(self) -> None:
+        for kind in ("targeted-review", "specialist-review", "targeted-closure"):
+            with self.subTest(kind=kind):
+                request = self.candidate_request(kind)
+                check_id = request["executedChecks"][0]["id"]
+                request["evidenceLedger"]["entries"] = [
+                    {
+                        "id": check_id,
+                        "kind": "definition-delta non-impact confirmation",
+                        "originEntryId": "prior-check-1",
+                        "originCandidateId": "candidate-0",
+                        "reviewedDefinitionDelta": "The check contract and covered matrix cell are unchanged.",
+                        "nonImpactRationale": "Only an unrelated review-contract lens definition changed.",
+                        "candidateId": "candidate-1",
+                        "status": "current",
+                        "result": "passed",
+                    }
+                ]
+                result = self.build(request)
+                self.assertNotEqual(result["status"], "ready")
+                self.assertIn("evidence-ledger-check-missing", self.codes(result))
+                self.assertIsNone(result["reviewBrief"])
+
+    def test_candidate_ledger_confirmation_requires_prior_origin_provenance(self) -> None:
+        for kind in ("targeted-review", "specialist-review", "targeted-closure"):
+            for condition, mutation, code in (
+                (
+                    "current-candidate",
+                    {"originCandidateId": "candidate-1"},
+                    "evidence-ledger-confirmation-origin-candidate-current",
+                ),
+                (
+                    "self-entry",
+                    {"originEntryId": "confirmation-1"},
+                    "evidence-ledger-confirmation-origin-entry-current",
+                ),
+                (
+                    "current-ledger-entry",
+                    {},
+                    "evidence-ledger-confirmation-origin-entry-current",
+                ),
+            ):
+                with self.subTest(kind=kind, condition=condition):
+                    request = self.candidate_request(kind)
+                    confirmation = {
+                        "id": "confirmation-1",
+                        "kind": "definition-delta non-impact confirmation",
+                        "originEntryId": "prior-check-1",
+                        "originCandidateId": "candidate-0",
+                        "reviewedDefinitionDelta": "The check contract and covered matrix cell are unchanged.",
+                        "nonImpactRationale": "Only an unrelated review-contract lens definition changed.",
+                        "candidateId": "candidate-1",
+                        "status": "current",
+                        "result": "passed",
+                    }
+                    confirmation.update(mutation)
+                    if condition == "current-ledger-entry":
+                        confirmation["originEntryId"] = request["evidenceLedger"]["entries"][0]["id"]
+                    request["evidenceLedger"]["entries"].append(confirmation)
+                    result = self.build(request)
+                    self.assertNotEqual(result["status"], "ready")
+                    self.assertIn(code, self.codes(result))
+                    self.assertIsNone(result["reviewBrief"])
 
     def test_candidate_bound_checks_require_current_candidate_provenance(self) -> None:
         for kind, role in (
