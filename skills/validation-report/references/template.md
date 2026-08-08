@@ -1,6 +1,7 @@
 # 通常作業用テンプレート
 
 Candidate Definitionを使わない作業では、このテンプレートだけを使う。Candidate専用の見出し、表、`not applicable`列を追加しない。
+以下の見出し、項目名、順序は構成例であり、同じ意味が読み取れれば文章、箇条書き、表など別の表現を使ってよい。
 
 # Validation
 
@@ -29,15 +30,17 @@ Candidate Definitionを使わない作業では、このテンプレートだけ
 
 ## Review
 
-- Required: yes | no — <reason>
-- Result: <review kind, scope, result, or not run>
+- Targeted / specialist review: <required / not required and reason; kind, scope, result, or not run>
+- Full-review gate: run | skip — <root sessionの判定理由>
+- Holistic complete-diff review scope: <scope, or not applicable for skip>
+- Holistic complete-diff review status: completed | unavailable | deadline exceeded | not applicable for skip — <result or reason>
 - Complete diff reviewed: yes | no
 - Full-diff review count: <number or 0>
 - Review deadline: <deadline and completed within deadline / exceeded / not started / not used>
 - Review retry: none | <tool or transport failure and preserved Candidate / review contract>
 - Blocking status: none | remaining — <detail>
 - Accepted risk: <risk and rationale, or none>
-- Validation gap: <gap or none>
+- Validation gap: <runでholistic reviewが完了していない場合のgap、その他のgap、またはnone>
 
 ## Completion Gates
 
@@ -90,6 +93,7 @@ Candidate verification resultが`verified`の作業では、通常作業用テ�
 # Candidate verification-onlyテンプレート
 
 Candidate verification resultが`mismatch`または`validation-gap`の場合は、このテンプレートだけを使う。通常作業用テンプレート、Verified Candidate拡張、substantive finding、approval、completion evidence、coverage表は出力しない。
+この出力を担当するreviewerは`Full-review gate`を判定または再判定しない。root sessionが後続の完了報告でgate判定と理由、`run`時のscope、実施状況、未完了時のvalidation gapを報告する。
 
 # Candidate Verification
 
