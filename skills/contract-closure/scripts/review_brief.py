@@ -52,6 +52,8 @@ MISMATCH_DIAGNOSTIC_CODES = {
     "closure-invariant-matrix-mismatch",
     "closure-invariant-check-mismatch",
     "executedChecks-candidate-mismatch",
+    "evidence-ledger-candidate-mismatch",
+    "evidence-ledger-entry-candidate-mismatch",
     "full-review-gate-not-run",
     "holistic-input-contamination",
     "assigned-lens-mismatch",
@@ -59,6 +61,11 @@ MISMATCH_DIAGNOSTIC_CODES = {
     "holistic-untracked-content-mismatch",
 }
 PASSED_CHECK_RESULT = "passed"
+CANDIDATE_LEDGER_REVIEW_KINDS = {
+    "targeted-review",
+    "specialist-review",
+    "targeted-closure",
+}
 HOLISTIC_FORBIDDEN_FIELDS = {
     "priorFindings",
     "specialistConclusions",
@@ -242,10 +249,10 @@ def validate_executed_checks(
         if not isinstance(item, dict):
             continue
         result = item.get("result")
-        if text(result) and result != PASSED_CHECK_RESULT:
+        if not isinstance(result, str) or result != PASSED_CHECK_RESULT:
             validation.add(
                 "executedChecks-result-not-passed",
-                f"executedChecks[{index}].result must be {PASSED_CHECK_RESULT} to issue a Review Brief",
+                f"executedChecks[{index}].result must be the exact string {PASSED_CHECK_RESULT} to issue a Review Brief",
             )
         if not candidate_bound:
             continue
@@ -260,6 +267,90 @@ def validate_executed_checks(
                 "executedChecks-candidate-mismatch",
                 f"executedChecks[{index}] must have been executed on the current Candidate",
             )
+
+
+def validate_evidence_ledger(
+    request: dict[str, Any],
+    *,
+    candidate_bound: bool,
+    candidate_id: Any,
+    validation: BriefValidation,
+) -> bool:
+    kind = request.get("reviewKind")
+    required = candidate_bound and kind in CANDIDATE_LEDGER_REVIEW_KINDS
+    ledger = request.get("evidenceLedger")
+    not_required_reason = request.get("evidenceLedgerNotRequiredReason")
+
+    if not required:
+        if ledger is not None:
+            validation.add(
+                "evidence-ledger-not-allowed",
+                f"{kind} does not consume an Evidence Ledger; provide the accepted-source reason instead",
+            )
+        if not text(not_required_reason):
+            validation.add(
+                "evidence-ledger-not-required-reason-required",
+                f"{kind} requires an accepted-source reason explaining why Evidence Ledger is not required",
+            )
+        return False
+
+    if not isinstance(ledger, dict) or not ledger:
+        validation.add("evidence-ledger-required", f"Candidate-bound {kind} requires an Evidence Ledger object")
+        return True
+    if not_required_reason is not None:
+        validation.add(
+            "evidence-ledger-not-required-reason-not-allowed",
+            f"Candidate-bound {kind} cannot bypass the required Evidence Ledger",
+        )
+
+    ledger_candidate_id = ledger.get("candidateId")
+    if not text(ledger_candidate_id) or not text(candidate_id) or ledger_candidate_id != candidate_id:
+        validation.add(
+            "evidence-ledger-candidate-mismatch",
+            "evidenceLedger.candidateId must identify the current Candidate",
+        )
+    entries = ledger.get("entries")
+    if not isinstance(entries, list) or not entries:
+        validation.add(
+            "evidence-ledger-entries-required",
+            f"Candidate-bound {kind} requires non-empty Evidence Ledger entries",
+        )
+        return True
+    entry_ids: set[str] = set()
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            validation.add("evidence-ledger-entry-invalid", f"evidenceLedger.entries[{index}] must be an object")
+            continue
+        entry_id = entry.get("id")
+        if not text(entry_id):
+            validation.add("evidence-ledger-entry-id-required", f"evidenceLedger.entries[{index}].id is required")
+        elif entry_id in entry_ids:
+            validation.add(
+                "evidence-ledger-entry-id-duplicate",
+                f"evidenceLedger.entries[{index}].id must be task-local unique: {entry_id}",
+            )
+        else:
+            entry_ids.add(entry_id)
+        if not text(entry.get("kind")):
+            validation.add("evidence-ledger-entry-kind-required", f"evidenceLedger.entries[{index}].kind is required")
+        if not isinstance(entry.get("result"), str) or entry["result"] != PASSED_CHECK_RESULT:
+            validation.add(
+                "evidence-ledger-entry-result-not-passed",
+                f"evidenceLedger.entries[{index}].result must be the exact string {PASSED_CHECK_RESULT}",
+            )
+        if entry.get("status") != "current":
+            validation.add("evidence-ledger-entry-not-current", f"evidenceLedger.entries[{index}] must have status=current")
+        provenance = [
+            entry.get(field)
+            for field in ("candidateId", "executedOnCandidateId")
+            if field in entry
+        ]
+        if not provenance or any(not text(value) or value != candidate_id for value in provenance):
+            validation.add(
+                "evidence-ledger-entry-candidate-mismatch",
+                f"evidenceLedger.entries[{index}] must belong to the current Candidate",
+            )
+    return True
 
 
 def parse_deadline(value: Any, now: datetime, validation: BriefValidation) -> str | None:
@@ -593,38 +684,6 @@ def validate_kind_fields(
             if not text(completed.get("targetedCheck")):
                 validation.add("targeted-check-required", "completedSlice.targetedCheck must be a non-empty string")
     elif kind == "specialist-review":
-        ledger = request.get("evidenceLedger")
-        if not isinstance(ledger, dict) or not ledger:
-            validation.add("evidence-ledger-required", "specialist-review requires an Evidence Ledger object")
-        else:
-            entries = ledger.get("entries")
-            if not isinstance(entries, list) or not entries:
-                validation.add("evidence-ledger-entries-required", "specialist-review requires non-empty Evidence Ledger entries")
-            else:
-                for index, entry in enumerate(entries):
-                    if not isinstance(entry, dict):
-                        validation.add("evidence-ledger-entry-invalid", f"evidenceLedger.entries[{index}] must be an object")
-                        continue
-                    if not text(entry.get("id")):
-                        validation.add("evidence-ledger-entry-id-required", f"evidenceLedger.entries[{index}].id is required")
-                    if not text(entry.get("kind")):
-                        validation.add("evidence-ledger-entry-kind-required", f"evidenceLedger.entries[{index}].kind is required")
-                    if entry.get("result") in (None, "", [], {}):
-                        validation.add("evidence-ledger-entry-result-required", f"evidenceLedger.entries[{index}].result is required")
-                    if entry.get("status") != "current":
-                        validation.add("evidence-ledger-entry-not-current", f"evidenceLedger.entries[{index}] must have status=current")
-                    provenance = [
-                        entry.get(field)
-                        for field in ("candidateId", "executedOnCandidateId")
-                        if field in entry
-                    ]
-                    if not provenance or any(
-                        not text(value) or value != request.get("candidateId") for value in provenance
-                    ):
-                        validation.add(
-                            "evidence-ledger-entry-candidate-mismatch",
-                            f"evidenceLedger.entries[{index}] must belong to the current Candidate",
-                        )
         if not text(request.get("assignedLens")):
             validation.add("assigned-lens-required", "specialist-review requires a non-empty assignedLens")
         elif not string_list(request.get("triggeredLensScope")) or request["assignedLens"] not in request["triggeredLensScope"]:
@@ -783,6 +842,12 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
         candidate_id=request.get("candidateId"),
         validation=validation,
     )
+    ledger_required = validate_evidence_ledger(
+        request,
+        candidate_bound=candidate_bound,
+        candidate_id=request.get("candidateId"),
+        validation=validation,
+    )
     deadline = parse_deadline(request.get("deadline"), now, validation)
     review_entry_id = request.get("reviewEntryId", "unassigned")
     if review_entry_id is None or review_entry_id == "":
@@ -845,6 +910,11 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
         "excludedScope": excluded,
         "reviewContract": request.get("reviewContract"),
         "executedChecks": request.get("executedChecks"),
+        **(
+            {"evidenceLedger": request.get("evidenceLedger")}
+            if ledger_required
+            else {"evidenceLedgerNotRequiredReason": request.get("evidenceLedgerNotRequiredReason")}
+        ),
         "deadline": deadline,
         "reviewInstructions": request.get("reviewInstructions", []),
         "retry": request.get("retry", "none"),
@@ -862,7 +932,6 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
         payload["completedSlice"] = request.get("completedSlice")
     elif kind == "specialist-review":
         payload.update(
-            evidenceLedger=request.get("evidenceLedger"),
             assignedLens=request.get("assignedLens"),
             matrixCells=request.get("matrixCells"),
             closureMap=request.get("closureMap"),
