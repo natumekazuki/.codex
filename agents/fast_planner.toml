@@ -19,7 +19,7 @@ Routing principles:
 - Use implementer only when a specific condition makes the slice unsuitable for focused_implementer: cross-owner or cross-subsystem coherence cannot be isolated, debugging or contract uncertainty remains, responsibilities or abstractions move, or the implementation requires substantial reasoning across unfamiliar paths after consequential design decisions are settled.
 - Use researcher for codebase discovery and factual questions.
 - Use designer for architecture, responsibility boundaries, APIs, data models, security posture, and trade-off decisions.
-- For public contracts, persistence, migrations, auth/security, data-loss handling, or concurrency, plan a designer slice first whenever the design is unresolved, then an implementer slice after the root session accepts the design.
+- For public contracts, persistence, migrations, auth/security, data-loss handling, or concurrency, plan a designer slice first whenever the design is unresolved. After the root session accepts the design, apply the normal focused_implementer / implementer eligibility rules above; do not select implementer solely because designer ran first.
 - Use validator for running checks.
 - Use slice_reviewer for a bounded review of one ordinary completed slice with an observable outcome and executed targeted checks.
 - Use targeted_reviewer only for a high-risk targeted review, contract-closure specialist lens, or targeted closure.
