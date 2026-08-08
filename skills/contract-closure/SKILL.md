@@ -118,6 +118,13 @@ high-risk / non-localな変更でIndependent Closure Reviewを行う場合は、
 - `agents/slice_reviewer.toml`は通常sliceのbounded targeted review、`agents/targeted_reviewer.toml`は高リスクtargeted review、specialist review、targeted closure、`agents/reviewer.toml`はholistic complete-diff reviewのread-only安全境界、受け取れる情報、findingとcoverageの出力を定める。各reviewerはこの節のReview Briefを検証し、CandidateやLedgerの意味を独自に補完または変更しない。
 - `skills/validation-report/`はtask-localなCandidate evidenceをuser-facingな完了報告へ投影する。表示のためにCandidate identityやevidence statusを再計算しない。
 
+### Snapshot Builder
+
+- Candidate Source Identityの作成とread-only検証には`python skills/contract-closure/scripts/candidate_snapshot.py create|verify`を使う。fieldと意味はこのSkillを正本とし、scriptはmode選択、identity生成、cleanup、postcondition、構造化診断だけを実行する。
+- `create`にはCandidate ID、target root、base ref label、include / exclude scope、task-localなartifact directoryを渡す。modeを省略した場合は`manifest-digest`となり、creator-tree capabilityを探索しない。
+- `creator-tree`を選ぶ場合だけ、独立snapshotが必要な理由、Git object write authority、Git common dirを含むwritable scope、target worktree外のtask-local artifact directoryを明示する。preflight fallbackを許可する場合は`--allow-manifest-fallback`も明示する。
+- `verify`はbuilderが出力したCandidate JSONを受け取り、宣言済みOIDとrecipeだけをread-onlyで再計算する。`verified`以外ではsubstantive reviewへ進まない。
+
 ```text
 Candidate Definition:
 Candidate ID:

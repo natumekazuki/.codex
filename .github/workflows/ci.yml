@@ -40,11 +40,13 @@ jobs:
       - name: Run unit tests
         run: >-
           python -m unittest
+          skills/contract-closure/scripts/test_candidate_snapshot.py
           skills/audit-codex-work-quality/scripts/test_collect_session_evidence.py
           skills/audit-codex-work-quality/scripts/test_audit_history.py
       - name: Compile Python entry points
         run: >-
           python -m py_compile
+          skills/contract-closure/scripts/candidate_snapshot.py
           skills/audit-codex-work-quality/scripts/collect_session_evidence.py
           skills/audit-codex-work-quality/scripts/audit_history.py
 
