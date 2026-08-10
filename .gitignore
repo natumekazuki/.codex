@@ -54,3 +54,5 @@ chrome-native-hosts-v2.json
 /worktrees
 automations/.run-jitter-salt
 generated_images/*
+/audit-codex-work-quality/
+/visualizations/
