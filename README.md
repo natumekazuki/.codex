@@ -35,7 +35,7 @@
 | `contract-closure` | 専門 | 変更した不変条件を兄弟入口、状態遷移、failure point、resource scopeまで展開し、局所修正による再発を防ぐ |
 | `consolidate-structure` | 専門 | review前に、具体的なtopology evidenceがある変更だけを一回のbounded consolidationで収束させる |
 | `knowledge-placement` | 専門 | 設計情報を source / test / type / schema / static check / comment / ADR / 全体設計のどこへ置くか判断する |
-| `withmate-memory` | runtime管理 | WithMateが自動配置し、durable Memoryを明示targetで検索・追記・確認・削除する |
+| `withmate-memory` | runtime管理 | WithMateが自動配置し、injected Character context、MCP優先のCharacter Memory / affect、semantic Memory CLIの運用契約を提供する |
 | `relaygraph` | 専門 | RelayGraph の関係グラフ調査、検証、ルール作成を行う |
 | `japanese-tech-writing-review` | 専門 | 日本語の技術文書を論証、読み手の負荷、用語、Markdown表記の観点で推敲する |
 | `natural-japanese` | 専門 | ビジネス文書や一般記事を自然さ、読みやすさ、AI臭の観点で作成・推敲・診断する |
@@ -47,7 +47,8 @@
 - 新しい端末ではこの repo を `$HOME/.codex` に配置し、既存の `config.toml` に `config.example.toml` と `config/agents.example.toml` の必要 section だけを移す
 - hook は `hooks.json` から `$HOME/.codex/hooks/subagent-routing.ps1` を呼び出す。Windows では `commandWindows` が `%USERPROFILE%\.codex` を使う
 - Spark routing の現在 mode は `hooks/subagent-routing.local.json` に保存される。このファイルは端末ごとの一時状態なので Git 管理しない
-- WithMateを使う端末では、起動後に`skills/withmate-memory/`が自動配置され、Skill一覧へ認識されていることを確認する
+- WithMateを使う端末では、起動後に`skills/withmate-memory/`が自動配置され、managed markerの`bundleVersion`とSkill一覧への認識を確認する
+- Character context MCPを使う端末では、`config.example.toml`の`withmate-character-context`設定をlocal `config.toml`へ反映し、WithMate起動後の新しいCodex sessionで`codex mcp list`と公開toolを確認する。詳細は`docs/runbooks/withmate-character-context.md`を参照する
 - `browser/`、`computer-use/`、`process_manager/`、`chrome-native-hosts.json` は plugin/runtime の生成状態として扱い、別端末では Codex が再生成する
 
 ## 設計判断

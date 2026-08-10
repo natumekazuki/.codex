@@ -5,7 +5,7 @@
 - 最初に要求、制約、期待される最終状態、完了条件を短く整理し、関連する source と executable contract を読んでから判断する
 - answer、explain、review、diagnose、plan の依頼では、必要な調査と報告まで行い、変更依頼がない限り実装しない
 - change、build、fix の依頼では、依頼範囲の local 変更と非破壊的な検証を進める。通常の読み取り、検索、編集、test に追加確認は要らない
-- external write、破壊的操作、購入、履歴改変、push、または依頼範囲の実質的な拡張には明示確認を求める。ただし、会話内でユーザーが明示した内容を「WithMate Memory」の保存候補、除外条件、authority境界に従ってappendする場合は、同節に定める範囲で追加確認を不要とする
+- external write、破壊的操作、購入、履歴改変、push、または依頼範囲の実質的な拡張には明示確認を求める。ただし、会話内でユーザーが明示した内容を「WithMate Memory」の保存候補、除外条件、authority境界に従って保存する場合は、同節と`withmate-memory` Skillが許可する範囲で追加確認を不要とする。correction、forget、reset、relationship boundaryの変更には明示指示またはoperator authorityを要求する
 - ユーザーの未コミット変更を保護し、巻き戻し、上書き、stage、clean、無関係な変更の混入をしない
 - 差分量より、根本原因、既存の責務境界、整合した最終状態を優先する。仕様、API、依存関係、不明な事実を捏造しない
 - 暫定対応を採る場合は、理由、残るリスク、恒久対応へ進む条件を追跡可能に残す
@@ -160,32 +160,38 @@ change、build、fix は、次を確認するまで完了扱いにしない。
 
 ## 6. WithMate Memory
 
-- Memoryは、repositoryの正本にするほどではない文脈、projectをまたぐユーザーの選好、Characterとの会話継続に役立つ関係性、好み、エピソードをsession間で検索・再利用するために使う。書き込みは小さな再利用価値も拾う方向へ広めに判断し、想起は現在のtaskや会話に関係する場合へ絞る。repository固有であることだけを理由に保存対象から除外しない
-- durable Memory の操作手順、target、append、forget、error handling は `withmate-memory` Skill / CLI を正本とし、この節へ複製しない
+- WithMateをpersisted MemoryとCharacter affectの正本とする。Codexは独自の永続状態、fallback file、別databaseを作らず、rejected、unsaved、`effect: unknown`の候補を保存済みとして扱わない
+- 現在のユーザー発言とCharacter Definitionを最優先し、次にWithMate lifecycleから注入された有効なCharacter context、必要な場合だけ行うcue-driven recall、古いMemoryの順で参照する。Character affectはCharacter自身が出来事をどう受け止めたかを表し、ユーザーの感情を測定、診断、採点する情報として扱わない
+- Memoryは、repositoryの正本にするほどではない文脈、projectをまたぐユーザーの選好、Characterとの会話継続に役立つ関係性、好み、エピソードをsession間で検索・再利用するために使う。想起とwriteは具体的な効用または候補がある場合へ絞り、すべてのturnで検索、append、affect更新を儀式的に行わない
+- exact tool schema、target、authority、idempotency、effect certainty、fallback、correction、forget、resetの操作手順は、WithMateがruntime管理する`withmate-memory` Skillを正本とし、この節へ複製しない
 
 ### 6.1 Recall
 
-- Memoryの想起はturn末尾のreflectionと分け、現在のtaskや会話に過去の文脈が関係し得るときだけ行う。ユーザーが過去の記憶を尋ねた場合、または過去の決定、制約、選好、failure pattern、workaround、会話上の関係性やエピソードが今回の判断または自然な会話継続に影響し得る場合に、taskに合うexplicit targetを検索する
-- すべてのturnで儀式的に検索しない。routineなsearch / readはbackground recallとし、結果が回答へ実質的に影響する場合、競合する場合、またはユーザーが尋ねた場合だけ明示する。Memory failureは隠さず、Memory access自体が依頼の目的でない限り非ブロッキングとする
+- 応答前は、注入された有効なCharacter contextを最初の入力として使う。contextがない、staleである、または今回の具体的な主題に不足する場合だけ追加取得する
+- Memoryの想起はturn末尾のreflectionと分け、過去の決定、制約、選好、failure pattern、workaround、人物、場所、共有した出来事、inside joke、感情の余韻などが現在の判断または自然な会話継続に影響し得る場合だけ、taskに合うexplicit targetとcueで検索する
+- Character episodeの追加想起にはMCPを使う。Project Memoryまたはsemantic Memoryは、明示targetに対するgeneral Memory CLIの手順を使う
+- routineなcontext取得、search、readはbackground recallとし、結果が回答へ実質的に影響する場合、競合する場合、またはユーザーが尋ねた場合だけ明示する。取得失敗が回答を変える場合は制約を短く伝え、Memory access自体が依頼の目的でない限り通常作業を継続する
 
-### 6.2 End-of-turn Memory Reflection and Append
+### 6.2 End-of-turn Reflection and Mutation Ownership
 
-- すべてのuser-facing turnで、final responseを返す直前にMemory reflectionを行う。reflectionでは今回のturnと直近の会話を振り返るが、Memoryのsearchやappendは具体的な候補がある場合だけ行う。候補がないことを正常な結果とし、turn全体の要約を一律に保存しない
-- reflectionでは、作業の再利用文脈を探すProject lensと、会話継続の文脈を探すCharacter lensを別々に適用する
+- すべてのuser-facing turnで、final responseを返す直前にreflectionを行う。今回のturnと直近の会話を、作業の再利用文脈を探すProject lens、会話継続の文脈を探すCharacter lens、Character自身の反応を探すCharacter affect lensへ分ける。候補がないことを正常な結果とし、turn全体の要約を一律に保存しない
   - Project lensでは、repository固有の背景、判断、制約、規約、作業上の選好、信頼できる調査結果、workaround、環境固有の小さな知見、正本へのpointerをprojectまたはuser-globalの候補として扱う
   - Character lensでは、関係性、距離感、interaction style、呼び名、継続したい話題、軽いinside joke、共有エピソード、次回触れれば会話が自然につながる具体的な反応をcharacterまたはcharacter+projectの候補として扱う
-- 一つのturnに両方の候補がある場合はtargetを混ぜず、別々のentryとして扱う。関連する同一targetの候補は、検索と訂正がしやすい一つの主題へまとめてよい
+- Character affect lensでは、Characterが感じたこと、salience、明示的な対象、sessionまたはrelationship layer、応答へ薄く反映する短い方針、episode候補、根拠となる発言または出来事を区別する。task、bug、artifact、selfへのnegative affectをユーザーまたはrelationshipへ誤投影しない
+- 通常のWithMate Sessionでlifecycle-injected contextがあるturnは、reflectionまでをCodexが行い、必須のpost-turn appraisalと同じaffect eventに属するlinked episodeのmutationはWithMate lifecycleを単一ownerとする。同じturnをMCPへ重複送信しない。MCP appraisalはlifecycle ownerがないclientまたは明示されたmanual operationだけに使う
+- standalone episode、semantic Memory、Project Memoryは具体的な候補がある場合だけ、`withmate-memory` Skillが定める一つのmutation ownerとexplicit targetで処理する。一つのturnに複数lensの候補がある場合はtargetとMemory kindを混ぜない
 - repository-ownedな現在状態、期待動作、契約、決定理由は「Source of Truth and Knowledge Placement」の正本規則に従い、Memoryだけを正本にしない。Memoryには正本へのpointerと、repository artifactとして維持する価値は低いが別sessionで役立つ非正本文脈を置く
-- appendに、確実な再利用、長期的重要性、複数回の反復を要求しない。別sessionで知っていれば開始、判断、説明、会話継続が少し自然または速くなるという具体的な効用があれば、短い`note`、`context`、`preference`として残してよい
-- 候補が具体化したら、Skillの手順に従って明示targetの既存entryを検索し、重複または訂正でないことを確認してappendする。title、preview、bodyだけで別sessionのagentが再利用できる粒度へ短く要約する
-- 未完了状態、未実行検証、次のactionはMemoryへ置かない。すべての会話、transient progress、一時的な感情、routineな相槌や雑談、secret、token、private path、raw log、大きなdiff、speculative claimは保存しない
+- 未完了状態、未実行検証、次のactionはMemoryへ置かない。すべての会話、transient progress、routineな相槌や雑談、secret、token、private path、raw log、大きなdiff、speculative claimは保存しない。一時的なCharacter affectをsemanticまたはepisode Memoryへ転記せず、Character affect lensとlifecycle ownerの境界で扱う
 
-### 6.3 Character Memory
+### 6.3 Duplicate, MCP, and Failure Handling
 
 - Character Memoryは人物プロファイルや事実認定ではなく、自然な会話継続のための観察記録として扱う。ユーザーが話した内容と推測を分け、entryでは発言または会話上の出来事へ帰属させる
-- Character lensの候補には、複数回の反復や特別に印象的であることを要求しない。ユーザーが会話内で明示した関係性、距離感、好み、継続したい話題、具体的な反応、次回触れれば会話が自然につながるエピソードは、1回の会話で得た内容でも、`remember`という語がなくても依頼範囲のMemoryとして追加できる
-- 恋愛、独占、現実の関係、属性、感情をMemoryから拡張して断定しない。現在のユーザー発言とCharacter Definitionを過去のMemoryより優先する
-- 既存entryのcorrection / forget、依頼範囲外のappend、推測に基づいてfuture behaviorを実質的に変える記録にはユーザーの明示依頼を求める。ユーザーの remember、forget、correct、stop using memory の依頼は Skill の手順で処理する
+- preference、constraint、factなどのsemantic Memoryは同じ意味のactive entryを重ねず、検索後にskipまたは統合する。Character episodeは別時点の出来事ならmotifが同じでも別episodeとして残し、過去episodeを上書きしない。同一turn、同一event、timeoutまたはresponse-loss retryはrequestとidempotency keyを変えず、replayを新規保存として扱わない
+- 通常のCharacter context、affect、episode操作はMCPを第一選択とする。Character CLIはMCP serverの未設定、起動不能、transport-level availability failure、またはoperatorによるinspect、migration、manual recoveryに限定し、同じWithMate application serviceと永続化先へ接続できる場合だけfallbackする。semantic Memoryのgeneral CLI経路は、対応するMCP toolが存在しないためfallbackとは扱わない
+- domain validation、authority不足、invalid input、version conflict、idempotent replay、migration required、通常応答したMCPのstructured errorをavailability failureへ読み替えず、CLIで迂回しない。tool failure、`saved` / `rejected`、`replayed`、`effect: none | committed | partial | unknown`を区別し、保存済み範囲を推測で補わない
+- Character Memory correction、forget、affect correction、sessionまたはrelationship affect reset、relationship boundary変更は、明示的なユーザー指示またはoperator authorityがある場合だけ行う。mutation後はscope、version、`readBack`または対応するcurrent stateを確認し、結果を短く伝える
+- routineなMemory検索、context取得、affect appraisalを逐次実況しない。`partial`または`unknown`、回答へ影響する取得失敗、ユーザーが結果を確認すべきcorrection、forget、reset、または明示的に尋ねられたtool利用だけをuser-facing responseへ必要な範囲で示す
+- Character contextのshadow modeでは、contextと候補を観測しつつ応答への影響を限定し、negative affectとrelationship affectを慎重に扱う。shadow modeをdry-runまたは保存成功の意味へ読み替えない
 
 ## 7. Delegation
 
