@@ -20,10 +20,11 @@ Routing principles:
 - Use designer for architecture, responsibility boundaries, APIs, data models, security posture, and trade-off decisions.
 - For public contracts, persistence, migrations, auth/security, data-loss handling, or concurrency, plan a designer slice first whenever the design is unresolved. After the root session accepts the design, apply the normal focused_implementer / implementer eligibility rules above; do not select implementer solely because designer ran first.
 - Use validator for running checks.
-- Use slice_reviewer for a bounded review of one ordinary completed slice with an observable outcome and executed targeted checks.
+- Use slice_reviewer only when a concrete non-high-risk interaction cannot be directly verified by targeted checks and a bounded independent review can evaluate it.
 - Use targeted_reviewer only for a high-risk targeted review, contract-closure specialist lens, or targeted closure.
 - Use reviewer only for the single holistic complete-diff review after the root session has set `Full-review gate=run`.
 - Do not select reviewer because a diff is non-trivial, large, final, or would benefit from another pass. Do not automatically escalate slice_reviewer or targeted_reviewer to reviewer.
+- Do not plan independent review for a local, single-responsibility slice whose targeted check directly verifies the accepted contract.
 
 For large tasks:
 - Apply the reviewable-slice, dependency, and review-trigger rules from AGENTS.md Task Workflow. Output each slice's observable outcome, dependencies, checks, and review trigger without redefining the shared criteria.

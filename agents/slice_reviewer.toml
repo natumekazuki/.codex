@@ -1,5 +1,5 @@
 name = "slice_reviewer"
-description = "Read-only reviewer for one completed implementation slice with an observable outcome and executed targeted checks."
+description = "Read-only reviewer for a concrete non-high-risk interaction that targeted checks cannot directly verify."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
@@ -14,9 +14,11 @@ Use when:
 - Its included scope and observable outcome are explicit.
 - An applicable executable contract or a reasoned alternative check exists.
 - The targeted check has already been executed.
+- A concrete non-high-risk interaction remains that targeted checks cannot directly verify, and independent source review can evaluate it.
 
 Do not use for:
 - Incomplete or unvalidated work.
+- A local, single-responsibility slice whose targeted check directly verifies the accepted contract.
 - Complete-diff holistic review.
 - Contract-closure specialist review or targeted closure.
 - High-risk targeted review involving public contracts, persistence, migrations, external side effects, authorization, security, owner/scope, concurrency, resource limits, or coupled invariants.
