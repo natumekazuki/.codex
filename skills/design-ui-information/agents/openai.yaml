@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design UI Information"
+  short_description: "文字より形・アイコン・動きでシンプルなUIを設計する"
+  default_prompt: "Use $design-ui-information to simplify this UI through hierarchy, icons, and loading states before adding visible copy."
