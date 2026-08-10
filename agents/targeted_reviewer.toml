@@ -16,7 +16,7 @@ Use for:
 - High-risk or non-local targeted Independent Closure Review required by contract-closure.
 
 Do not use for:
-- Ordinary completed-slice review that fits slice_reviewer.
+- Local, single-responsibility slices whose targeted checks directly verify the accepted contract.
 - Complete-diff holistic review.
 - Deciding whether Full-review gate should run.
 - General bug hunting outside the included scope.

@@ -191,7 +191,9 @@ if ($sliceReviewerText -notmatch '(?m)^model\s*=\s*"gpt-5\.6-luna"\s*$' -or
 $targetedReviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/targeted_reviewer.toml') -Raw
 if ($sliceReviewerText -notmatch 'one completed implementation slice' -or
     $sliceReviewerText -notmatch 'Do not inspect or request the complete diff' -or
-    $targetedReviewerText -notmatch 'Ordinary completed-slice review that fits slice_reviewer' -or
+    $sliceReviewerText -notmatch 'targeted checks cannot directly verify' -or
+    $sliceReviewerText -notmatch 'local, single-responsibility slice whose targeted check directly verifies' -or
+    $targetedReviewerText -notmatch 'Local, single-responsibility slices whose targeted checks directly verify' -or
     $targetedReviewerText -notmatch 'Specialist review' -or
     $targetedReviewerText -notmatch 'Targeted closure') {
     throw 'slice_reviewer and targeted_reviewer responsibilities overlap or are incomplete'
@@ -199,13 +201,29 @@ if ($sliceReviewerText -notmatch 'one completed implementation slice' -or
 
 $agentsPolicyText = Get-Content -LiteralPath (Join-Path $repoRoot 'AGENTS.md') -Raw
 foreach ($policyFragment in @(
-    '通常のcompleted sliceは`slice_reviewer`',
+    '局所的・単一責務でtargeted checkがaccepted contractを直接検証できるsliceは独立reviewを起動しない',
+    'targeted checkでは直接検証できない具体的なinteractionは`slice_reviewer`',
     '高リスク境界を持つsliceまたは`contract-closure`が要求するtargeted reviewは`targeted_reviewer`',
+    'finding修正後に同じscopeの探索reviewまたはcomplete-diff reviewを再開しない',
     '`Full-review gate=run`で許可された一度のcomplete-diff holistic reviewだけは`reviewer`'
 )) {
     if ($agentsPolicyText -notmatch [regex]::Escape($policyFragment)) {
         throw "AGENTS.md review routing contract is missing: $policyFragment"
     }
+}
+
+foreach ($plannerName in @('planner', 'fast_planner')) {
+    $plannerText = Get-Content -LiteralPath (Join-Path $repoRoot "agents/$plannerName.toml") -Raw
+    if ($plannerText -notmatch 'Use slice_reviewer only when a concrete non-high-risk interaction cannot be directly verified by targeted checks' -or
+        $plannerText -notmatch 'Do not plan independent review for a local, single-responsibility slice whose targeted check directly verifies the accepted contract') {
+        throw "$plannerName does not preserve the proportional review trigger"
+    }
+}
+
+$fastReviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/fast_reviewer.toml') -Raw
+if ($fastReviewerText -notmatch 'only when the user explicitly requests `fast_reviewer`' -or
+    $fastReviewerText -notmatch 'Never recommend or start this role automatically') {
+    throw 'fast_reviewer can still be selected automatically for local low-risk work'
 }
 
 foreach ($roleName in @('planner', 'fast_planner', 'designer', 'implementer', 'researcher', 'focused_implementer', 'slice_reviewer')) {
