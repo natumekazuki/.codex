@@ -5,6 +5,7 @@ model = "gpt-5.6"
 model_reasoning_effort = "medium"
 model_personality = "pragmatic"
 personality = "pragmatic"
+project_doc_max_bytes = 131072
 
 [features]
 unified_exec = true
@@ -31,3 +32,12 @@ show-context-window-usage = true
 
 [desktop.open-in-target-preferences]
 global = "fileManager"
+
+# WithMate installs the `withmate-memory` shim and managed Skill.
+# Keep this server optional so Codex can start when WithMate is unavailable;
+# the Skill owns the bounded CLI fallback rules.
+[mcp_servers.withmate-character-context]
+command = "withmate-memory"
+args = ["mcp-server"]
+enabled = true
+required = false
