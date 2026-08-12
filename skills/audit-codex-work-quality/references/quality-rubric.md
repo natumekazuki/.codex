@@ -48,9 +48,14 @@ session数やturn数ではなく、ユーザーが得ようとした一つの成
 
 ### 3.2 Defect / contract discovery stage
 
-- 契約、schema、環境制約、authority境界を実装前に確認できたか。
-- 後段reviewで見つかった問題を、最初に読めたsourceやpreflightから防げたか。
-- 最も早い検出地点を`brief / preflight / implementation / targeted check / specialist review / holistic review / user feedback`から選ぶ。
+- 後段で判明した事実ごとに、実際の発見時点と原因分類を分ける。
+- 原因は次のいずれかに分類する。
+  - `事前確認可能な欠落`: 明確な正本があり、着手前に読めば結論を確定できた。
+  - `解釈の不一致`: 当時の同じ情報から複数の妥当なscope解釈があり、ユーザー意図が明示されていなかった。
+  - `実装中に顕在化した判断`: 組み込みや実装を進めたことで、既存経路との関係が観測可能な結果を変える判断事項になった。
+- 最も早い検出地点を`brief / preflight / implementation / targeted check / specialist review / holistic review / user feedback`から選び、その地点で実際に利用できた根拠を示す。後から判明した事実を、着手前から既知だったように扱わない。
+- 事前確認可能だった証拠がない場合、preflight強化を既定の改善策にしない。
+- 実装中の発見後に追加編集を止めて判断を求めた場合は、予防失敗の有無と発見後の対応品質を別々に評価する。
 
 ### 3.3 Finding family recurrence
 
@@ -98,8 +103,9 @@ session数やturn数ではなく、ユーザーが得ようとした一つの成
 2. 欠けたInvariantまたは判断境界
 3. 同じfamilyの兄弟case
 4. 成果物または収束へ与えた影響
-5. 最も早く検出できた地点
+5. 事実の発見時点、原因分類、当時の根拠で最も早く検出できた地点
 6. 既に存在する防止策と、機能しなかった理由
+7. 実装中に発見した場合の停止・判断依頼と、予防失敗と分けた対応品質
 
 同じreview commentの件数ではなく、異なるInvariant familyの数を示す。
 
@@ -218,7 +224,7 @@ Proportionality:
 - Evidence / Why it mattered
 
 Findings:
-- Family / Evidence / Impact / Earliest catch point
+- Family / Evidence / Impact / Discovery stage / Cause classification / Earliest evidence-based catch point / Post-discovery response
 
 Causal timeline:
 - Observation / Mechanism / Decision point

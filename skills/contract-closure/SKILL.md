@@ -30,9 +30,21 @@ description: 境界、public API、永続化、migration、外部副作用、認
 - 現在のsourceやtestが存在することだけをaccepted contractにしない。
 - 既存のClosure MapとInvariant Matrixから今回の変更がtriggerする軸だけを選ぶ。関係しない高リスク軸を空欄埋めのために展開しない。
 - 根拠が競合し、required / optional、default、failure semantics、supported scope、外部consumer互換性、後戻り困難な永続化・migration・security上の選択、または業務ルールの結論が変わる場合は、reviewerに選択させず`unresolved`とする。
-- `unresolved`ではsourceとexecutable contractを編集しない。ユーザーには、確定できない問い、確認した根拠、選択肢ごとのconsumer影響、根拠がある場合の推奨案だけを短く示し、自由記述のチェックリストや承認作業を求めない。
+- `unresolved`ではsourceとexecutable contractを編集しない。ユーザーには、次の「要判断」通知だけを短く示し、自由記述のチェックリストや承認作業を求めない。
 - 調査量が多い、内部実装方法が未確定、複数の内部実装案がある、または追加情報があると便利という理由だけで`unresolved`にしない。既存の正本から安全に解決できる内容はCodexが判断する。
 - 必要な情報が揃っている場合は、ユーザーによる記入や承認を要求せず`ready`とし、実装へ進む。
+
+```text
+要判断: <決めること>
+発見: <実装中に確認できた事実。着手前のunresolvedなら調査で確認した事実>
+これまでの前提: <Codexが採っていた解釈。着手前のunresolvedで前提がない場合は未確定と示す>
+選択肢と影響: <観測可能な結果が変わる選択肢だけ>
+推奨: <根拠がある場合。なければ省略>
+停止範囲: <回答待ちで止めている編集または作業>
+```
+
+- 新しい一般チェックリストとして使わない。新しい事実によりaccepted contract、supported scope、canonical owner、外部consumerのいずれかが変わり、選択によって観測可能な結果が変わる場合だけ使う。
+- 着手前に読める明確な正本があり、その時点で結論を確定できた証拠がある場合を除き、実装中の発見を「事前調査の見落とし」と表現しない。
 
 ## Pre-Implementation Closure Plan
 
@@ -50,7 +62,7 @@ Invariant Matrix: <今回選んだ行>
 - mock、spy、metadata、static checkを選ぶ場合は、それが対象failureを最も直接検出する安定境界である理由を示す。build成功や内部callの確認だけで、利用者から観測可能なfailureの検証を代用しない。
 - `Gate status: ready`は、accepted contractとexact anchor、supported scopeと対象外、変更する不変条件とcanonical owner、同じ不変条件を共有する兄弟経路、主要なfailure mode、consumer影響、直接検証、未確定判断の有無を確定できた状態とする。
 - `Gate status: unresolved`は、信頼できる根拠が不足または競合し、選択によってaccepted behaviorが変わる状態に限る。read-only調査とユーザー確認を続け、`ready`へ更新するまでsourceとexecutable contractを編集しない。
-- 実装中にaccepted contract、supported scope、canonical owner、外部consumerのいずれかが変わった場合は、新たな編集を止めてこのゲートを再判定する。既存のworktree変更は巻き戻さず、`unresolved`なら回答を得るまで追加編集しない。
+- 実装中にaccepted contract、supported scope、canonical owner、外部consumerのいずれかが変わった場合は、新たな編集を止めてこのゲートを再判定する。既存のworktree変更は巻き戻さず、`unresolved`なら回答を得るまで追加編集せず、上の「要判断」通知を返す。
 - Pre-Implementation Closure Planで固定したInvariant ID、scope、failure mode、consumer影響、直接検証を、test設計、targeted check、Invariant Matrix、specialist review、Review Brief、validation reportへ同じ意味のまま引き継ぐ。実装後に新しい契約軸が判明した場合もreviewだけへ追加せず、このゲートへ戻る。
 
 ## Closure Map
