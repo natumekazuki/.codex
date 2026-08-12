@@ -56,11 +56,12 @@ description: 開始日時と終了日時で固定したCodexセッション区�
 9. 関連PRごとに、state、base / head、created / updated / merged時刻、merge commit、commit数、changed filesと行数、review decision、check resultをread-onlyで取得する。final diffは先にfile別統計と構造を確認し、監査対象のcontractと複雑性判断に必要な範囲を読む。区間終了後の状態はoutcome contextへ分離する。
 10. PR evidenceをGoal / Artifact / Contract / Validation / Review / Outcomeへ統合し、`references/quality-rubric.md`の比例性と異常系到達性を評価する。PRがない論理変更、local-only成果、明示的にPRを作らないtaskを未完了扱いにしない。
 11. 同じfindingをInvariant / failure familyで束ねる。review回数やtool call数だけで品質を判定しない。
-12. materialなfinding familyごとに因果timelineを作り、`symptom -> proximate mechanism -> enabling condition -> systemic cause -> origin decision -> reinforcing / balancing feedback`を、該当する深さまで追う。途中の層を証拠なしで補完しない。
-13. 少なくとも二つの競合仮説を置き、各仮説を支持する証拠、反証、説明できない事実、confidenceを比較する。複数要因の相互作用が必要なら、一つの主因へ強制的に縮約しない。
-14. 既存の防止策が何だったか、その防止策がなぜ検出・停止・縮小に失敗したかを確認する。成功した変更または反例となるsessionとも比較し、単発事故から因果を一般化しない。
-15. 介入案は因果分析と分離する。ユーザーが改善提案または実験を求めた場合だけ、confidenceが十分な因果linkについて局所・構造・policyの候補を同じ因果層ごとに比較する。最小差分を分析の目的または既定の結論にしない。
-16. 各claimed観点についてboundedな構造化結果を`complete`する。途中で監査を完了できなかった観点は`fail`し、`completed`以外を分析済みとして扱わない。
+12. materialなfinding familyごとに、事実が実際に発見された時点と、当時利用できた根拠から最も早く検出できた地点を分ける。原因を`事前確認可能な欠落 | 解釈の不一致 | 実装中に顕在化した判断`へ分類してから、因果timelineを作る。
+13. materialなfinding familyごとに、`symptom -> proximate mechanism -> enabling condition -> systemic cause -> origin decision -> reinforcing / balancing feedback`を、該当する深さまで追う。途中の層を証拠なしで補完しない。
+14. 少なくとも二つの競合仮説を置き、各仮説を支持する証拠、反証、説明できない事実、confidenceを比較する。複数要因の相互作用が必要なら、一つの主因へ強制的に縮約しない。
+15. 既存の防止策が何だったか、その防止策がなぜ検出・停止・縮小に失敗したかを確認する。成功した変更または反例となるsessionとも比較し、単発事故から因果を一般化しない。
+16. 介入案は因果分析と分離する。ユーザーが改善提案または実験を求めた場合だけ、confidenceが十分な因果linkについて局所・構造・policyの候補を同じ因果層ごとに比較する。最小差分を分析の目的または既定の結論にしない。
+17. 各claimed観点についてboundedな構造化結果を`complete`する。途中で監査を完了できなかった観点は`fail`し、`completed`以外を分析済みとして扱わない。
 
 ## Collector usage
 
@@ -82,6 +83,10 @@ description: 開始日時と終了日時で固定したCodexセッション区�
 - 成果物、accepted contract、実行したcheck、review evidence、ユーザーの修正指示を一次証拠にする。
 - commentaryの自信、作業時間、message数、review回数を成果物品質の代用にしない。
 - user steeringは、要求追加と、agentが先に防げた方向修正を分ける。
+- 後段で判明した事実は、実際の発見時点と原因分類を分ける。`事前確認可能な欠落`は、明確な正本があり、着手前にそれを読めば結論を確定できた証拠がある場合に限る。
+- `解釈の不一致`は、当時の同じ情報から複数の妥当なscope解釈があり、ユーザー意図が明示されていなかった場合に使う。`実装中に顕在化した判断`は、組み込みや実装を進めたことで既存経路との関係が判断事項になった場合に使う。
+- 「最も早く検出できた地点」は、後から得た知識ではなく、その時点で利用できた根拠から判定する。事前確認可能だった証拠がなければ、preflight強化を既定の介入案にしない。
+- 実装中の発見後に追加編集を停めて判断を求めた場合は、予防失敗の有無と発見後の対応品質を別々に評価する。
 - review findingはvalidityを再確認し、`blocking`、改善候補、noiseを混ぜない。
 - 異常系対策は、accepted / supported scope、通常利用から必要な前提条件、実発生または再現証拠、影響、検知、復旧、より局所的な防止境界を確認する。理論上構築できるだけのcaseを現実的なblocking riskとして数えない。
 - PRの比例性は、行数ではなく要求へ直接寄与した責務と、追加されたmode、fallback、設定、dependency、policy、test matrix、運用負担の関係で判断する。green CI、merge済み、review finding数の少なさだけで比例的とみなさない。
@@ -101,7 +106,7 @@ description: 開始日時と終了日時で固定したCodexセッション区�
 3. 関連PRとassociation evidence、final artifact / outcome context
 4. 変更規模の比例性と異常系到達性
 5. 品質低下または収束遅延のfinding familyと根拠
-6. 因果timelineと、最も早く防げた地点
+6. 事実の発見時点、原因分類、当時の根拠で最も早く検出できた地点、発見後の対応品質
 7. 因果model、既存防御が失敗した理由、reinforcing / balancing feedback
 8. 競合仮説、反証、confidence
 9. 良かった判断と成功例との差
