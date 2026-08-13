@@ -1,6 +1,6 @@
 # ADR-0007: frozen Candidateと不変条件lensでhigh-risk reviewを収束させる
 
-- Status: accepted, amended by ADR-0008, ADR-0012, and ADR-0013
+- Status: accepted, amended by ADR-0008, ADR-0012, and ADR-0013, partially superseded by ADR-0018
 - Date: 2026-07-26
 - Amends: ADR-0004, ADR-0005
 - Related: ADR-0006

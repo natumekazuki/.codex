@@ -24,5 +24,5 @@ Codex の共通規則、role 契約、再利用手順、runtime delta を異な�
 ## Pointers
 
 - subagent の実行境界: `docs/architecture/subagent-workspace.md`
-- 設計情報の配置判断: `skills/knowledge-placement/SKILL.md`
+- 設計情報の配置判断: `AGENTS.md`の「Sources of Truth and Knowledge Placement」
 - routing mode の操作: `hooks/subagent-routing-modes.md`

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Session Handoff"
-  short_description: "正本への参照と差異を含む再開用snapshotを作成する"
-  default_prompt: "Use $session-handoff to capture a restart snapshot with canonical anchors, discrepancies, and remaining work."

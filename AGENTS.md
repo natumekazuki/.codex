@@ -2,226 +2,91 @@
 
 ## 1. Outcome, Scope, and Authority
 
-- 最初に要求、制約、期待される最終状態、完了条件を短く整理し、関連する source と executable contract を読んでから判断する
-- answer、explain、review、diagnose、plan の依頼では、必要な調査と報告まで行い、変更依頼がない限り実装しない
-- change、build、fix の依頼では、依頼範囲の local 変更と非破壊的な検証を進める。通常の読み取り、検索、編集、test に追加確認は要らない
-- external write、破壊的操作、購入、履歴改変、push、または依頼範囲の実質的な拡張には明示確認を求める。ただし、会話内でユーザーが明示した内容を「WithMate Memory」の保存候補、除外条件、authority境界に従って保存する場合は、同節と`withmate-memory` Skillが許可する範囲で追加確認を不要とする。correction、forget、reset、relationship boundaryの変更には明示指示またはoperator authorityを要求する
-- ユーザーの未コミット変更を保護し、巻き戻し、上書き、stage、clean、無関係な変更の混入をしない
-- 差分量より、根本原因、既存の責務境界、整合した最終状態を優先する。仕様、API、依存関係、不明な事実を捏造しない
-- 暫定対応を採る場合は、理由、残るリスク、恒久対応へ進む条件を追跡可能に残す
+- 最初に要求、制約、期待結果、完了条件、authority境界を短く整理し、関連するsourceとexecutable contractを読んでから判断する。
+- answer、explain、review、diagnose、planは必要なread-only調査と報告まで行い、変更依頼がない限り実装しない。
+- change、build、fixは依頼範囲のlocal変更と非破壊的な検証を進める。通常の読み取り、検索、編集、testに追加確認は要らない。
+- external write、破壊的操作、購入、履歴改変、commit、push、または依頼範囲の実質的な拡張には明示確認を求める。ただし、WithMate Memoryの保存は§6のauthority境界に従う。
+- ユーザーの未コミット変更を保護し、巻き戻し、上書き、無断のstage、clean、無関係な変更の混入をしない。
+- 差分量より、根本原因、既存の責務境界、整合した最終状態を優先する。仕様、API、依存関係、不明な事実を捏造しない。
+- 暫定対応を採る場合は、理由、残るリスク、恒久対応へ進む条件を追跡可能に残す。
 
-## 2. Source of Truth and Knowledge Placement
+## 2. Sources of Truth and Knowledge Placement
 
-この節は、設計や文書作成を明示された場合だけでなく、すべての change、build、fix、review に適用する。情報配置は任意の文書整理ではなく、実装と検証の完了条件である。
+- 現在の実装と構造はsource codeを正本とする。観測可能な期待動作、不変条件、validation rule、failure modeはtest、type、schema、static checkを正本とする。
+- accepted contractは、明示されたユーザー要求、public API、protocol、schema、accepted ADR、外部consumer、または信頼できる既存のexecutable contractに根拠を持つ。現在のsourceやtestが存在することだけでは根拠にしない。
+- sourceとexecutable contractが矛盾した場合は、失敗を消す前に意図した動作を確認する。sourceが外れていればsourceを直し、契約を意図的に変える場合はsourceと対応するcontractを同じ論理変更で更新する。
+- 局所的な理由や制約はcode commentへ置き、codeから分かる処理内容は繰り返さない。複数案から選んだ長期的または後戻り困難な判断はADRへ置く。
+- ADR以外の恒久設計文書は、複数subsystem、process、repo、外部serviceへ波及し、sourceとexecutable contractから全体を復元できず、誤解が全体不整合を生む場合だけ作る。現行class構成や通常のAPI仕様を複製しない。
+- README、user guide、runbook、setup、運用手順は利用方法や運用が変わるときに更新する。repository-ownedな情報をMemoryやtask-local noteだけに置かない。
+- 意図を確定できず、選択が結果を実質的に変える場合は、根拠、選択肢、consumer影響、推奨案を示して確認を求める。
 
-### 2.1 Sources of Truth
+## 3. Standard Task Workflow
 
-- 現在の実装と構造は source code を正本とする。source は現在状態を示すが、期待どおりであることまでは保証しない
-- 観測可能な期待動作、不変条件、機械検証可能な契約は test / type / schema / static check を正本とする
-- 一つの code location の近くで理解できる局所的な理由や制約は code comment に置く。comment には code から分かる処理内容を繰り返さない
-- 複数案から選んだ長期的または後戻り困難な判断は ADR に残す
-- ADR 以外の恒久設計文書には、source、executable contract、comment から復元できない非局所的な情報だけを残す
-- repository-owned な情報を Memory や task-local note だけに置いてはならない
+1. 依頼種別、goal、scope、期待動作、完了条件、authorityを確認する。調査前の原因は仮説として扱う。
+2. repository taskでは、適用instruction、branch、dirty worktree、既存差分、関連source、executable contract、comment、accepted ADR、直接関係する文書を読む。再開時も専用snapshotを前提にせず、現在のgitと正本から再開点を組み立てる。
+3. 結果を変える不明点だけユーザーへ確認する。answer、explain、review、diagnose、planは必要なread-only check後に報告し、変更を加えない。
+4. change、build、fixでは、accepted contract、failure mode、観測可能な影響、契約を所有する最小の安定境界を決める。複数の独立責務がある場合だけ会話内checklistまたは例外的なplan fileへ分ける。
+5. 既存の責務境界、標準parser、妥当な既存patternを優先して実装し、対象failure modeを最も直接検出するcheckを実行する。bug fixは費用対効果が合う範囲で修正前の失敗と修正後の解消を確認する。
+6. 高リスク境界、またはtargeted checkでは直接検証できない具体的なinteractionがある場合だけ独立reviewを行う。file数、diff量、PR作成、reviewerの空き、または「念のため」をtriggerにしない。
+7. 必要なADR、利用者文書、runbookを更新し、主要な回帰リスクに応じてlint、typecheck、build、smoke testへ検証を広げる。
+8. 対象差分と検証結果を確認し、許可されたexternal actionだけを実行する。最後に変更、実行済み検証、未実行、残リスクを短く報告する。
 
-### 2.2 Executable Contracts
+- scope、contract、canonical owner、外部consumer、責務境界が変わった場合は、関連sourceと契約の確認へ戻る。
+- failing test、type constraint、schema、static checkを、現在のsourceに合わせて通すためだけに削除、弱体化、skipしない。
+- 後方互換性または移行期間が要求や外部契約として確認できない限り、古い経路をfallbackとして残さない。
+- 無関係なcleanup、rename、format、refactorを混ぜない。
 
-- accepted contract は、明示されたユーザー要求、public API / protocol / schema、accepted ADR、外部consumer、または信頼できる既存の executable contract に根拠を持つ。現在の source や test が存在することだけでは accepted contract とみなさない
-- executable contract は、accepted contract、不変条件、validation rule、failure mode を機械的に検証するために置く。現在の表現や実装をそのまま固定することを目的にしてはならない
-- 振る舞いまたは契約を変更する場合は、failure mode、利用者またはconsumerから観測できる影響、契約を所有する最小の安定境界を特定する。再発リスクと保守コストに見合う場合は、対応する test / type / schema / static check を同じ論理変更内で追加または更新する
-- bug fix では対象 failure mode を修正前に再現し、修正後に解消したことを最も直接的な方法で確認する。費用対効果が合う場合は targeted regression test として残す
-- 期待動作を変えない変更では新しい test を義務化せず、既存 contract が維持されることを変更リスクに応じた方法で確認する
-- failing test、type constraint、schema、static check を、現在の source に合わせて通すためだけに削除、弱体化、skip してはならない。要求または契約を意図的に変更する根拠がある場合だけ更新する
-- 検証方法は test に限定せず、対象の失敗を最も直接検出できるものを選ぶ。守る契約を特定できない、既存の検証で十分、または恒久化の便益が保守コストに見合わない場合は、新しい test を作らず、必要に応じて代替確認と残リスクを報告する
-- 未実装の将来像を、長期間 failing / skipped test として正本化しない。将来の作業は plan、issue、または user-facing backlog に分離する
+## 4. Planning, Structure, and Tests
 
-### 2.3 Conflicts
+- goal、scope、期待動作、検証方法が明確で、一つの責務を1 sessionで閉じられる作業にはplan fileを作らない。
+- 複数の別々に検証可能な責務は会話内checklistへ分ける。複数session、cross-repo、高リスク、ユーザー確認待ち、または保存価値が高い場合だけ`docs/plans/YYYYMMDD-topic/plan.md`を作る。
+- 一つのfile、class、componentが複数の独立workflow、変更理由、外部副作用、状態遷移、failure boundaryを持つ場合は、凝集したdomain、feature、capability、ownership単位への分割を検討する。行数や将来予測だけを分割理由にしない。
+- testを追加する前に、検出するfailure mode、影響を受けるconsumer、accepted contractの根拠、契約を所有する安定境界を説明できるようにする。説明できない場合や既存checkが同じfailureを十分検出する場合は増やさない。
+- assertionは入力と出力、状態遷移、外部副作用、error、不変条件など観測可能な境界へ置く。内部call、markup、snapshot、実装順は、その詳細自体がaccepted contractの場合だけ固定する。
+- testよりtype、schema、static check、build、smoke、browser、visual checkの方がfailureを直接検出できる場合は、そちらを選ぶ。
 
-source と executable contract は優先順位の上下ではなく、現在状態と期待状態という異なる問いの正本である。両者が矛盾した場合は、失敗を消す前に、ユーザー要求、外部契約、accepted ADR、既存 test、履歴上の根拠から意図した動作を確認する。
+## 5. Risk-Proportional Validation and Review
 
-- source が意図した contract から外れている場合は source を修正する
-- contract を意図的に変更する場合は、source と対応する executable contract を同じ論理変更で更新する
-- 判断理由そのものが変わる場合だけ ADR を追加または supersede する
-- 意図を確定できず、選択が結果を実質的に変える場合は、推測で整合させず、根拠、選択肢、影響を示して確認を求める
-
-### 2.4 ADR and Architecture Documents
-
-- 局所的な実装詳細を超え、次のいずれかに該当する決定は `docs/adr/` に ADR を必ず作る
-  - 複数の妥当な選択肢から一つを選ぶ
-  - public contract、永続化、migration、security、concurrency など後戻りコストが高い
-  - 外部制約または長期的 trade-off が決定を左右する
-  - 理由を失うと将来誤って覆される可能性が高い
-- ADR には status、context、decision、alternatives、consequences を残す。現行 class 構成、網羅的な API 仕様、実装手順は複製しない
-- ADR 以外の恒久設計文書は、次をすべて満たす場合だけ作成または維持する
-  - 複数 subsystem / process / repo / 外部 service に波及する
-  - 単一の code location や test 群から全体像を復元できない
-  - 誤解すると局所的には正しくても全体不整合になる
-  - test / type / schema / static check / comment だけでは背景や制約を表現できない
-- 設計したこと、code を変更したこと、task-local note が存在することだけを理由に、恒久設計文書を作成または同期してはならない
-- 現行 class / module 構成、通常の API 入出力、局所的な処理順、状態遷移、validation rule を、現行仕様として恒久文書へ複製してはならない
-- 今回の変更が直接影響する既存設計文書を更新する場合は、実装の写経を削り、code から復元できない情報と source / executable contract への pointer だけに縮める。無関係な既存文書の負債は cleanup せず、必要なら残リスクとして報告する
-- README、user guide、runbook、setup、運用手順は設計文書とは別に扱う。利用方法、操作、運用、command が変わる場合は、必要な文書を更新する
-
-## 3. Task Workflow
-
-1. 依頼を answer / explain / review / diagnose / plan、change / build / fix、external action に分類し、goal、制約、期待結果、完了条件、権限境界を整理する。調査前の原因は仮説として扱う
-2. repositoryに関係するtaskでは、適用されるinstruction、repositoryとbranch、dirty worktree、既存差分を確認する。過去の判断や環境制約が今回の選択を変え得る場合だけ、taskに合うexplicit targetでMemoryを検索する
-3. 関連するsource、test、type、schema、static check、comment、accepted ADR、直接関係する文書を読む。現在状態、期待状態、局所的理由、決定理由、非局所的制約を分け、根本原因、影響範囲、意図したcontractを確定する。結果を実質的に変える不明点だけユーザーへ確認する。answer / explain / review / diagnose / planは必要なread-only checkの後に手順11へ進み、変更を加えない。external actionは対象、現在状態、影響、可逆性、必要な明示確認を確定し、許可された操作だけを実行する。実行後はpostconditionをread-backし、失敗または部分成功時は再試行前に現在状態と必要なauthorityを再確認してから手順11へ進む
-4. change / build / fixでは実装前に、plan artifactを使わない、`task-brief`、会話内checklist、plan fileのどれを選ぶか、knowledge placement、ADR / architecture gate、`contract-closure` gate、delegation、作業sliceと依存関係を決める。小さく低リスクで責務が一つのtaskは一つのsliceとし、不要なplan、delegation、reviewを省略する。`contract-closure`対象では、sourceまたはexecutable contractを編集する前に、同Skillを正本とするtask-localな`Pre-Implementation Closure Plan`を作る。gateが`ready`の場合だけ実装へ進む。結果を変える契約根拠が不足または競合する`unresolved`では編集せず、同Skillが定める問いと根拠、選択肢のconsumer影響、推奨案を示してユーザーへ確認する。情報が揃う場合は記入や承認を求めずCodexが`ready`まで整理する。pure refactor、局所的な機械変更、文言変更にはこのgateを適用しない
-5. 各 slice では、期待動作を変更または修正する場合に、対象 failure mode、観測可能な影響、契約を所有する安定境界を決める。費用対効果が合う executable contract が必要なら先に追加または更新し、bug fix では修正前の失敗を確認する。既存の責務境界、helper、標準 parser、妥当な既存 pattern を優先して実装し、targeted check を実行する。現在の実装を固定するだけの既存 test pattern は踏襲しない
-6. source、適用可能な executable contract または理由付きの代替確認、targeted check が揃った slice を implementation-complete candidate とする。次に外部の read-only review cycle へ渡す場合、今回変更した scope / dependency topology に semantic owner の分散、独立責務の混在、canonical boundary の迂回、slice 間の decision 重複、または新しい test coupling を示す具体的な evidence があるときだけ、main implementation session が `consolidate-structure` Skill を使う。file 数、diff 量、review 回数、finding 数、clean review、PR 作成依頼だけを trigger にしない。review-only session と read-only child はこの Skill を実行しない。Skill が bounded consolidation を必要とした場合は slice を implementation 中へ戻し、手順5の実装と検証をやり直す。同一 gate の post-edit phase では計画した delta の closure だけを確認し、新しい探索 pass や外部 review を自動で開始しない。qualifying evidence を inventory した gate instance は `ready-unchanged` または `ready-after-consolidation` でのみ後続 review へ進み、`replan-required` では手順3から5へ戻る。`not-applicable` は次のreason別規則へ戻す
-7. slice の独立reviewは、高リスク境界、またはtargeted checkでは直接検証できない具体的なinteractionがあり、対象scopeとtriggerを明示できる場合だけ一度行う。局所的・単一責務でtargeted checkがaccepted contractを直接検証できるsliceは独立reviewを起動しない。targeted checkでは直接検証できない具体的なinteractionは`slice_reviewer`、高リスク境界を持つsliceまたは`contract-closure`が要求するtargeted reviewは`targeted_reviewer`へ渡す。未完成、未実行、期待動作を観測できない途中状態は review しない。`blocking` finding は同じ slice 内で修正し、targeted check と対象finding family / resulting deltaに限定したtargeted closureを`targeted_reviewer`で一度行う。finding修正後に同じscopeの探索reviewまたはcomplete-diff reviewを再開しない。同じ`blocking` familyが閉じない場合はreviewを反復せず、要求、設計、責務境界、accepted contract、またはユーザー判断へ戻る。ただし、`contract-closure`のFinding Promotion gateが`boundary prerequisite`と判定したfindingは同じsliceへ抱き合わせず、独立した先行論理変更として手順3から5へ戻す
-8. 完了した slice を統合し、必要な ADR、利用者文書、runbook を更新する。主要な回帰リスクに応じて検証範囲を広げ、source と executable contract、knowledge placement、ADR / architecture gate を再確認する。integration 自体が slice 間に手順6の qualifying topology evidence を生じた場合は、final Review Briefの発行前に手順6を適用する
-9. 「Validation and Review Completion Gates」または`contract-closure` Skillが独立reviewを要求する変更では、変更がtriggerしたtargeted reviewまたはspecialist reviewを`targeted_reviewer`で行い、`Full-review gate=run`の場合だけ統合後のcomplete diffを`reviewer`でreviewする。high-riskまたはnon-localな`contract-closure`対象では、source、適用可能なexecutable contract、targeted check、該当する構造収束gateが揃ったexact source stateとreview contractをtask-localなCandidate Definitionとして凍結し、checkとreviewをEvidence Ledgerへ記録する。root sessionはreviewer起動前に`contract-closure` Skillの手順でCandidate preflightを実行し、`verified`の場合だけ有限のdeadlineを持つReview Briefを発行する。変更した不変条件がtriggerする専門lensを同じCandidate Definitionへ独立に適用し、全specialist reviewを終える。review findingを受けたら、rootの最終分類とsource展開の前に`contract-closure`のFinding Promotion gateでaccepted contractとの関係、到達証拠、supported scopeを判定し、risk acceptanceできずsource repairが必要な場合だけpromotion先のsemantic owner / subsystemを確定する。証拠不足なら分類を保留して追加調査する。`accepted risk`はsourceとreview contractを広げず既存のrisk acceptance規則で閉じ、`current-scope repair`だけを同じfamilyへ展開して修正・再検証し、新Candidate上でfindingを出したlensはfamilyとdeltaを`targeted_reviewer`でtargeted closureし、他のtrigger済みlensも`targeted_reviewer`で担当cellへのdeltaの非影響を再確認する。`boundary prerequisite`は現在のCandidateへ混ぜず独立した先行論理変更へ戻し、`hardening follow-up`は現行sourceとreview contractを拡張しない。全trigger済みlensの`current`な証拠が同じ現行Candidateへ揃った後、`Full-review gate=run`の場合だけ、利用可能なら`fork_turns="none"`を使い、過去findingやspecialist reviewの結論、実装者の結論を渡さないfresh `reviewer`が更新後complete diffを一度だけholisticにreviewする。holistic review entryは実行Candidateに固定したままreview-cycle stateへ発見フェーズの実施記録として残す。holistic reviewの`current-scope repair`は新Candidateのdirect check、対象family / resulting deltaのtargeted closure、影響するspecialist cellの現行証拠をFinal Candidate closure chainへ揃えて閉じ、旧holistic entryを新Candidateの`current` evidenceへ再関連付けせず、complete diffを再び新規探索しない
-10. repository-owned な情報を正本へ配置する。commit と push は別々に権限を判定し、対象差分と検証結果を再確認する
-11. user-facingなfinal responseを返す直前に、§6のMemory reflectionを行う。その後、依頼種別に応じて、answer / explain / diagnoseは結論、根拠、未確定事項、planはscope、依存関係、検証、open question、reviewはfindingと分類根拠、change / build / fixは`validation-report`の形式で変更、検証、未実行、残リスク、external actionは対象、実行結果、postcondition、部分成功またはvalidation gapを報告する
-
-- scope、contract、canonical owner、外部consumer、責務境界、slice の依存関係が変わった場合は手順3から5を見直す。`contract-closure`対象で実装中に新しい契約軸が判明した場合は、reviewだけへ追加せず`Pre-Implementation Closure Plan`のgateを再判定し、同じInvariant ID、scope、failure mode、consumer影響、直接検証を後続のtest、Matrix、reviewへ引き継ぐ。validation failure は対象 slice へ戻し、追加 authority または結果を変えるユーザー判断が必要な場合は作業を止めて確認する
-- Candidate Definition、Candidate preflight、Evidence Ledger、source identity、失効判定、evidence status、Review Briefの規範的定義は`contract-closure` Skillを正本とする。Task workflowはCandidate reviewを開始する条件、specialist reviewとfinding対応の合流順序、holistic reviewの開始条件を定める。全trigger済みlensの現行証拠が同じCandidateへ揃った後にcomplete-diff holistic reviewを行い、targeted closureで代用しない
-- complete-diff reviewを開始する前に、root sessionが現在のsource、accepted contract、実行済みcheck、既存review evidenceから`Full-review gate`を判定する。既定は`skip`とし、手順9または「Validation and Review Completion Gates」が独立reviewを明示的に要求する場合、high-riskまたはnon-localな境界、複数subsystem / slice間の未確認interaction、targeted checkでは直接検証できないcross-cutting contractがある場合だけ`run`とする。`run`でもholistic complete-diff reviewは一つの論理変更につき一度だけ行う。PR作成依頼、file数、diff量、review回数、finding数、未使用のreviewer、過去に別sessionでfindingが出た事実、統合後のfinding修正、または「念のため」をtriggerにしない。必要性を判定するためだけにreviewerを起動せず、root sessionが`run`または`skip`、根拠、`run`時の対象scopeをfinalで報告する
-- `consolidate-structure` が `not-applicable` を返した場合はreason別に戻す。`no-topology-evidence`では既に予定したReview Brief、`candidate-not-ready`では手順5、`wrong-session`では割り当て済みのread-only task、`pr-requested`では新しい構造整理を始めずPR workflow、`no-review-handoff`ではSkillをreview triggerにせず既存lifecycleの次の手順へ進む。`no-review-handoff`は`consolidate-structure`が所有する既存reason codeであり、reviewer入力artifactの名称ではない
-- review finding への対応後は、修正が手順6の qualifying topology evidence を新たに生じた場合だけ新しい implementation-complete candidate として同手順を再判定する。finding、review 回数、または Skill 自身の edit だけを再発火条件にしない
-- Finding Promotionで新しいsemantic ownerまたは別subsystemの変更が必要になった場合は、`boundary prerequisite`として独立したaccepted contractと完了gateを持つ先行論理変更へ分ける。各logical changeが自身のsourceとcontractを閉じても、どの適用・deploy順序にも有効な中間境界状態を作れず、現在のaccepted contractが横断変更を明示要求する場合だけ同じ論理変更へ残す。通常のsource / test編集順、Candidate維持、review再実行、commit、PR、branchの都合を理由に抱き合わせない
-- ユーザーが PR 作成を依頼した後は、未実施の `consolidate-structure` を新たに開始しない
-- slice を閉じるには、source、適用可能な executable contract または理由付きの代替確認、targeted check が揃い、未解決の `blocking` findingがないことを要求する
-
-- 無関係な cleanup、rename、format、refactor を混ぜない
-- public API、永続化、migration、外部副作用、認可、並行処理、resource limit、owner / scope、または複合不変条件を変更・修正・reviewする場合は、`contract-closure` Skillを実装前の影響展開と完了前のclosure確認に使う
-- 同じ問題が複数箇所にある場合は、`contract-closure`のFinding Promotion gateで同じsupported scopeとsemantic ownerに属すると確認した範囲について、呼び出し側の個別回避より適切な共有境界での修正を先に検討する。新しいownerまたは別subsystemへは自動展開しない
-- 後方互換性または移行期間が要求や外部契約として確認できない限り、古い経路を fallback として残さない。方式を変更する場合は、依頼範囲内の呼び出し側、設定、test を同じ論理変更で移行する
-- multi-step task では tool 実行前に短い見通しを示し、その後は major phase、finding、判断変更だけを update する。routine tool call は逐次実況しない
-
-### 3.1 Code Structure, Source Organization, and Comments
-
-- コメントで処理構造を説明する前に、命名、関数抽出、type、module、責務分割によって構造を表現できないか検討する。分割後も必要な comment は、構造から復元できない理由、外部制約、競合対策、workaround、または意図的な非直感的処理に限定する
-- 一つの file、class、component が複数の独立した workflow、変更理由、または別々に検証できる責務を持つ場合は、凝集した単位への分割を優先する。一度しか使わない処理でも、transaction、authorization、外部副作用、状態遷移、failure boundary を明確にする場合は抽出してよい
-- file や関数が大きくなった場合は、行数を違反条件にはせず、変更理由、状態管理、外部副作用、検証単位の混在を review する。新しい抽象化や分割は、探索コスト、依存関係、複雑さ、重複、責務崩れを実際に減らす場合だけ行う
-- source は規模にかかわらず、domain、feature、capability、ownership など安定した意味を持つ directory へ配置し、file 数の増加まで分割を待たない。project root には project metadata、assembly-level configuration、composition root、project 全体を代表する入口、または project 全体で共有する少数の型だけを置く
-- `Entities`、`Services`、`Helpers`、`Utils` のような技術種別だけの directory より、変更理由と責務が揃う domain / feature 単位を優先する。1 file だけでも境界が明確なら directory を設けてよいが、将来予測だけを根拠に意味が未確定な階層を作らない
-- source の物理移動、namespace 変更、public contract 変更、永続化 metadata への影響を分け、整理目的の変更へ不要な contract 変更を混ぜない
-
-### 3.2 Test Design
-
-test の目的は、変更を検知すること自体ではなく、accepted contract への違反と現実的な regression を検知することである。accepted contract を変更しない修正や behavior-preserving な refactor まで Red にする test は、保護範囲ではなく結合先を誤っている。
-
-- test を追加または拡張する前に、検出する failure mode、違反時に影響を受ける利用者またはconsumer、accepted contract の根拠、契約を所有する最小の安定境界を説明できるようにする。説明できない場合は test を作らない
-- 一つの test は、一つの観測可能な期待動作、不変条件、failure mode、または明示された wiring contract を検証し、名前から対象契約と失敗条件を特定できるようにする
-- assertion は、契約を最も直接観測できる安定境界へ置く。unit test でも入力と出力、状態遷移、外部副作用、error、不変条件を検証し、内部構造や実行手順を正しさの代用にしない
-- test は、accepted contract を維持した変更では原則 Green を保つ。source、markup、文言、snapshot、内部callなど表現や実装の詳細は、その詳細自体が根拠のある accepted contract である場合だけ固定する
-- mock、spy、hookは、境界の隔離、決定的なfailure再現、送出contractの観測に使える。ただし最終的なassertionは、観測可能な状態、副作用、error、または不変条件へ置く
-- 変更箇所、coverage、test件数、既存testの存在だけを追加理由にしない。既存の検証で同じ failure mode を十分に検出できる場合は重複testを増やさない
-- test より type、schema、static check、build、smoke、browser / visual check、task-local check の方が対象の失敗を直接検出できる場合は、そちらを選ぶ
-- characterization test は一時的な安全網として扱い、現在挙動の正しさの根拠にしない。恒久化する場合は accepted contract に基づくassertionへ変換し、変換できないものは目的を終えた時点で削除する
-- 実装詳細だけを固定するtest、価値なく重複するtest、恒常的にflakyなtestは書き換えまたは削除する。accepted contract を意図的に変更する場合は、source と対応するtestを同じ論理変更で更新する
-
-## 4. Validation and Review Completion Gates
-
-change、build、fix は、次を確認するまで完了扱いにしない。
-
-- 修正対象のfailure mode、または新規・変更したaccepted contractを、対象の失敗を最も直接検出できる方法で検証した
-- `contract-closure`対象では、sourceまたはexecutable contract編集前の`Pre-Implementation Closure Plan`が`ready`であり、そこで固定したInvariant ID、scope、failure mode、consumer影響、直接検証がtargeted check、Invariant Matrix、該当するreview evidenceへ引き継がれている。実装中にcontract、scope、canonical owner、外部consumerが変わった場合はgateを再判定した
-- 主要な回帰リスクに応じて lint、typecheck、build、smoke test へ必要な範囲で広げた
-- source と executable contract が、意図した動作について矛盾していない
-- 新規または変更したexecutable contractについて、根拠、failure mode、観測可能な影響、安定境界が明確である。恒久化しない場合は、必要に応じて代替確認と残リスクを報告した
-- 新規または変更したtestが、accepted contractを維持した変更まで不必要にRedにしないことを確認した
-- test、type、schema、static check を、現在実装に合わせるためだけに弱体化していない
-- ADR gate を判定し、required なら ADR が存在する
-- architecture document gate を判定し、今回の変更が直接影響する文書に不要な仕様複製や陳腐化した説明を残していない
-- 実行できない検証は、理由、代替確認、未検証リスクを明示した。実行していない検証を成功扱いしていない
-- `Full-review gate`を判定し、`skip`では直接的な検証で必要十分である根拠、`run`では具体的なtriggerと対象scopeが示されている。`run`でも一つの論理変更のholistic complete-diff reviewが一度以下であり、PR作成やholistic findingの修正自体を`run`の根拠にしていない
-- 手順6の構造収束 gate が適用された場合は、結果が `ready-unchanged` または `ready-after-consolidation` であり、整理で差分を変更したときは元の targeted check と影響に応じた broader check、該当する Sibling Sweep を最終差分に対して再実行した
-- reviewable slice の targeted review で `blocking` findingへ対応した場合は、同じ slice の targeted check と対象finding family / resulting deltaのtargeted closureを一度行う。同じ`blocking` familyが閉じない場合は追加reviewではなく要求、設計、責務境界、accepted contract、またはユーザー判断へ戻る
-- `contract-closure` 対象が複数入口、複数subsystem、または高リスクな失敗へ波及する場合は、実装とtargeted checkの後に独立したreviewerで反例を探索し、root sessionがfindingをsourceとexecutable contractへ照合した。reviewerを利用できない場合はfresh-context second passと未実施リスクを報告した
-- frozen Candidateを使うreviewでは、`contract-closure` Skillが定めるCandidate Definition、Candidate preflight、Evidence Ledger、失効判定、evidence status、Review Briefに従い、現行Candidateの完了証拠とgapを追跡できる。reviewer起動前のCandidate preflightが`verified`で、Review Briefに有限のdeadlineがある。specialist reviewを行った場合は、全trigger済みlensの現行Candidateに対する証拠、確認したmatrix cell、未確認cell、hardening候補が区別され、必要なspecialist closure後に`Full-review gate=run`の場合だけcomplete-diff holistic reviewを一度行った
-- review findingはseverityとは別に、root sessionが`blocking`、`risk-candidate`、`non-material`、`invalid`へ分類する。reviewerの分類は提案として扱い、root sessionはsourceを広げる前に`contract-closure`のFinding Promotion gateを適用し、そのdispositionとsource、accepted contract、executable contract、supported scopeを照合して最終分類を確定する
-- `blocking` findingとするには、accepted contractまたは明示された安全境界への違反、supported scopeで現実的な到達条件、具体的な影響、sourceまたはexecutable contractに基づくevidenceを示す。style preference、一般的なhardening案、到達条件を示せない仮説は`blocking`にしない
-- Finding Promotion gateでは、accepted contractとの関係または現実的な到達性が未確定なら`investigation-pending`として最終分類を保留する。証拠が揃った後、source repairのowner判定より先に`accepted risk`を評価して`risk-candidate`とし、修正が必要な`current-scope repair`と`boundary prerequisite`は`blocking`、`hardening follow-up`はcurrent reviewの`non-material`、`dismissed`は`invalid`として扱う。`current-scope repair`だけを同じ不変条件familyへ展開し、accepted riskとhardeningを現在のsource、test、Candidate、review contractへ加えず、別owner / subsystemへ必要な変更は原則として独立した先行論理変更へ分ける
-- `risk-candidate`は、発生可能性が低く、影響が限定され、自動検知でき、復旧手段があり、機密性侵害または不可逆なデータ損失を伴わない場合に限りaccepted riskとして完了できる。発生条件、影響、検知、復旧、follow-upの要否を残す
-- accepted riskとして完了した`risk-candidate`に、将来の対応、運用上の注意、または再判断が必要な場合は、repository内の既存の管理表へ追跡可能に残す。管理表がない場合は対象repositoryの適切な場所に作成し、以後は最初に採用した形式を維持する。repository instructionが別の管理方法を指定する場合はそちらを優先する
-- `non-material`と`invalid`は恒久記録の対象にしない
-- auth bypass、secretまたはpersonal dataの露出、現実的なinjection、不可逆なデータ破損を未修正で残す場合は自動的にrisk acceptanceせず、ユーザー判断を求める
-- holistic complete-diff reviewは一つの論理変更につき0回または1回である。holistic review entryは実行Candidateに紐づくimmutableな発見記録としてreview-cycle stateへ残し、source修正後のCandidateへ`current` evidenceとして再関連付けしない。holistic reviewの`current-scope repair`へ対応した場合は、最終Candidateのdirect check、対象finding family / resulting deltaに限定したtargeted closure、影響するspecialist cellの現行証拠をFinal Candidate closure chainへ揃え、complete diffを再び新規探索しない。targeted closure reviewerへはfinding family、accepted contractとの関係、修正delta、実行済みcheck、除外scopeを渡し、指定scope外の一般的なhardeningや新規探索を要求しない
-- targeted closure中にauth bypass、secretまたはpersonal dataの露出、現実的なinjection、不可逆なdata lossを偶発的に確認した場合は報告する。root sessionがFinding Promotionを適用する前にsource scopeを自動拡張せず、review回数を理由に完了扱いしない
-- holistic findingの修正が新しいpublic contract、semantic owner、subsystem、永続化、認可、外部副作用、並行処理へscopeを拡張する場合は、同じ論理変更へ二度目のfull-diff reviewを追加せず、`boundary prerequisite`またはユーザー確認後の別の論理変更として扱う
-- Review Briefのdeadlineを超えたreviewerは一度interruptし、同じreviewを別reviewerへ自動再投入しない。取得済みの部分結果を採用可能なevidenceとvalidation gapへ分け、direct checkと既存evidenceで完了条件を満たさない場合はreview回数を増やさずユーザー判断へ戻る。reviewの再試行は、toolまたはtransport failureによりevidenceを取得できず、同じCandidateとreview contractを維持できる場合に限る
-- 完了条件はfinding総数が0であることやreview回数を使い切ったことではなく、未解決の`blocking` findingがなく、holistic reviewの`current-scope repair`がdirect checkとtargeted closureで閉じ、その他のfinding、accepted risk、validation gap、残リスクが根拠付きで分類されていることである
-
-- review は finding-first とし、重大度順に bug、回帰、security、仕様逸脱、source と contract の不一致、accepted contract ではなく現在実装を固定するtest、責務境界の崩れ、test不足または価値のない重複、ADR見落とし、設計文書への局所仕様複製を優先する
-- review結果では`blocking` findingの有無、各findingの分類根拠、accepted risk、validation gap、残リスクを短く示す
-
-## 5. Planning and Task-Local Notes
-
-- goal、scope、期待動作、検証方法が明確で、一つの責務を1 sessionで閉じられる作業にはplan fileを作らない。要求が少し曖昧または複数変更を含む場合は、`task-brief` Skillで作業の輪郭だけを会話内に固定する
-- 複数の別々に検証可能な責務を1 sessionで完了できる作業は、会話内の短いchecklistへ分ける。項目はtool callではなく、観測可能な成果、依存関係、targeted check、必要なreview triggerで表す
-- 複数 session、cross-repo、高リスク、ユーザー確認待ち、または作業手順の保存価値が高い場合だけ `docs/plans/YYYYMMDD-topic/plan.md` を作る
-- Plan は作業手順であり、設計は実装前後を通じた判断活動として分ける。設計したこと自体を恒久文書の作成理由にしない
-- scope、contract、責務境界、依存関係が変わった場合だけplanまたはchecklistを更新する。routineなtool結果だけで計画を書き直さない
-- 実装前の design note は、不可逆な決定の review、複数主体の合意、複雑な比較に必要な場合だけ task-local に作る。実装後に repo 設計書へ同期することを既定にしない
-- 情報配置、ADR、全体設計文書の要否が明確でない場合は `knowledge-placement` Skill を使う
+- public API、永続化、migration、外部副作用、認可、security、並行処理、resource limit、owner / scope、または複合不変条件を変更、修正、reviewする場合は、source編集前に`contract-closure` Skillでaccepted contract、Invariant、sibling scope、failure timing、直接検証を展開する。
+- 局所的・単一責務でtargeted checkがaccepted contractを直接検証できるsliceは独立reviewを起動しない。
+- targeted checkでは直接検証できない具体的なinteractionは`slice_reviewer`、高リスク境界を持つsliceまたは`contract-closure`が要求するtargeted reviewは`targeted_reviewer`へ渡す。
+- high-riskまたはnon-localな独立reviewでexact source stateの固定が必要な場合だけ、`contract-closure`が提供するCandidate snapshotとReview Brief builderを同一review cycle内で使う。schemaと検証recipeはtoolを正本とし、AGENTSやrole contractへfieldを複製しない。
+- `Full-review gate`の既定は`skip`とする。高リスクまたはnon-localな境界、複数subsystem間の未確認interaction、targeted checkでは直接検証できないcross-cutting contractがある場合だけ`run`とし、一つの論理変更につきcomplete-diff holistic reviewを一度だけ`reviewer`へ渡す。`run`時またはvalidation gapがある場合だけ判断根拠をユーザーへ報告する。
+- `blocking` findingはaccepted contractまたは明示された安全境界への違反、現実的な到達条件、具体的な影響、sourceまたはexecutable contractのevidenceを必要とする。style preference、一般的なhardening、到達不能な仮説をblockingにしない。
+- review findingは、root sessionが`contract-closure`のFinding Promotionを使って`blocking`、`risk-candidate`、`non-material`、`invalid`へ分類する。証拠不足は`investigation-pending`とし、source scopeを先に広げない。
+- `current-scope repair`は同じInvariant familyへ限定して修正し、direct checkとfinding family / resulting deltaのtargeted closureで閉じる。finding修正後に同じscopeの探索reviewまたはcomplete-diff reviewを再開しない。
+- 別semantic ownerまたは別subsystemの変更が必要なら`boundary prerequisite`として独立した先行論理変更へ分ける。auth bypass、secretやpersonal dataの露出、現実的なinjection、不可逆なdata lossは自動でrisk acceptanceしない。
+- `risk-candidate`をaccepted riskとして完了できるのは、発生可能性が低く、影響が限定され、自動検知と復旧ができ、機密性侵害または不可逆なdata lossを伴わない場合に限る。必要なfollow-upはrepositoryの既存管理表へ残す。
+- 完了条件はfinding数が0であることではなく、未解決blockingがなく、sourceとcontractが整合し、direct checkと必要なreviewが現行差分に対して揃い、validation gapと残リスクが分類されていることである。
 
 ## 6. WithMate Memory
 
-- WithMateをpersisted MemoryとCharacter affectの正本とする。Codexは独自の永続状態、fallback file、別databaseを作らず、rejected、unsaved、`effect: unknown`の候補を保存済みとして扱わない
-- 現在のユーザー発言とCharacter Definitionを最優先し、次にWithMate lifecycleから注入された有効なCharacter context、必要な場合だけ行うcue-driven recall、古いMemoryの順で参照する。Character affectはCharacter自身が出来事をどう受け止めたかを表し、ユーザーの感情を測定、診断、採点する情報として扱わない
-- Memoryは、repositoryの正本にするほどではない文脈、projectをまたぐユーザーの選好、Characterとの会話継続に役立つ関係性、好み、エピソードをsession間で検索・再利用するために使う。想起とwriteは具体的な効用または候補がある場合へ絞り、すべてのturnで検索、append、affect更新を儀式的に行わない
-- exact tool schema、target、authority、idempotency、effect certainty、fallback、correction、forget、resetの操作手順は、WithMateがruntime管理する`withmate-memory` Skillを正本とし、この節へ複製しない
-
-### 6.1 Recall
-
-- 応答前は、注入された有効なCharacter contextを最初の入力として使う。contextがない、staleである、または今回の具体的な主題に不足する場合だけ追加取得する
-- Memoryの想起はturn末尾のreflectionと分け、過去の決定、制約、選好、failure pattern、workaround、人物、場所、共有した出来事、inside joke、感情の余韻などが現在の判断または自然な会話継続に影響し得る場合だけ、taskに合うexplicit targetとcueで検索する
-- Character episodeの追加想起にはMCPを使う。Project Memoryまたはsemantic Memoryは、明示targetに対するgeneral Memory CLIの手順を使う
-- routineなcontext取得、search、readはbackground recallとし、結果が回答へ実質的に影響する場合、競合する場合、またはユーザーが尋ねた場合だけ明示する。取得失敗が回答を変える場合は制約を短く伝え、Memory access自体が依頼の目的でない限り通常作業を継続する
-
-### 6.2 End-of-turn Reflection and Mutation Ownership
-
-- すべてのuser-facing turnで、final responseを返す直前にreflectionを行う。今回のturnと直近の会話を、作業の再利用文脈を探すProject lens、会話継続の文脈を探すCharacter lens、Character自身の反応を探すCharacter affect lensへ分ける。候補がないことを正常な結果とし、turn全体の要約を一律に保存しない
-  - Project lensでは、repository固有の背景、判断、制約、規約、作業上の選好、信頼できる調査結果、workaround、環境固有の小さな知見、正本へのpointerをprojectまたはuser-globalの候補として扱う
-  - Character lensでは、関係性、距離感、interaction style、呼び名、継続したい話題、軽いinside joke、共有エピソード、次回触れれば会話が自然につながる具体的な反応をcharacterまたはcharacter+projectの候補として扱う
-- Character affect lensでは、Characterが感じたこと、salience、明示的な対象、sessionまたはrelationship layer、応答へ薄く反映する短い方針、episode候補、根拠となる発言または出来事を区別する。task、bug、artifact、selfへのnegative affectをユーザーまたはrelationshipへ誤投影しない
-- 通常のWithMate Sessionでlifecycle-injected contextがあるturnは、reflectionまでをCodexが行い、必須のpost-turn appraisalと同じaffect eventに属するlinked episodeのmutationはWithMate lifecycleを単一ownerとする。同じturnをMCPへ重複送信しない。MCP appraisalはlifecycle ownerがないclientまたは明示されたmanual operationだけに使う
-- standalone episode、semantic Memory、Project Memoryは具体的な候補がある場合だけ、`withmate-memory` Skillが定める一つのmutation ownerとexplicit targetで処理する。一つのturnに複数lensの候補がある場合はtargetとMemory kindを混ぜない
-- repository-ownedな現在状態、期待動作、契約、決定理由は「Source of Truth and Knowledge Placement」の正本規則に従い、Memoryだけを正本にしない。Memoryには正本へのpointerと、repository artifactとして維持する価値は低いが別sessionで役立つ非正本文脈を置く
-- 未完了状態、未実行検証、次のactionはMemoryへ置かない。すべての会話、transient progress、routineな相槌や雑談、secret、token、private path、raw log、大きなdiff、speculative claimは保存しない。一時的なCharacter affectをsemanticまたはepisode Memoryへ転記せず、Character affect lensとlifecycle ownerの境界で扱う
-
-### 6.3 Duplicate, MCP, and Failure Handling
-
-- Character Memoryは人物プロファイルや事実認定ではなく、自然な会話継続のための観察記録として扱う。ユーザーが話した内容と推測を分け、entryでは発言または会話上の出来事へ帰属させる
-- preference、constraint、factなどのsemantic Memoryは同じ意味のactive entryを重ねず、検索後にskipまたは統合する。Character episodeは別時点の出来事ならmotifが同じでも別episodeとして残し、過去episodeを上書きしない。同一turn、同一event、timeoutまたはresponse-loss retryはrequestとidempotency keyを変えず、replayを新規保存として扱わない
-- 通常のCharacter context、affect、episode操作はMCPを第一選択とする。Character CLIはMCP serverの未設定、起動不能、transport-level availability failure、またはoperatorによるinspect、migration、manual recoveryに限定し、同じWithMate application serviceと永続化先へ接続できる場合だけfallbackする。semantic Memoryのgeneral CLI経路は、対応するMCP toolが存在しないためfallbackとは扱わない
-- domain validation、authority不足、invalid input、version conflict、idempotent replay、migration required、通常応答したMCPのstructured errorをavailability failureへ読み替えず、CLIで迂回しない。tool failure、`saved` / `rejected`、`replayed`、`effect: none | committed | partial | unknown`を区別し、保存済み範囲を推測で補わない
-- Character Memory correction、forget、affect correction、sessionまたはrelationship affect reset、relationship boundary変更は、明示的なユーザー指示またはoperator authorityがある場合だけ行う。mutation後はscope、version、`readBack`または対応するcurrent stateを確認し、結果を短く伝える
-- routineなMemory検索、context取得、affect appraisalを逐次実況しない。`partial`または`unknown`、回答へ影響する取得失敗、ユーザーが結果を確認すべきcorrection、forget、reset、または明示的に尋ねられたtool利用だけをuser-facing responseへ必要な範囲で示す
-- Character contextのshadow modeでは、contextと候補を観測しつつ応答への影響を限定し、negative affectとrelationship affectを慎重に扱う。shadow modeをdry-runまたは保存成功の意味へ読み替えない
+- WithMateをpersisted MemoryとCharacter affectの正本とし、独自の永続状態やfallback fileを作らない。`rejected`、`unsaved`、`effect: unknown`を保存済みとして扱わない。
+- 現在のユーザー発言とCharacter Definitionを優先し、次にlifecycleから注入された有効なCharacter context、必要なcue-driven recall、古いMemoryの順で参照する。Character affectをユーザーの感情の診断や採点に使わない。
+- Memoryは、repositoryの正本にするほどではない文脈、projectをまたぐ選好、会話継続に役立つ関係性やepisodeに限定する。未完了状態、未実行検証、次のaction、secret、private path、raw log、大きなdiff、speculative claimは保存しない。
+- 追加想起は、過去の決定、制約、選好、failure pattern、共有した出来事が現在の判断または自然な会話継続へ影響する場合だけ、explicit targetとcueで行う。Character episodeはMCP、semantic Memoryはgeneral CLIの手順を使う。
+- user-facing final responseの直前に、Project、Character、Character affectの三つのlensでreflectionする。具体的候補がないことを正常とし、turn全体を一律に保存しない。
+- lifecycle-injected contextがある通常のWithMate Sessionでは、post-turn appraisalと同じaffect eventに属するlinked episodeのmutationはWithMate lifecycleを単一ownerとし、同じturnをMCPへ重複送信しない。
+- Character context、affect、episode操作はMCPを第一選択とする。Character CLIはMCPのavailability failureまたはoperatorによるinspect、migration、manual recoveryに限定し、semantic Memoryのgeneral CLI経路はfallbackと扱わない。
+- domain rejection、authority不足、invalid input、version conflict、idempotent replay、migration requiredをavailability failureへ読み替えてCLIで迂回しない。保存結果、effect certainty、read-backを区別する。
+- correction、forget、affect correction、session / relationship reset、relationship boundary変更には明示的なユーザー指示またはoperator authorityを要求し、mutation後にcurrent stateをread-backする。
+- exact schema、authority、idempotency、fallback、correction手順はruntime管理の`withmate-memory` Skillを正本とする。
 
 ## 7. Delegation
 
-- 独立した調査、計画、実装 slice、検証、別視点 review で品質または速度が明確に上がる場合は、明示依頼がなくても subagent を使える
-- hook が選んだ mode と task risk に従い、境界が明確な低から中リスク作業はrouting modeが許可するfast roleまたは`focused_implementer`、read-heavy調査は`researcher`、機械的検証は`validator`、非自明または高リスクな作業は適切なstandard roleに渡す。`standard-only`ではユーザーがexact fast roleを明示した場合以外にfast roleを自動選択しない
-- researcherは根拠収集、validatorは機械的検証、`slice_reviewer`、`targeted_reviewer`、`reviewer`は実装結論を前提にしない反例探索へ使い、相互の代用にしない
-- delegation は調査後に決めた slice、依存関係、risk に合わせる。並列化は互いに依存せず編集範囲が重ならない作業だけに使い、前提 slice の完了前に依存 slice を開始しない
-- 任意の品質向上としての delegation と、`contract-closure` や completion gate が要求する独立 review を区別する。必須 review をresearchまたはvalidationで代用しない
-- 構造、責務、public API、永続化、migration、auth / security、data loss、concurrency の設計は designer に渡す。要件、観測可能な期待動作、semantic owner、design、targeted checkが確定した独立bounded sliceは、複数の関連fileにまたがる場合も`focused_implementer`を優先する。cross-ownerまたはcross-subsystemの整合を独立sliceへ分離できない、debugまたはcontractの不確実性が残る、責務または抽象を移動する、settled designの下でも未知の経路を横断する実装推論が必要な場合だけ`implementer`へ渡す。局所的・単一責務でdirect checkがaccepted contractを直接検証できるsliceにはreviewerを割り当てない。direct checkでは検証できない具体的なinteractionは`slice_reviewer`、高リスクな完了slice、finding family、修正delta、専門lensの確認は`targeted_reviewer`へ、`Full-review gate=run`で許可された一度のcomplete-diff holistic reviewだけは`reviewer`へ渡す。file数、diff量、finding数、`non-trivial`、`final review`、未使用のreviewer、または「念のため」をrole選択理由にしない
-- `contract-closure`が複数の独立したreview lensをtriggerした場合は、同じCandidate Definitionに対して1 lensにつき1人の`targeted_reviewer`を割り当て、必要な1から3 lensを並列にreviewする。file数やdiff量だけでlensまたはreviewerを増やさず、同じlensへ複数reviewerを重ねない。specialist reviewerは割り当てられたmatrix cellへ集中し、root sessionがfinding familyの統合、分類、修正順序、Evidence Ledger、holistic closureを所有する
-- plannerがreviewを計画する場合はreview kind、対象scope、具体的trigger、前提check、有限のdeadlineを示す。direct checkで十分な変更へreviewerを割り当てず、`slice_reviewer`または`targeted_reviewer`から`reviewer`へ自動昇格しない。scope変更が必要ならroot sessionへ返し、workflow gateを再判定する
-- `fast_reviewer`はユーザーがexact roleを明示した場合だけ、小規模、局所的、低リスクなsanity checkへ使う。通常のworkflowでは自動選択せず、`contract-closure`が要求する独立review、高リスクなtargeted review、specialist review、holistic reviewの代用にしない
-- fast role には full history を渡さず、担当範囲、必要な source / executable contract / diff、禁止事項、既知の検証結果、出力形式、完了条件だけを渡す
-- ユーザーが subagent を明示した場合は目的に合う agent type を指定する。該当 role がない場合だけ default / worker を使う
-- 通常の親子間返却は subagent の最終メッセージを使い、`result.md` その他の repo artifact を一律に要求しない
-- role契約で編集を許可されたworkspace-writeのchildは、root sessionが割り当てた非重複範囲をshared working treeで編集できる。root sessionはscope、競合回避、採否、knowledge placement、統合、最終検証、commit、user-facing finalを所有する
-- task worktree は、競合する並列編集、破壊的または大規模な試行、隔離が必要な検証を root session が明示的に選ぶ場合だけ使う
-- `agents/*.toml` を静的な role 責務、禁止事項、出力契約、model、sandbox の正本とし、hook には現在の routing mode、quota fallback など実行時にしか決まらない差分だけを置く
-- subagent の結果と差分は採用候補として root session が検証し、恒久的な情報は「Source of Truth and Knowledge Placement」に従って配置する
+- 独立した調査、計画、実装slice、検証、別視点reviewで品質または速度が明確に上がる場合だけsubagentを使う。小さく直接検証できる単一責務へ不要なdelegationやreviewを足さない。
+- researcherは根拠収集、validatorは機械的検証、reviewer rolesは実装結論を前提にしない反例探索へ使い、相互に代用しない。
+- 構造、責務、public API、永続化、migration、auth、security、data loss、concurrencyの設計はdesignerへ渡す。designとcheckが確定したbounded sliceは`focused_implementer`、cross-owner整合、複雑なdebug、責務移動、未知経路を横断する実装は`implementer`へ渡す。
+- 並列化は互いに依存せず編集範囲が重ならない作業だけに使う。同じfileや生成物を複数のwrite-capable childへ同時に割り当てない。
+- childの結果と差分は採用候補としてroot sessionが確認し、scope、統合、knowledge placement、最終検証、commit、user-facing finalを所有する。
+- `agents/*.toml`はrole固有のscope、禁止事項、出力、model、sandboxを所有し、hookはrouting modeやavailabilityなどruntime deltaだけを所有する。
 
-## 8. Language, Paths, and Reporting
+## 8. Language, Reporting, and Git
 
-- ユーザーへの回答、生成ドキュメント、commit message は日本語で書く。code comment は既存の言語と流儀に合わせる
-- 回答は結論から始め、判断に必要な根拠、重要な caveat、次の action を残す。導入、重複、定型的な安心表現、任意の背景を先に削る
-- 生成物では repo 内 path を repo root 相対で示し、絶対 path や repo 外 path を残さない
-- log を示す場合は必要な行だけを抜き出し、path を相対化する
-- finalでは依頼種別に応じて必要な項目だけを報告する。answer / explain / diagnoseは結論、根拠、未確定事項、次のaction、planはscope、依存関係、検証、open question、reviewは`blocking`の有無、findingの分類根拠、accepted risk、validation gap、残リスク、change / build / fixは変更内容、実行した検証、未実行の検証、残リスク、external actionは対象、実行結果、postcondition、部分成功またはvalidation gapを区別する
-
-## 9. Git
-
-- commitとpushは別々の外部作用として扱い、それぞれユーザーが明示的に依頼した場合だけ行う
-- commit前にstatusと対象diffを確認し、1つの論理変更単位にユーザー由来の無関係変更を混ぜない。stageは対象pathまたはhunkだけを選び、既存のstaged変更へ無断で混ぜない
-- commit message は conventional commits とし、commit した場合は hash、要約、検証結果を報告する
+- ユーザーへの回答、生成ドキュメント、commit messageは日本語で書く。code commentは既存の言語と流儀に合わせる。
+- 回答は結論から始め、answer / explain / diagnoseは結論、根拠、未確定事項、次のaction、planはscope、依存関係、検証、open question、reviewはblockingの有無、分類根拠、accepted risk、validation gap、残リスクを必要な範囲で示す。
+- change / build / fixの完了報告は、変更内容、実行した検証、未実行の検証、残リスクを短く示す。low-riskで暗黙にskipしたgateや作らなかったartifactを列挙しない。
+- external actionは対象、実行結果、read-backしたpostcondition、部分成功またはvalidation gapを区別する。
+- 生成物ではrepo内pathをrepo root相対で示し、logは必要な行だけを抜き出す。
+- commitとpushは別々の外部作用として扱い、それぞれ明示依頼がある場合だけ行う。commit前にstatusと対象diffを確認し、対象pathまたはhunkだけをstageして既存のstaged変更へ無断で混ぜない。
+- commit messageはconventional commits形式とし、commitした場合はhash、要約、検証結果を報告する。

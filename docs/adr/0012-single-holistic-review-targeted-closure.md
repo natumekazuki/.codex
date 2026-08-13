@@ -1,6 +1,6 @@
 # ADR-0012: holistic reviewを一度に限定しfindingをtargeted closureで閉じる
 
-- Status: accepted, amended by ADR-0013
+- Status: accepted, amended by ADR-0013, partially superseded by ADR-0018
 - Date: 2026-08-03
 - Amends: ADR-0004, ADR-0007, ADR-0011
 - Related: ADR-0008, ADR-0010
@@ -61,5 +61,5 @@ complete-diff reviewには、統合後のinteractionとcross-cutting contractか
 - Lifecycle and completion gates: `AGENTS.md`
 - Candidate Definition, Candidate preflight, Evidence Ledger, Review Brief, targeted closure: `skills/contract-closure/SKILL.md`
 - Reviewer input and output contract: `agents/reviewer.toml`, `agents/targeted_reviewer.toml`
-- User-facing validation projection: `skills/validation-report/SKILL.md`, `skills/validation-report/references/template.md`
+- Current reporting policy: `AGENTS.md`
 - Runtime executable contract: なし。review cycleを機械制御するruntimeを導入する場合は、その状態遷移を別のexecutable contractとして追加する。
