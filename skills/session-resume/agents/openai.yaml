@@ -1,4 +1,0 @@
-interface:
-  display_name: "Session Resume"
-  short_description: "handoffと現在の正本を照合して安全な再開順序を作る"
-  default_prompt: "Use $session-resume to compare the restart snapshot with current canonical sources and identify discrepancies before continuing."

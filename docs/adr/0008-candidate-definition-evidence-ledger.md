@@ -1,6 +1,7 @@
 # ADR-0008: Candidate DefinitionとEvidence Ledgerを分離する
 
 - Status: accepted
+- Partially superseded by: ADR-0018
 - Date: 2026-07-27
 - Amends: ADR-0007
 - Related: ADR-0004, ADR-0006
@@ -56,5 +57,5 @@ review contractだけを変更した後に旧evidenceを新Candidateへ再関連
 - Candidate Definition, Evidence Ledger, invalidation, and Review Brief: `skills/contract-closure/SKILL.md`
 - Reusable counterexamples: `skills/contract-closure/references/trigger-matrices.md`
 - Reviewer read-only boundary, accepted input, and output: `agents/reviewer.toml`, `agents/targeted_reviewer.toml`
-- User-facing validation projection: `skills/validation-report/SKILL.md`
+- Current reporting policy: `AGENTS.md`
 - Runtime executable contract: なし。状態管理を実装する場合だけ、その実装の観測可能な振る舞いを検証する

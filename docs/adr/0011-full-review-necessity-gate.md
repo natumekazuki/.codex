@@ -1,6 +1,6 @@
 # ADR-0011: complete-diff reviewを具体的な必要性で発火する
 
-- Status: accepted, amended by ADR-0012
+- Status: accepted, amended by ADR-0012, partially superseded by ADR-0018
 - Date: 2026-08-02
 - Amends: ADR-0004, ADR-0005
 - Related: ADR-0007, ADR-0008, ADR-0010

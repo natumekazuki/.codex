@@ -8,7 +8,7 @@ root session と child agent が同じ task を扱うときの、成果返却、
 
 1. root session が child に担当範囲、必要な artifact、禁止事項、完了条件を渡す
 2. read-only child は調査結果を、workspace-write child は割り当て範囲の差分と検証結果を最終メッセージで返す
-3. root session が結果と working tree を確認し、採否、統合、追加検証、knowledge placement を判断する
+3. root session が結果と working tree を確認し、採否、統合、追加検証、情報配置を判断する
 
 通常の親子間返却に repo 内の `result.md` や task workspace は要求しない。
 
@@ -27,7 +27,7 @@ root session と child agent が同じ task を扱うときの、成果返却、
 
 - child の最終メッセージは一時的な task result であり、repo の正本ではない
 - 複数 session の引継ぎ、監査証跡、大きな比較結果など保存価値がある場合だけ task-local artifact を作る
-- source、test、type、schema、static check、comment、ADR、architecture 文書への配置は root session が `AGENTS.md` と `skills/knowledge-placement/SKILL.md` に従って判断する
+- source、test、type、schema、static check、comment、ADR、architecture 文書への配置は root session が `AGENTS.md` に従って判断する
 - child の design output や task-local note を恒久文書へ自動同期しない
 
 ## Decision Pointer

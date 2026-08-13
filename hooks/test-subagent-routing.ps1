@@ -192,7 +192,7 @@ $targetedReviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/ta
 if ($sliceReviewerText -notmatch 'one completed implementation slice' -or
     $sliceReviewerText -notmatch 'Do not inspect or request the complete diff' -or
     $sliceReviewerText -notmatch 'targeted checks cannot directly verify' -or
-    $sliceReviewerText -notmatch 'local, single-responsibility slice whose targeted check directly verifies' -or
+    $sliceReviewerText -notmatch 'local single-responsibility slice whose targeted check directly verifies' -or
     $targetedReviewerText -notmatch 'Local, single-responsibility slices whose targeted checks directly verify' -or
     $targetedReviewerText -notmatch 'Specialist review' -or
     $targetedReviewerText -notmatch 'Targeted closure') {
@@ -205,7 +205,7 @@ foreach ($policyFragment in @(
     'targeted checkでは直接検証できない具体的なinteractionは`slice_reviewer`',
     '高リスク境界を持つsliceまたは`contract-closure`が要求するtargeted reviewは`targeted_reviewer`',
     'finding修正後に同じscopeの探索reviewまたはcomplete-diff reviewを再開しない',
-    '`Full-review gate=run`で許可された一度のcomplete-diff holistic reviewだけは`reviewer`'
+    '一つの論理変更につきcomplete-diff holistic reviewを一度だけ`reviewer`へ渡す'
 )) {
     if ($agentsPolicyText -notmatch [regex]::Escape($policyFragment)) {
         throw "AGENTS.md review routing contract is missing: $policyFragment"

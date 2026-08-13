@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Build and preflight schema-version-1 Review Briefs."""
+"""Build and preflight schema-version-2 Review Briefs."""
 
 from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -15,7 +16,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Sequence
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 REVIEW_KINDS = {
     "targeted-review",
     "specialist-review",
@@ -52,9 +53,6 @@ MISMATCH_DIAGNOSTIC_CODES = {
     "closure-invariant-matrix-mismatch",
     "closure-invariant-check-mismatch",
     "executedChecks-candidate-mismatch",
-    "evidence-ledger-candidate-mismatch",
-    "evidence-ledger-logical-change-mismatch",
-    "evidence-ledger-entry-candidate-mismatch",
     "full-review-gate-not-run",
     "holistic-input-contamination",
     "assigned-lens-mismatch",
@@ -62,17 +60,13 @@ MISMATCH_DIAGNOSTIC_CODES = {
     "holistic-untracked-content-mismatch",
 }
 PASSED_CHECK_RESULT = "passed"
-CANDIDATE_LEDGER_REVIEW_KINDS = {
-    "targeted-review",
-    "specialist-review",
-    "targeted-closure",
-}
 HOLISTIC_FORBIDDEN_FIELDS = {
     "priorFindings",
     "specialistConclusions",
     "claimedResolution",
     "implementationConclusion",
     "closureMap",
+    "reviewInstructions",
 }
 
 
@@ -142,6 +136,71 @@ def within(path: Path, root: Path) -> bool:
         return True
     except (OSError, ValueError):
         return False
+
+
+def validate_contract_anchors(
+    anchors: Any,
+    root: Path | None,
+    validation: BriefValidation,
+) -> list[dict[str, str]]:
+    if not isinstance(anchors, list) or not anchors:
+        validation.add("accepted-contract-anchors-required", "acceptedContract.anchors must be a non-empty object list")
+        return []
+    normalized: list[dict[str, str]] = []
+    for index, anchor in enumerate(anchors):
+        if not isinstance(anchor, dict):
+            validation.add("accepted-contract-anchor-invalid", f"acceptedContract.anchors[{index}] must be an object")
+            continue
+        kind = anchor.get("kind")
+        path_value = anchor.get("path")
+        if kind == "repository-path":
+            if not text(path_value) or root is None:
+                validation.add("accepted-contract-anchor-path-required", f"acceptedContract.anchors[{index}].path is required")
+                continue
+            relative = PurePosixPath(path_value.replace("\\", "/"))
+            if relative.is_absolute() or ".." in relative.parts or re.match(r"^[A-Za-z]:", path_value):
+                validation.add("accepted-contract-anchor-outside-target", f"repository anchor must stay within reviewTarget: {path_value}")
+                continue
+            resolved = (root / Path(*relative.parts)).resolve()
+            if not within(resolved, root) or not resolved.is_file():
+                validation.add("accepted-contract-anchor-unreadable", f"repository anchor is not a readable file: {path_value}")
+                continue
+            normalized.append({"kind": kind, "path": relative.as_posix()})
+        elif kind == "external-file":
+            digest = anchor.get("sha256")
+            if not text(path_value) or not Path(path_value).is_absolute() or not text(digest):
+                validation.add("accepted-contract-anchor-external-invalid", f"external anchor {index} requires an absolute path and sha256")
+                continue
+            resolved = Path(path_value).resolve()
+            if not resolved.is_file():
+                validation.add("accepted-contract-anchor-unreadable", f"external anchor is not a readable file: {path_value}")
+                continue
+            actual = "sha256:" + hashlib.sha256(resolved.read_bytes()).hexdigest()
+            if digest.lower() != actual:
+                validation.add("accepted-contract-anchor-digest-mismatch", f"external anchor digest does not match: {path_value}")
+                continue
+            normalized.append({"kind": kind, "path": str(resolved), "sha256": actual})
+        else:
+            validation.add("accepted-contract-anchor-kind-invalid", f"acceptedContract.anchors[{index}].kind is unsupported")
+    return normalized
+
+
+def validate_canonical_anchors(anchors: Any, root: Path | None, validation: BriefValidation) -> list[str]:
+    if not string_list(anchors):
+        validation.add("canonical-anchors-invalid", "canonicalAnchors must be a non-empty repository-path list")
+        return []
+    normalized: list[str] = []
+    for anchor in anchors:
+        relative = PurePosixPath(anchor.replace("\\", "/"))
+        if root is None or relative.is_absolute() or ".." in relative.parts or re.match(r"^[A-Za-z]:", anchor):
+            validation.add("canonical-anchor-outside-target", f"canonical anchor must stay within reviewTarget: {anchor}")
+            continue
+        resolved = (root / Path(*relative.parts)).resolve()
+        if not within(resolved, root) or not resolved.is_file():
+            validation.add("canonical-anchor-unreadable", f"canonical anchor is not a readable file: {anchor}")
+            continue
+        normalized.append(relative.as_posix())
+    return normalized
 
 
 def scope_contains(parent: str, child: str) -> bool:
@@ -295,185 +354,6 @@ def validate_executed_checks(
                 f"executedChecks[{index}] must have been executed on the current Candidate",
             )
     return check_ids
-
-
-def validate_evidence_ledger(
-    request: dict[str, Any],
-    *,
-    candidate_bound: bool,
-    candidate_id: Any,
-    logical_change_id: Any,
-    executed_check_ids: set[str],
-    validation: BriefValidation,
-) -> bool:
-    kind = request.get("reviewKind")
-    required = candidate_bound and kind in CANDIDATE_LEDGER_REVIEW_KINDS
-    ledger = request.get("evidenceLedger")
-    not_required_reason = request.get("evidenceLedgerNotRequiredReason")
-
-    if not required:
-        if ledger is not None:
-            validation.add(
-                "evidence-ledger-not-allowed",
-                f"{kind} does not consume an Evidence Ledger; provide the accepted-source reason instead",
-            )
-        if not text(not_required_reason):
-            validation.add(
-                "evidence-ledger-not-required-reason-required",
-                f"{kind} requires an accepted-source reason explaining why Evidence Ledger is not required",
-            )
-        return False
-
-    if not isinstance(ledger, dict) or not ledger:
-        validation.add("evidence-ledger-required", f"Candidate-bound {kind} requires an Evidence Ledger object")
-        return True
-    if not_required_reason is not None:
-        validation.add(
-            "evidence-ledger-not-required-reason-not-allowed",
-            f"Candidate-bound {kind} cannot bypass the required Evidence Ledger",
-        )
-
-    ledger_candidate_id = ledger.get("candidateId")
-    if not text(ledger_candidate_id) or not text(candidate_id) or ledger_candidate_id != candidate_id:
-        validation.add(
-            "evidence-ledger-candidate-mismatch",
-            "evidenceLedger.candidateId must identify the current Candidate",
-        )
-    ledger_logical_change_id = ledger.get("logicalChangeId")
-    if not text(ledger_logical_change_id):
-        validation.add(
-            "evidence-ledger-logical-change-required",
-            "evidenceLedger.logicalChangeId must be a non-empty string",
-        )
-    elif not text(logical_change_id) or ledger_logical_change_id != logical_change_id:
-        validation.add(
-            "evidence-ledger-logical-change-mismatch",
-            "evidenceLedger.logicalChangeId must match the Review Brief logicalChangeId",
-        )
-    entries = ledger.get("entries")
-    if not isinstance(entries, list) or not entries:
-        validation.add(
-            "evidence-ledger-entries-required",
-            f"Candidate-bound {kind} requires non-empty Evidence Ledger entries",
-        )
-        for check_id in sorted(executed_check_ids):
-            validation.add(
-                "evidence-ledger-check-missing",
-                f"Evidence Ledger is missing the current passed check entry for executedChecks ID: {check_id}",
-            )
-        return True
-    entry_ids: set[str] = set()
-    ledger_check_ids: set[str] = set()
-    confirmation_origin_entry_ids: list[tuple[int, str]] = []
-    for index, entry in enumerate(entries):
-        if not isinstance(entry, dict):
-            validation.add("evidence-ledger-entry-invalid", f"evidenceLedger.entries[{index}] must be an object")
-            continue
-        entry_id = entry.get("id")
-        if not text(entry_id):
-            validation.add("evidence-ledger-entry-id-required", f"evidenceLedger.entries[{index}].id is required")
-        elif entry_id in entry_ids:
-            validation.add(
-                "evidence-ledger-entry-id-duplicate",
-                f"evidenceLedger.entries[{index}].id must be task-local unique: {entry_id}",
-            )
-        else:
-            entry_ids.add(entry_id)
-        entry_kind = entry.get("kind")
-        if not text(entry_kind):
-            validation.add("evidence-ledger-entry-kind-required", f"evidenceLedger.entries[{index}].kind is required")
-        elif entry_kind not in {"check", "review", "definition-delta non-impact confirmation"}:
-            validation.add(
-                "evidence-ledger-entry-kind-unknown",
-                f"evidenceLedger.entries[{index}].kind must identify a supported Evidence Ledger entry kind",
-            )
-        elif entry_kind == "check" and text(entry_id):
-            ledger_check_ids.add(entry_id)
-        elif entry_kind == "review":
-            if entry.get("reviewKind") not in REVIEW_KINDS:
-                validation.add(
-                    "evidence-ledger-review-kind-invalid",
-                    f"evidenceLedger.entries[{index}].reviewKind must identify a supported review kind",
-                )
-            if not text(entry.get("lens")):
-                validation.add(
-                    "evidence-ledger-review-lens-required",
-                    f"evidenceLedger.entries[{index}].lens must be a non-empty string",
-                )
-            if not string_list(entry.get("reviewedCells")):
-                validation.add(
-                    "evidence-ledger-review-cells-required",
-                    f"evidenceLedger.entries[{index}].reviewedCells must be a non-empty string list",
-                )
-            unreviewed_cells = entry.get("unreviewedCells")
-            if not isinstance(unreviewed_cells, list) or not all(text(cell) for cell in unreviewed_cells):
-                validation.add(
-                    "evidence-ledger-review-unreviewed-cells-invalid",
-                    f"evidenceLedger.entries[{index}].unreviewedCells must be a string list; an empty list is valid",
-                )
-        elif entry_kind == "definition-delta non-impact confirmation":
-            for field, code, description in (
-                ("originEntryId", "evidence-ledger-confirmation-origin-entry-required", "origin Entry ID"),
-                ("originCandidateId", "evidence-ledger-confirmation-origin-candidate-required", "origin Candidate ID"),
-                (
-                    "reviewedDefinitionDelta",
-                    "evidence-ledger-confirmation-definition-delta-required",
-                    "reviewed definition delta",
-                ),
-                (
-                    "nonImpactRationale",
-                    "evidence-ledger-confirmation-non-impact-rationale-required",
-                    "non-impact rationale",
-                ),
-            ):
-                if not text(entry.get(field)):
-                    validation.add(
-                        code,
-                        f"evidenceLedger.entries[{index}].{field} must identify the {description}",
-                    )
-            origin_candidate_id = entry.get("originCandidateId")
-            if text(origin_candidate_id) and origin_candidate_id == candidate_id:
-                validation.add(
-                    "evidence-ledger-confirmation-origin-candidate-current",
-                    f"evidenceLedger.entries[{index}].originCandidateId must identify a prior Candidate",
-                )
-            origin_entry_id = entry.get("originEntryId")
-            if text(origin_entry_id):
-                confirmation_origin_entry_ids.append((index, origin_entry_id))
-        if not isinstance(entry.get("result"), str) or entry["result"] != PASSED_CHECK_RESULT:
-            validation.add(
-                "evidence-ledger-entry-result-not-passed",
-                f"evidenceLedger.entries[{index}].result must be the exact string {PASSED_CHECK_RESULT}",
-            )
-        if entry.get("status") != "current":
-            validation.add("evidence-ledger-entry-not-current", f"evidenceLedger.entries[{index}] must have status=current")
-        provenance = [
-            entry.get(field)
-            for field in ("candidateId", "executedOnCandidateId")
-            if field in entry
-        ]
-        if not provenance or any(not text(value) or value != candidate_id for value in provenance):
-            validation.add(
-                "evidence-ledger-entry-candidate-mismatch",
-                f"evidenceLedger.entries[{index}] must belong to the current Candidate",
-            )
-    for index, origin_entry_id in confirmation_origin_entry_ids:
-        if origin_entry_id in entry_ids:
-            validation.add(
-                "evidence-ledger-confirmation-origin-entry-current",
-                f"evidenceLedger.entries[{index}].originEntryId must identify an entry from a prior Candidate",
-            )
-    for check_id in sorted(ledger_check_ids - executed_check_ids):
-        validation.add(
-            "evidence-ledger-check-unexpected",
-            f"Evidence Ledger check entry does not correspond to executedChecks: {check_id}",
-        )
-    for check_id in sorted(executed_check_ids - ledger_check_ids):
-        validation.add(
-            "evidence-ledger-check-missing",
-            f"Evidence Ledger is missing the current passed check entry for executedChecks ID: {check_id}",
-        )
-    return True
 
 
 def parse_deadline(value: Any, now: datetime, validation: BriefValidation) -> str | None:
@@ -873,7 +753,13 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
     validation = BriefValidation()
     now = now or datetime.now(timezone.utc)
     if request.get("schemaVersion") != SCHEMA_VERSION:
-        validation.add("schema-version-unsupported", "input schemaVersion must be 1")
+        validation.add("schema-version-unsupported", "input schemaVersion must be 2")
+    for legacy_field in ("evidenceLedger", "evidenceLedgerNotRequiredReason"):
+        if legacy_field in request:
+            validation.add(
+                "legacy-evidence-ledger-not-supported",
+                f"{legacy_field} is not part of Review Brief schema version 2",
+            )
     kind = request.get("reviewKind")
     role = request.get("reviewerRole")
     if kind not in REVIEW_KINDS:
@@ -909,8 +795,6 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
             validation.add(code, f"{field} must be a non-empty string")
     accepted = request.get("acceptedContract")
     if isinstance(accepted, dict):
-        if not string_list(accepted.get("anchors")):
-            validation.add("accepted-contract-anchors-required", "acceptedContract.anchors must be a non-empty string list")
         if not text(accepted.get("meaning")):
             validation.add("accepted-contract-meaning-required", "acceptedContract.meaning must be a non-empty string")
     else:
@@ -923,8 +807,6 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
             validation.add("review-contract-recipe-required", "reviewContract.recipe must be a non-empty string")
     else:
         validation.add("review-contract-invalid", "reviewContract must contain revision and recipe")
-    if request.get("canonicalAnchors") is not None and not string_list(request.get("canonicalAnchors")):
-        validation.add("canonical-anchors-invalid", "canonicalAnchors must be a non-empty string list")
     if request.get("supportedContractScope") is not None and not string_list(request.get("supportedContractScope")):
         validation.add("supported-contract-scope-invalid", "supportedContractScope must be a non-empty string list")
     if request.get("executedChecks") is not None and (
@@ -935,6 +817,9 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
         validation.add("executed-checks-invalid", "executedChecks must be a non-empty object list")
 
     root, repository = validate_review_target(request.get("reviewTarget"), validation)
+    if isinstance(accepted, dict):
+        accepted["anchors"] = validate_contract_anchors(accepted.get("anchors"), root, validation)
+    request["canonicalAnchors"] = validate_canonical_anchors(request.get("canonicalAnchors"), root, validation)
     included = normalize_scope(request.get("includedScope"), "included-scope", validation) or []
     excluded_value = request.get("excludedScope")
     if excluded_value == []:
@@ -959,19 +844,11 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
             validation,
             require_contract_fields=require_contract_fields,
         )
-    executed_check_ids = validate_executed_checks(
+    validate_executed_checks(
         request.get("executedChecks"),
         candidate_bound=candidate_bound,
         candidate_id=request.get("candidateId"),
         logical_change_id=request.get("logicalChangeId"),
-        validation=validation,
-    )
-    ledger_required = validate_evidence_ledger(
-        request,
-        candidate_bound=candidate_bound,
-        candidate_id=request.get("candidateId"),
-        logical_change_id=request.get("logicalChangeId"),
-        executed_check_ids=executed_check_ids,
         validation=validation,
     )
     deadline = parse_deadline(request.get("deadline"), now, validation)
@@ -1036,15 +913,11 @@ def build_review_brief(request: dict[str, Any], *, now: datetime | None = None) 
         "excludedScope": excluded,
         "reviewContract": request.get("reviewContract"),
         "executedChecks": request.get("executedChecks"),
-        **(
-            {"evidenceLedger": request.get("evidenceLedger")}
-            if ledger_required
-            else {"evidenceLedgerNotRequiredReason": request.get("evidenceLedgerNotRequiredReason")}
-        ),
         "deadline": deadline,
-        "reviewInstructions": request.get("reviewInstructions", []),
         "retry": request.get("retry", "none"),
     }
+    if kind != "holistic-complete-diff-review":
+        payload["reviewInstructions"] = request.get("reviewInstructions", [])
     if candidate_bound:
         payload.update(
             candidateId=request.get("candidateId"),

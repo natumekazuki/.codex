@@ -31,7 +31,7 @@
 - Positive: 恒久文書は理由、外部制約、全体責務に集中できる
 - Negative: 不変条件を test、type、schema、static check へ落とす規律が必要になる
 - Negative: 非局所情報が architecture 文書の全条件を満たすか、変更時に確認する必要がある
-- Follow-up: `knowledge-placement` Skill と agent workflow で配置判断を支援する
+- Follow-up: 配置判断は`AGENTS.md`の「Sources of Truth and Knowledge Placement」で支援する
 
 ## Executable Anchors
 

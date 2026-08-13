@@ -7,7 +7,7 @@
 - token消費を抑えることより成果物品質を優先し、品質を落とさず省ける処理だけを効率化する
 - 通常タスクは root session で進めつつ、独立した調査、計画、実装、検証、レビューで品質または速度が上がる場合は subagent を使う
 - subagent は standing authorization として許可し、毎回の明示依頼を必須にしない
-- plan、workspace、handoff は必要な場合だけ作り、恒久設計文書は ADR と、複数 subsystem / process / repo / 外部 service に波及して code と executable contract から復元できない非局所情報に限定する
+- plan と workspace は必要な場合だけ作り、作業再開は現在のgitと正本から組み立てる。恒久設計文書は ADR と、複数 subsystem / process / repo / 外部 service に波及して code と executable contract から復元できない非局所情報に限定する
 - Codex で利用する専門 Skill は含めるが、他ツールの global 設定や運用規則は含めない
 
 ## 構成
@@ -28,13 +28,8 @@
 | Skill | 区分 | 役割 |
 | --- | --- | --- |
 | `commit-note` | 軽量 | commit message と commit 前後の短い記録を整える |
-| `task-brief` | 軽量 | 実装前にgoal、target behavior、scope、canonical anchors、done、risksを短く整理する |
-| `validation-report` | 軽量 | sourceと実行可能な契約の整合、回帰coverage、完了gate、残リスクを報告する |
-| `session-handoff` | 専門 | 正本へのpointer、観測差異、未完了状態を再開用snapshotとして保存する |
-| `session-resume` | 専門 | snapshotと現在の正本を照合し、差異とblockerを含む再開順序を作る |
-| `contract-closure` | 専門 | 変更した不変条件を兄弟入口、状態遷移、failure point、resource scopeまで展開し、局所修正による再発を防ぐ |
+| `contract-closure` | 専門 | 高リスクな契約変更の不変条件を兄弟入口、状態遷移、failure timing、scopeへ展開し、直接検証と反証reviewで閉じる |
 | `consolidate-structure` | 専門 | review前に、具体的なtopology evidenceがある変更だけを一回のbounded consolidationで収束させる |
-| `knowledge-placement` | 専門 | 設計情報を source / test / type / schema / static check / comment / ADR / 全体設計のどこへ置くか判断する |
 | `withmate-memory` | runtime管理 | WithMateが自動配置し、injected Character context、MCP優先のCharacter Memory / affect、semantic Memory CLIの運用契約を提供する |
 | `relaygraph` | 専門 | RelayGraph の関係グラフ調査、検証、ルール作成を行う |
 | `japanese-tech-writing-review` | 専門 | 日本語の技術文書を論証、読み手の負荷、用語、Markdown表記の観点で推敲する |
@@ -57,6 +52,7 @@
 - child agent は常時 orchestration の構成要素ではなく、限定目的の補助役にする
 - file plan は例外扱いにし、通常は会話と差分で完了させる
 - plan は作業手順、design は実装前後を通じた判断活動として分け、設計したこと自体を文書作成理由にしない
+- goal、scope、done、riskの整理と、変更・検証・未実行・残リスクの報告は標準workflowに含め、独立Skillや常設artifactにしない
 - 現在の実装と構造は source、実行可能な期待動作と不変条件は test / type / schema / static check、局所理由は code comment に置く
 - ADR に該当する決定は必ず残し、それ以外の恒久設計文書は複数 subsystem / process / repo / 外部 service に波及し、code と executable contract から復元できない非局所情報だけに限定する
 - task-local な設計メモを repo 設計書へ同期する workflow は採用しない

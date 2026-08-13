@@ -1,6 +1,7 @@
 # ADR-0005: task lifecycleを一つの番号付きworkflowへ統合する
 
 - Status: accepted
+- Partially superseded by: ADR-0018
 - Date: 2026-07-18
 
 ## Context
@@ -42,6 +43,7 @@
 
 - Workflow: `AGENTS.md`
 - Role contracts: `agents/*.toml`
-- Reusable procedures: `skills/task-brief/SKILL.md`、`skills/validation-report/SKILL.md`、`skills/session-handoff/SKILL.md`、`skills/session-resume/SKILL.md`、`skills/withmate-memory/SKILL.md`
+- Current workflow and reporting: `AGENTS.md`
+- Memory procedure: `skills/withmate-memory/SKILL.md`
 - Instruction ownership: `docs/architecture/instruction-governance.md`
 - Executable contract: なし。task lifecycleは自然言語の運用契約であり、runtime routing testの責務には含めない
