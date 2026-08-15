@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Tests"
+  short_description: "価値あるテスト境界と直接的な検証手段を一貫して設計する"
+  default_prompt: "$design-tests を使って、この変更のfailure modeを直接検出するcheckを設計してください。"

@@ -41,6 +41,7 @@
 - goal、scope、期待動作、検証方法が明確で、一つの責務を1 sessionで閉じられる作業にはplan fileを作らない。
 - 複数の別々に検証可能な責務は会話内checklistへ分ける。複数session、cross-repo、高リスク、ユーザー確認待ち、または保存価値が高い場合だけ`docs/plans/YYYYMMDD-topic/plan.md`を作る。
 - 一つのfile、class、componentが複数の独立workflow、変更理由、外部副作用、状態遷移、failure boundaryを持つ場合は、凝集したdomain、feature、capability、ownership単位への分割を検討する。行数や将来予測だけを分割理由にしない。
+- testの新規追加、意味変更、削除、または新たな回帰checkの選定を行うchange、build、fixでは、test編集前に`design-tests` Skillを使う。既存checkを実行するだけの場合は使わない。
 - testを追加する前に、検出するfailure mode、影響を受けるconsumer、accepted contractの根拠、契約を所有する安定境界を説明できるようにする。説明できない場合や既存checkが同じfailureを十分検出する場合は増やさない。
 - assertionは入力と出力、状態遷移、外部副作用、error、不変条件など観測可能な境界へ置く。内部call、markup、snapshot、実装順は、その詳細自体がaccepted contractの場合だけ固定する。
 - testよりtype、schema、static check、build、smoke、browser、visual checkの方がfailureを直接検出できる場合は、そちらを選ぶ。
