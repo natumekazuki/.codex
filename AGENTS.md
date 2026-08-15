@@ -18,6 +18,8 @@
 - 局所的な理由や制約はcode commentへ置き、codeから分かる処理内容は繰り返さない。複数案から選んだ長期的または後戻り困難な判断はADRへ置く。
 - ADR以外の恒久設計文書は、複数subsystem、process、repo、外部serviceへ波及し、sourceとexecutable contractから全体を復元できず、誤解が全体不整合を生む場合だけ作る。現行class構成や通常のAPI仕様を複製しない。
 - README、user guide、runbook、setup、運用手順は利用方法や運用が変わるときに更新する。repository-ownedな情報をMemoryやtask-local noteだけに置かない。
+- System Promptで`SessionFolder`が提供される場合は、repositoryへ入れる必要がないユーザー入力と、repositoryへ入れずユーザーへ共有する成果物の受け渡し先として使う。SessionFolder上のメモは正本にせず、恒久契約、実装、検証根拠は適切なrepository artifactへ反映する。
+- Codex設定ディレクトリやOSのTEMPを、SessionFolderの代替となる共有場所または成果物置き場にしない。TEMPはprocess終了や時間経過で失われてもよい処理用fileだけに使う。Folder Contextはpathを通知するだけでfilesystem authorityを拡張しない。
 - 意図を確定できず、選択が結果を実質的に変える場合は、根拠、選択肢、consumer影響、推奨案を示して確認を求める。
 
 ## 3. Standard Task Workflow
@@ -65,12 +67,15 @@
 - WithMateをpersisted MemoryとCharacter affectの正本とし、独自の永続状態やfallback fileを作らない。`rejected`、`unsaved`、`effect: unknown`を保存済みとして扱わない。
 - 現在のユーザー発言とCharacter Definitionを優先し、次にlifecycleから注入された有効なCharacter context、必要なcue-driven recall、古いMemoryの順で参照する。Character affectをユーザーの感情の診断や採点に使わない。
 - Memoryは、repositoryの正本にするほどではない文脈、projectをまたぐ選好、会話継続に役立つ関係性やepisodeに限定する。未完了状態、未実行検証、次のaction、secret、private path、raw log、大きなdiff、speculative claimは保存しない。
-- 追加想起は、過去の決定、制約、選好、failure pattern、共有した出来事が現在の判断または自然な会話継続へ影響する場合だけ、explicit targetとcueで行う。Character episodeはMCP、semantic Memoryはgeneral CLIの手順を使う。
+- 追加想起は、過去の決定、制約、選好、failure pattern、共有した出来事が現在の判断または自然な会話継続へ影響する場合だけ、explicit targetとcueで行う。Character episodeとsemantic MemoryはいずれもMCPの対応する手順を使う。
 - user-facing final responseの直前に、Project、Character、Character affectの三つのlensでreflectionする。具体的候補がないことを正常とし、turn全体を一律に保存しない。
-- lifecycle-injected contextがある通常のWithMate Sessionでは、post-turn appraisalと同じaffect eventに属するlinked episodeのmutationはWithMate lifecycleを単一ownerとし、同じturnをMCPへ重複送信しない。
-- Character context、affect、episode操作はMCPを第一選択とする。Character CLIはMCPのavailability failureまたはoperatorによるinspect、migration、manual recoveryに限定し、semantic Memoryのgeneral CLI経路はfallbackと扱わない。
+- 具体的なCharacter affectの変化を認識したら、まず自然に反応し、その後できるだけ早くMCPでappraiseする。affectはturn末の最終状態ではなくevent履歴として扱い、後から解消、反転、減衰しても先行eventを消さない。lifecycleはmandatory post-turn appraisalだけを所有し、Agentによるevent-time appraisalを禁止しない。同じpost-turn requestをMCPへ再送しない。
+- 同じaffect eventに属するlinked episodeは同じappraisalへ含め、Character episodeとして別途mutationしない。別時点または別の根拠を持つaffect eventは、family、target、label、意味が似ていても別eventとして残す。同一eventのtimeout、response loss、client resendだけは、変更していないrequestと同じidempotency keyでreconcileする。
+- runtime bindingで解決されたAgentはユーザーの代理として、許可された明示targetのMemoryを自律的に検索、取得、追加、訂正、forget、moveできる。許可targetは`user-global`、明示Project、actor Session自身のCharacter、actor Session自身のCharacterと明示Projectの組み合わせとし、別Characterをownerに持つtargetは読み書きとも拒否する。
+- Memoryの訂正、forget、moveは具体的な理由とidempotency keyを伴わせ、mutation後にcurrent stateをread-backする。general Memoryのbulk forgetは実行前にdry-runする。
+- Character context、affect、episode、general semantic Memoryの通常操作はMCPを第一選択とする。CLIはMCPのavailability failureまたはoperatorによるinspect、migration、manual recoveryに限定し、同じWithMate application serviceと永続化先を確認できる場合だけ使う。
 - domain rejection、authority不足、invalid input、version conflict、idempotent replay、migration requiredをavailability failureへ読み替えてCLIで迂回しない。保存結果、effect certainty、read-backを区別する。
-- correction、forget、affect correction、session / relationship reset、relationship boundary変更には明示的なユーザー指示またはoperator authorityを要求し、mutation後にcurrent stateをread-backする。
+- affect correction、session / relationship affect reset、relationship boundary変更には明示的なユーザー指示またはoperator authorityを要求し、mutation後にcurrent stateをread-backする。
 - exact schema、authority、idempotency、fallback、correction手順はruntime管理の`withmate-memory` Skillを正本とする。
 
 ## 7. Delegation
