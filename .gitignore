@@ -56,3 +56,5 @@ automations/.run-jitter-salt
 generated_images/*
 /audit-codex-work-quality/
 /visualizations/
+thread-writer-locks/.coordination.lock
+transcription-history.jsonl
