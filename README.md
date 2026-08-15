@@ -30,7 +30,7 @@
 | `commit-note` | 軽量 | commit message と commit 前後の短い記録を整える |
 | `contract-closure` | 専門 | 高リスクな契約変更の不変条件を兄弟入口、状態遷移、failure timing、scopeへ展開し、直接検証と反証reviewで閉じる |
 | `consolidate-structure` | 専門 | review前に、具体的なtopology evidenceがある変更だけを一回のbounded consolidationで収束させる |
-| `withmate-memory` | runtime管理 | WithMateが自動配置し、injected Character context、MCP優先のCharacter Memory / affect、semantic Memory CLIの運用契約を提供する |
+| `withmate-memory` | runtime管理 | WithMateが自動配置し、injected Character context、MCP優先のCharacter Memory / affect / semantic Memoryの運用契約を提供する |
 | `relaygraph` | 専門 | RelayGraph の関係グラフ調査、検証、ルール作成を行う |
 | `japanese-tech-writing-review` | 専門 | 日本語の技術文書を論証、読み手の負荷、用語、Markdown表記の観点で推敲する |
 | `natural-japanese` | 専門 | ビジネス文書や一般記事を自然さ、読みやすさ、AI臭の観点で作成・推敲・診断する |
