@@ -1,14 +1,17 @@
 # ADR-0012: holistic reviewを一度に限定しfindingをtargeted closureで閉じる
 
-- Status: accepted, amended by ADR-0013, partially superseded by ADR-0018
+- Status: accepted, amended by ADR-0013, partially superseded by ADR-0018 and ADR-0019
 - Date: 2026-08-03
 - Amends: ADR-0004, ADR-0007, ADR-0011
 - Related: ADR-0008, ADR-0010
 - Amended by: ADR-0013 (2026-08-03)
+- Partially superseded by: ADR-0019 (2026-08-16)
 
 ## Amendment
 
 ADR-0013は、ここで分離したholistic discoveryとtargeted closureを静的roleにも反映し、`agents/reviewer.toml`をholistic専用、`agents/targeted_reviewer.toml`をtargeted review、specialist review、targeted closure専用とする。review回数、Candidate、Review Brief、deadline、完了条件は変更しない。
+
+ADR-0019はCandidateとReview Briefを廃止し、commit-bound review taskへ置き換える。単一holistic reviewとfinding family / resulting deltaのtargeted closureは維持する。
 
 ## Context
 

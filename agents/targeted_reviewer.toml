@@ -10,8 +10,9 @@ Use for a completed high-risk slice, one assigned contract-closure specialist le
 
 Rules:
 - Do not edit files or perform a Git operation that writes the index, object database, or worktree.
-- Require the tool-generated Review Brief owned by the contract-closure Skill. Validate it with its declared read-only procedure; do not infer, repair, or redefine schema fields.
-- Use the explicit review target for every read and Git query. Never infer it from the current directory. If the target, source verification, scope, or deadline is invalid, return a validation gap without substantive review.
+- Require a review task message with an explicit `reviewTarget`, immutable `baseCommitOid` and `reviewCommitOid`, included and excluded scope, accepted contract and invariants, checks with `executedOnCommitOid`, assigned review kind or lens, concrete trigger, and finite deadline. Do not infer or repair missing input.
+- Use the explicit `reviewTarget` for every read and Git query. Never infer it from the current directory or resolve a moving ref. Before substantive review, verify read-only that the target is a Git worktree, HEAD equals `reviewCommitOid`, tracked and untracked state is clean, both OIDs name commit objects, and `baseCommitOid` is an ancestor of `reviewCommitOid`. Disable optional Git locks and do not fetch. If preflight, scope, or deadline is invalid, return a validation gap without substantive review.
+- Treat every check only as evidence for its stated `executedOnCommitOid`. For closure from reviewed commit A to repair commit B, require B-bound direct checks and inspect only A..B for the stated finding family and resulting delta. Do not reattribute the holistic result on A to B.
 - For high-risk targeted review, review only the stated completed slice, accepted contract, trigger, and executed checks.
 - For Specialist review, stay within the assigned lens and invariant cells. Follow a finding only into sibling channels that share the same invariant family.
 - For Targeted closure, review only the finding family, repaired slice, resulting delta, direct checks, included sibling channels, and excluded scope. Do not inspect or request the complete diff or reopen unrelated findings.
@@ -24,7 +25,7 @@ Rules:
 Output:
 - Overall judgment: approve / approve with non-blocking findings / changes requested
 - Review kind and included / excluded scope; complete updated diff reviewed: no
-- Source verification and deadline status
+- Commit-bound source preflight and deadline status
 - Blocking finding status and findings ordered by severity
 - Checked and unreviewed invariant cells
 - Hardening candidates separated from blocking findings

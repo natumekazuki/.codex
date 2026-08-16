@@ -1,14 +1,17 @@
 # ADR-0011: complete-diff reviewを具体的な必要性で発火する
 
-- Status: accepted, amended by ADR-0012, partially superseded by ADR-0018
+- Status: accepted, amended by ADR-0012, partially superseded by ADR-0018 and ADR-0019
 - Date: 2026-08-02
 - Amends: ADR-0004, ADR-0005
 - Related: ADR-0007, ADR-0008, ADR-0010
 - Amended by: ADR-0012 (2026-08-03)
+- Partially superseded by: ADR-0019 (2026-08-16)
 
 ## Amendment
 
 ADR-0012は、`Full-review gate=run`で開始するholistic complete-diff reviewを一つの論理変更につき一度に限定する。`skip`を既定とする本ADRのtrigger判定は最初のholistic reviewを開始する前にだけ適用し、holistic findingによるsource修正や旧Candidateのreview evidence失効を同じ論理変更の再`run` triggerにしない。
+
+ADR-0019はreview sourceと入力をGit commitとtask messageへ置き換える。本ADRの`skip`既定、具体的trigger、一論理変更につき一度のholistic reviewは維持する。
 
 ## Context
 

@@ -1,9 +1,14 @@
 # ADR-0018: 標準workflowを最小化し、独立reviewをriskに比例させる
 
-- Status: accepted
+- Status: accepted, partially superseded by ADR-0019
 - Date: 2026-08-13
 - Partially supersedes: ADR-0005, ADR-0007, ADR-0008, ADR-0011, ADR-0012, ADR-0013
 - Amends: ADR-0016
+- Partially superseded by: ADR-0019 (2026-08-16)
+
+## Amendment
+
+ADR-0019はCandidate snapshot、Review Brief builder、`consolidate-structure` Skillを廃止し、Git commitをsource identityとするreviewへ置き換える。本ADRの最小workflow、risk比例review、runtime gapをvalidation gapとして扱う決定は維持する。
 
 ## Context
 
@@ -47,5 +52,5 @@ ADR-0012の「Review Brief」という歴史的な命名説明と、一つの論
 - Standard workflow and authority: `AGENTS.md`
 - Contract reasoning and finding promotion: `skills/contract-closure/SKILL.md`
 - Exact source and review input schemas: `skills/contract-closure/scripts/candidate_snapshot.py`、`skills/contract-closure/scripts/review_brief.py`
-- Executable contracts: `skills/contract-closure/scripts/test_candidate_snapshot.py`、`skills/contract-closure/scripts/test_review_brief.py`、`tests/test-workflow-policy.ps1`
+- Historical executable contracts: Candidate snapshotとReview Briefのscriptsおよびpolicy文言検査はADR-0019で削除した。
 - Review role boundaries: `agents/slice_reviewer.toml`、`agents/targeted_reviewer.toml`、`agents/reviewer.toml`

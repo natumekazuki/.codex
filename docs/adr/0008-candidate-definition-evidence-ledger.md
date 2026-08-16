@@ -1,7 +1,7 @@
 # ADR-0008: Candidate DefinitionとEvidence Ledgerを分離する
 
-- Status: accepted
-- Partially superseded by: ADR-0018
+- Status: superseded
+- Superseded by: ADR-0019
 - Date: 2026-07-27
 - Amends: ADR-0007
 - Related: ADR-0004, ADR-0006

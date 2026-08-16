@@ -4,8 +4,8 @@
 
 - 最初に要求、制約、期待結果、完了条件、authority境界を短く整理し、関連するsourceとexecutable contractを読んでから判断する。
 - answer、explain、review、diagnose、planは必要なread-only調査と報告まで行い、変更依頼がない限り実装しない。
-- change、build、fixは依頼範囲のlocal変更と非破壊的な検証を進める。通常の読み取り、検索、編集、testに追加確認は要らない。
-- external write、破壊的操作、購入、履歴改変、commit、push、または依頼範囲の実質的な拡張には明示確認を求める。ただし、WithMate Memoryの保存は§6のauthority境界に従う。
+- change、build、fixは依頼範囲のlocal変更、非破壊的な検証、task / feature branchへの通常の追加commitを進める。通常の読み取り、検索、編集、test、許可済みcommitに追加確認は要らない。
+- external write、破壊的操作、購入、default / main / protected branchへのcommit、amend / rebase / resetなどの履歴改変、push、または依頼範囲の実質的な拡張には明示確認を求める。ただし、WithMate Memoryの保存は§6のauthority境界に従う。
 - ユーザーの未コミット変更を保護し、巻き戻し、上書き、無断のstage、clean、無関係な変更の混入をしない。
 - 差分量より、根本原因、既存の責務境界、整合した最終状態を優先する。仕様、API、依存関係、不明な事実を捏造しない。
 - 暫定対応を採る場合は、理由、残るリスク、恒久対応へ進む条件を追跡可能に残す。
@@ -18,8 +18,8 @@
 - 局所的な理由や制約はcode commentへ置き、codeから分かる処理内容は繰り返さない。複数案から選んだ長期的または後戻り困難な判断はADRへ置く。
 - ADR以外の恒久設計文書は、複数subsystem、process、repo、外部serviceへ波及し、sourceとexecutable contractから全体を復元できず、誤解が全体不整合を生む場合だけ作る。現行class構成や通常のAPI仕様を複製しない。
 - README、user guide、runbook、setup、運用手順は利用方法や運用が変わるときに更新する。repository-ownedな情報をMemoryやtask-local noteだけに置かない。
-- System Promptで`SessionFolder`が提供される場合は、repositoryへ入れる必要がないユーザー入力と、repositoryへ入れずユーザーへ共有する成果物の受け渡し先として使う。SessionFolder上のメモは正本にせず、恒久契約、実装、検証根拠は適切なrepository artifactへ反映する。
-- Codex設定ディレクトリやOSのTEMPを、SessionFolderの代替となる共有場所または成果物置き場にしない。TEMPはprocess終了や時間経過で失われてもよい処理用fileだけに使う。Folder Contextはpathを通知するだけでfilesystem authorityを拡張しない。
+- System Promptで`SessionFolder`が提供される場合は、repositoryへ入れる必要がないユーザー入力と、repositoryへ入れずユーザーへ共有する成果物の受け渡し先として使う。exact-source reviewの一時worktreeにも、filesystem authority内の`<SessionFolder>/review-worktrees/<repositoryId>/<reviewCommitOid>`を第一候補として使う。SessionFolder上のメモや一時worktreeは正本にせず、恒久契約、実装、検証根拠は適切なrepository artifactへ反映する。
+- Codex設定ディレクトリやOSのTEMPを、SessionFolderの代替となる共有場所、成果物置き場、review worktree rootにしない。SessionFolderがない場合のreview worktreeに限り、repository内でgitignore済みの`.agent-worktrees/reviews/<reviewCommitOid>`をfallbackとして使える。Folder Contextはpathを通知するだけでfilesystem authorityを拡張しない。
 - 意図を確定できず、選択が結果を実質的に変える場合は、根拠、選択肢、consumer影響、推奨案を示して確認を求める。
 
 ## 3. Standard Task Workflow
@@ -28,7 +28,7 @@
 2. repository taskでは、適用instruction、branch、dirty worktree、既存差分、関連source、executable contract、comment、accepted ADR、直接関係する文書を読む。再開時も専用snapshotを前提にせず、現在のgitと正本から再開点を組み立てる。
 3. 結果を変える不明点だけユーザーへ確認する。answer、explain、review、diagnose、planは必要なread-only check後に報告し、変更を加えない。
 4. change、build、fixでは、accepted contract、failure mode、観測可能な影響、契約を所有する最小の安定境界を決める。複数の独立責務がある場合だけ会話内checklistまたは例外的なplan fileへ分ける。
-5. 既存の責務境界、標準parser、妥当な既存patternを優先して実装し、対象failure modeを最も直接検出するcheckを実行する。bug fixは費用対効果が合う範囲で修正前の失敗と修正後の解消を確認する。
+5. 既存の責務境界、標準parser、妥当な既存patternを優先して実装し、対象failure modeを最も直接検出するcheckを実行する。変更したscopeにsemantic ownerの分散、独立責務の混在、canonical boundaryの迂回、decisionの重複、またはprivate wiringへのtest couplingが生じた具体的なevidenceがある場合は、accepted behaviorを保ったまま責務と依存方向を同じ実装内で収束させ、checkを再実行する。bug fixは費用対効果が合う範囲で修正前の失敗と修正後の解消を確認する。
 6. 高リスク境界、またはtargeted checkでは直接検証できない具体的なinteractionがある場合だけ独立reviewを行う。file数、diff量、PR作成、reviewerの空き、または「念のため」をtriggerにしない。
 7. 必要なADR、利用者文書、runbookを更新し、主要な回帰リスクに応じてlint、typecheck、build、smoke testへ検証を広げる。
 8. 対象差分と検証結果を確認し、許可されたexternal actionだけを実行する。最後に変更、実行済み検証、未実行、残リスクを短く報告する。
@@ -53,7 +53,10 @@
 - public API、永続化、migration、外部副作用、認可、security、並行処理、resource limit、owner / scope、または複合不変条件を変更、修正、reviewする場合は、source編集前に`contract-closure` Skillでaccepted contract、Invariant、sibling scope、failure timing、直接検証を展開する。
 - 局所的・単一責務でtargeted checkがaccepted contractを直接検証できるsliceは独立reviewを起動しない。
 - targeted checkでは直接検証できない具体的なinteractionは`slice_reviewer`、高リスク境界を持つsliceまたは`contract-closure`が要求するtargeted reviewは`targeted_reviewer`へ渡す。
-- high-riskまたはnon-localな独立reviewでexact source stateの固定が必要な場合だけ、`contract-closure`が提供するCandidate snapshotとReview Brief builderを同一review cycle内で使う。schemaと検証recipeはtoolを正本とし、AGENTSやrole contractへfieldを複製しない。
+- exact source stateを必要とする独立reviewは、Git管理されたrepositoryのcommit済みsourceだけを対象とする。rootまたはruntimeはimmutableな`baseCommitOid`と`reviewCommitOid`を固定し、`reviewCommitOid`をcheckoutしたcleanなdetached worktreeを`reviewTarget`として用意する。reviewerはsubstantive review前に、明示されたtargetでHEAD一致、tracked / untrackedのcleanliness、commit objectの存在、base ancestryをread-onlyで検証する。実装branchはreview中も進めてよい。
+- review用branchは作らない。全reviewerがapprove、finding、validation gap、deadline、interruptのいずれかで終了した後、rootまたはruntimeは`reviewTarget`の正規化済みpathが選択したreview worktree root配下にあり、HEADが`reviewCommitOid`と一致し、tracked / untrackedともcleanであることを確認してから`git worktree remove`で後始末する。path、HEAD、cleanlinessが一致しない場合は`--force`で削除せずvalidation gapとして報告する。実装branchとreview対象commitは後始末の対象にしない。
+- review task messageには`reviewTarget`、`baseCommitOid`、`reviewCommitOid`、included / excluded scope、accepted contractとInvariant、`executedOnCommitOid`付きの実行済みcheck、review trigger、有限のdeadlineを渡す。Git未管理または未commitのsourceにsnapshot fallbackを作らず、review必須ならvalidation gapとして停止し、任意ならdirect checkだけで閉じてreview未実施を報告する。
+- check evidenceは実行対象の`executedOnCommitOid`に固定し、別commitのcurrent evidenceへ付け替えない。commit Aのholistic resultはAへ固定する。finding修正commit BはB上のdirect checkとA..Bのfinding family / resulting deltaに限定したtargeted closureで閉じ、holistic reviewを再実行しない。別semantic ownerの後続変更は別の論理変更へ分ける。
 - `Full-review gate`の既定は`skip`とする。高リスクまたはnon-localな境界、複数subsystem間の未確認interaction、targeted checkでは直接検証できないcross-cutting contractがある場合だけ`run`とし、一つの論理変更につきcomplete-diff holistic reviewを一度だけ`reviewer`へ渡す。`run`時またはvalidation gapがある場合だけ判断根拠をユーザーへ報告する。
 - `blocking` findingはaccepted contractまたは明示された安全境界への違反、現実的な到達条件、具体的な影響、sourceまたはexecutable contractのevidenceを必要とする。style preference、一般的なhardening、到達不能な仮説をblockingにしない。
 - review findingは、root sessionが`contract-closure`のFinding Promotionを使って`blocking`、`risk-candidate`、`non-material`、`invalid`へ分類する。証拠不足は`investigation-pending`とし、source scopeを先に広げない。
@@ -94,5 +97,5 @@
 - change / build / fixの完了報告は、変更内容、実行した検証、未実行の検証、残リスクを短く示す。low-riskで暗黙にskipしたgateや作らなかったartifactを列挙しない。
 - external actionは対象、実行結果、read-backしたpostcondition、部分成功またはvalidation gapを区別する。
 - 生成物ではrepo内pathをrepo root相対で示し、logは必要な行だけを抜き出す。
-- commitとpushは別々の外部作用として扱い、それぞれ明示依頼がある場合だけ行う。commit前にstatusと対象diffを確認し、対象pathまたはhunkだけをstageして既存のstaged変更へ無断で混ぜない。
+- change / build / fixでtask / feature branchへ通常の追加commitを行うauthorityは依頼に含める。default / main / protected branchへのcommit、amend / rebase / resetなどの履歴改変、pushは別の外部作用として扱い、それぞれ明示依頼がある場合だけ行う。commit前にstatusと対象diffを確認し、対象pathまたはhunkだけをstageして既存のstaged変更へ無断で混ぜない。
 - commit messageはconventional commits形式とし、commitした場合はhash、要約、検証結果を報告する。

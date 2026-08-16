@@ -1,14 +1,17 @@
 # ADR-0007: frozen Candidateと不変条件lensでhigh-risk reviewを収束させる
 
-- Status: accepted, amended by ADR-0008, ADR-0012, and ADR-0013, partially superseded by ADR-0018
+- Status: accepted, amended by ADR-0008, ADR-0012, and ADR-0013, partially superseded by ADR-0018 and ADR-0019
 - Date: 2026-07-26
 - Amends: ADR-0004, ADR-0005
 - Related: ADR-0006
 - Amended by: ADR-0008 (2026-07-27), ADR-0012 (2026-08-03), ADR-0013 (2026-08-03)
+- Partially superseded by: ADR-0019 (2026-08-16)
 
 ## Amendment
 
 ADR-0012は、specialist review後のholistic complete-diff reviewを`Full-review gate=run`の場合の一度に限定し、そのfinding修正後のfresh-context full-diff closure reviewを廃止する。specialist lens、Candidate、Evidence Ledger、同一Candidateへ証拠を揃える決定は維持する。ADR-0013は、実運用で確認された観点混在を受け、初期導入の単一`reviewer` roleをholistic専用`reviewer`とtargeted / specialist / closure専用`targeted_reviewer`へ分割する。lensごとの専用roleは追加しない。
+
+ADR-0019はCandidateとEvidence Ledgerをcommit-bound sourceとtask-local evidenceへ置き換える。specialist lensとreview kindの分離は維持する。
 
 ## Context
 

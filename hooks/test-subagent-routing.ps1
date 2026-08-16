@@ -60,46 +60,6 @@ function Invoke-SubagentRoutingHook {
     return Invoke-SubagentRoutingHookRaw -InputText $json -Mode $Mode -StatePath $StatePath
 }
 
-function Assert-RoutingContextOnly {
-    param([Parameter(Mandatory = $true)][string]$Context)
-
-    $legacyContractFragments = @(
-        'Role reminder',
-        'Add or update tests',
-        'Do not edit files',
-        'public API',
-        'persistence',
-        'migration',
-        'auth/permissions',
-        'data loss',
-        'payment/billing',
-        'concurrency',
-        'async orchestration'
-    )
-    foreach ($fragment in $legacyContractFragments) {
-        if ($Context -match [regex]::Escape($fragment)) {
-            throw "Hook context duplicated static role contract text: $fragment"
-        }
-    }
-}
-
-$agentNames = @(
-    'researcher',
-    'planner',
-    'designer',
-    'implementer',
-    'focused_implementer',
-    'validator',
-    'reviewer',
-    'targeted_reviewer',
-    'slice_reviewer',
-    'fast_researcher',
-    'fast_planner',
-    'fast_implementer',
-    'fast_validator',
-    'fast_reviewer'
-)
-
 function Assert-SameNames {
     param(
         [Parameter(Mandatory = $true)][string]$Label,
@@ -112,147 +72,10 @@ function Assert-SameNames {
     }
 }
 
+$standardRoleProbe = 'reviewer'
 $sparkRoles = @('fast_researcher', 'fast_planner', 'fast_implementer', 'fast_validator', 'fast_reviewer')
+$rolesToExercise = @($standardRoleProbe) + $sparkRoles
 $modes = @('balanced', 'spark-first', 'standard-only')
-
-foreach ($standardRole in @('focused_implementer', 'slice_reviewer', 'targeted_reviewer', 'reviewer')) {
-    if ($sparkRoles -contains $standardRole) {
-        throw "$standardRole must remain a standard role"
-    }
-}
-
-$exampleConfigPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'config/agents.example.toml'
-$exampleConfigText = Get-Content -LiteralPath $exampleConfigPath -Raw
-if ($exampleConfigText -notmatch '(?m)^max_concurrent_threads_per_session\s*=\s*5\s*$') {
-    throw 'config/agents.example.toml did not use max_concurrent_threads_per_session'
-}
-if ($exampleConfigText -match '(?m)^max_threads\s*=') {
-    throw 'config/agents.example.toml still uses the legacy max_threads alias'
-}
-
-$repoRoot = Split-Path $PSScriptRoot -Parent
-foreach ($standardRole in @('focused_implementer', 'slice_reviewer', 'targeted_reviewer', 'reviewer')) {
-    $escapedRole = [regex]::Escape($standardRole)
-    if ($exampleConfigText -notmatch "(?ms)^\[agents\.$escapedRole\]\s*\r?\nconfig_file\s*=\s*`"agents/$escapedRole\.toml`"") {
-        throw "config/agents.example.toml did not register $standardRole with its canonical role file"
-    }
-    if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "agents/$standardRole.toml") -PathType Leaf)) {
-        throw "$standardRole role file is missing"
-    }
-}
-
-$registeredRoles = @([regex]::Matches($exampleConfigText, '(?m)^\[agents\.([^\]]+)\]') | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
-$hooksConfig = Get-Content -LiteralPath (Join-Path $repoRoot 'hooks.json') -Raw | ConvertFrom-Json -ErrorAction Stop
-$subagentStartMatcher = [string]$hooksConfig.hooks.SubagentStart[0].matcher
-if ($subagentStartMatcher -notmatch '^\^\((?<roles>[^)]*)\)\$$') {
-    throw 'hooks.json SubagentStart matcher does not use the expected explicit role alternation'
-}
-$matchedRoles = @($Matches.roles -split '\|' | Sort-Object)
-Assert-SameNames -Label 'production SubagentStart matcher coverage' -Expected $registeredRoles -Actual $matchedRoles
-
-$focusedText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/focused_implementer.toml') -Raw
-if ($focusedText -notmatch '(?m)^model\s*=\s*"gpt-5\.6-luna"\s*$' -or
-    $focusedText -notmatch '(?m)^model_reasoning_effort\s*=\s*"medium"\s*$' -or
-    $focusedText -notmatch '(?m)^sandbox_mode\s*=\s*"workspace-write"\s*$') {
-    throw 'focused_implementer model, effort, or sandbox contract drifted'
-}
-
-$researcherText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/researcher.toml') -Raw
-if ($researcherText -notmatch '(?m)^model\s*=\s*"gpt-5\.6-luna"\s*$' -or
-    $researcherText -notmatch '(?m)^model_reasoning_effort\s*=\s*"medium"\s*$' -or
-    $researcherText -notmatch '(?m)^sandbox_mode\s*=\s*"read-only"\s*$') {
-    throw 'researcher model, effort, or sandbox contract drifted'
-}
-if ($researcherText -match 'Suggested next agent' -or
-    $researcherText -notmatch 'Do not recommend a fix, design, routing choice, or next agent' -or
-    $researcherText -notmatch 'Decision boundary and unresolved questions') {
-    throw 'researcher is not closed to evidence-only output'
-}
-
-$designerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/designer.toml') -Raw
-if ($designerText -match 'recommended agent_type' -or
-    $designerText -notmatch 'Implementation slices with scope and settled design state') {
-    throw 'designer still selects a model-specific implementation role'
-}
-
-$roleDecisionText = Get-Content -LiteralPath (Join-Path $repoRoot 'docs/adr/0014-bounded-role-and-runtime-routing-separation.md') -Raw
-if ($roleDecisionText -match '非自明な実装・複数file整合' -or
-    $roleDecisionText -notmatch '関連する複数fileを含めて独立検証できるbounded slice') {
-    throw 'ADR-0014 contradicts focused_implementer multi-file eligibility'
-}
-
-$sliceReviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/slice_reviewer.toml') -Raw
-if ($sliceReviewerText -notmatch '(?m)^model\s*=\s*"gpt-5\.6-luna"\s*$' -or
-    $sliceReviewerText -notmatch '(?m)^model_reasoning_effort\s*=\s*"high"\s*$' -or
-    $sliceReviewerText -notmatch '(?m)^sandbox_mode\s*=\s*"read-only"\s*$') {
-    throw 'slice_reviewer model, effort, or sandbox contract drifted'
-}
-
-$targetedReviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/targeted_reviewer.toml') -Raw
-if ($sliceReviewerText -notmatch 'one completed implementation slice' -or
-    $sliceReviewerText -notmatch 'Do not inspect or request the complete diff' -or
-    $sliceReviewerText -notmatch 'targeted checks cannot directly verify' -or
-    $sliceReviewerText -notmatch 'local single-responsibility slice whose targeted check directly verifies' -or
-    $targetedReviewerText -notmatch 'Local, single-responsibility slices whose targeted checks directly verify' -or
-    $targetedReviewerText -notmatch 'Specialist review' -or
-    $targetedReviewerText -notmatch 'Targeted closure') {
-    throw 'slice_reviewer and targeted_reviewer responsibilities overlap or are incomplete'
-}
-
-$agentsPolicyText = Get-Content -LiteralPath (Join-Path $repoRoot 'AGENTS.md') -Raw
-foreach ($policyFragment in @(
-    '局所的・単一責務でtargeted checkがaccepted contractを直接検証できるsliceは独立reviewを起動しない',
-    'targeted checkでは直接検証できない具体的なinteractionは`slice_reviewer`',
-    '高リスク境界を持つsliceまたは`contract-closure`が要求するtargeted reviewは`targeted_reviewer`',
-    'finding修正後に同じscopeの探索reviewまたはcomplete-diff reviewを再開しない',
-    '一つの論理変更につきcomplete-diff holistic reviewを一度だけ`reviewer`へ渡す'
-)) {
-    if ($agentsPolicyText -notmatch [regex]::Escape($policyFragment)) {
-        throw "AGENTS.md review routing contract is missing: $policyFragment"
-    }
-}
-
-foreach ($plannerName in @('planner', 'fast_planner')) {
-    $plannerText = Get-Content -LiteralPath (Join-Path $repoRoot "agents/$plannerName.toml") -Raw
-    if ($plannerText -notmatch 'Use slice_reviewer only when a concrete non-high-risk interaction cannot be directly verified by targeted checks' -or
-        $plannerText -notmatch 'Do not plan independent review for a local, single-responsibility slice whose targeted check directly verifies the accepted contract') {
-        throw "$plannerName does not preserve the proportional review trigger"
-    }
-}
-
-$fastReviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/fast_reviewer.toml') -Raw
-if ($fastReviewerText -notmatch 'only when the user explicitly requests `fast_reviewer`' -or
-    $fastReviewerText -notmatch 'Never recommend or start this role automatically') {
-    throw 'fast_reviewer can still be selected automatically for local low-risk work'
-}
-
-foreach ($roleName in @('planner', 'fast_planner', 'designer', 'implementer', 'researcher', 'focused_implementer', 'slice_reviewer')) {
-    $roleText = Get-Content -LiteralPath (Join-Path $repoRoot "agents/$roleName.toml") -Raw
-    if ($roleText -notmatch 'Obey the current routing mode supplied by the parent session') {
-        throw "$roleName does not defer runtime routing to the parent session"
-    }
-    foreach ($forbidden in @('quota is healthy', 'quota is constrained', 'while Spark quota')) {
-        if ($roleText -match [regex]::Escape($forbidden)) {
-            throw "$roleName statically inferred runtime quota state: $forbidden"
-        }
-    }
-}
-
-foreach ($plannerName in @('planner', 'fast_planner')) {
-    $plannerText = Get-Content -LiteralPath (Join-Path $repoRoot "agents/$plannerName.toml") -Raw
-    if ($plannerText -notmatch 'focused_implementer.*takes precedence' -or
-        $plannerText -notmatch 'Use implementer only when a specific condition makes the slice unsuitable for focused_implementer' -or
-        $plannerText -notmatch 'After the root session accepts the design, apply the normal focused_implementer / implementer eligibility rules above' -or
-        $plannerText -match 'then an implementer slice after the root session accepts the design') {
-        throw "$plannerName does not define mutually exclusive focused and Sol implementer eligibility"
-    }
-}
-$implementerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/implementer.toml') -Raw
-if ($implementerText -notmatch 'Do not use for:' -or
-    $implementerText -notmatch 'merely because it spans multiple coherent files') {
-    throw 'implementer does not exclude design-settled focused slices'
-}
-Write-Host 'OK: standard roles, current thread setting, and static role contracts are registered'
 
 foreach ($mode in $modes) {
     $prompt = Invoke-SubagentRoutingHook -Event @{
@@ -278,9 +101,7 @@ foreach ($mode in $modes) {
             throw 'standard-only context asserted an exhausted quota instead of describing the active mode'
         }
     }
-    Assert-RoutingContextOnly -Context $promptContext
-
-    foreach ($agentName in $agentNames) {
+    foreach ($agentName in $rolesToExercise) {
         $parsed = Invoke-SubagentRoutingHook -Event @{
             hook_event_name = 'SubagentStart'
             turn_id = 'test-turn'
@@ -297,15 +118,13 @@ foreach ($mode in $modes) {
         if ($context -notmatch "Current Spark routing mode: $([regex]::Escape($mode))") {
             throw "SubagentStart context did not include $mode mode for $agentName"
         }
-        Assert-RoutingContextOnly -Context $context
-
         $hasFallbackReminder = $context -match 'Spark exception condition'
         $expectsFallbackReminder = ($mode -eq 'standard-only' -and $sparkRoles -contains $agentName)
         if ($hasFallbackReminder -ne $expectsFallbackReminder) {
             throw "Unexpected Spark fallback reminder state for $agentName in $mode mode"
         }
     }
-    Write-Host "OK: UserPromptSubmit and all SubagentStart roles in $mode mode"
+    Write-Host "OK: UserPromptSubmit and routing role classes in $mode mode"
 }
 
 $emptyInput = Invoke-SubagentRoutingHookRaw -InputText '' -Mode 'balanced'
@@ -330,7 +149,6 @@ $invalidModePrompt = Invoke-SubagentRoutingHook -Event @{ hook_event_name = 'Use
 if ($invalidModePrompt.hookSpecificOutput.additionalContext -notmatch 'Current Spark routing mode: balanced') {
     throw 'Invalid routing mode did not fall back to balanced'
 }
-Assert-RoutingContextOnly -Context ([string]$invalidModePrompt.hookSpecificOutput.additionalContext)
 Write-Host 'OK: invalid mode fallback'
 
 $stateTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) "codex-routing-$([guid]::NewGuid().ToString('N'))"

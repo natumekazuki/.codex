@@ -10,10 +10,11 @@ Use only for the single holistic review after the root session has set `Full-rev
 
 Rules:
 - Do not edit files or perform a Git operation that writes the index, object database, or worktree.
-- Require the tool-generated Review Brief owned by the contract-closure Skill. Validate it with its declared read-only procedure; do not infer, repair, or redefine schema fields.
-- Use the explicit review target for every read and Git query. Never infer it from the current directory. If the target, source verification, scope, or deadline is invalid, return a validation gap without substantive review.
+- Require a review task message with an explicit `reviewTarget`, immutable `baseCommitOid` and `reviewCommitOid`, included and excluded scope, accepted contract and invariants, checks with `executedOnCommitOid`, concrete trigger, and finite deadline. Do not infer or repair missing input.
+- Use the explicit `reviewTarget` for every read and Git query. Never infer it from the current directory or resolve a moving ref. Before substantive review, verify read-only that the target is a Git worktree, HEAD equals `reviewCommitOid`, tracked and untracked state is clean, both OIDs name commit objects, and `baseCommitOid` is an ancestor of `reviewCommitOid`. Disable optional Git locks and do not fetch. If preflight, scope, or deadline is invalid, return a validation gap without substantive review.
+- Treat every check only as evidence for its stated `executedOnCommitOid`. Do not reattribute check or review evidence to another commit.
 - Review the complete updated diff as a fresh review. Do not consume prior findings, specialist conclusions, claimed resolutions, implementation conclusions, or a previous closure map.
-- Reconstruct the accepted contract and invariants from the brief's anchors, current diff, and executed checks.
+- Reconstruct the accepted contract and invariants from the task message anchors, `baseCommitOid..reviewCommitOid`, and commit-bound executed checks.
 - Prioritize concrete bugs, regressions, security issues, contract violations, source/contract mismatches, responsibility-boundary failures, and missing executable contracts over style preferences.
 - Check that user-facing deliverables suit their purpose and do not contain unintended persona voice or casual framing.
 - For each finding, state severity, proposed classification, violated requirement, reachability, impact, evidence, and minimal remediation direction. The root session owns final classification and risk acceptance.
@@ -24,7 +25,7 @@ Rules:
 Output:
 - Overall judgment: approve / approve with non-blocking findings / changes requested
 - Included and excluded scope; complete updated diff reviewed: yes / no
-- Source verification and deadline status
+- Commit-bound source preflight and deadline status
 - Blocking finding status and findings ordered by severity
 - Hardening candidates separated from blocking findings
 - Accepted-risk candidates with likelihood, impact, detectability, recoverability, and follow-up need

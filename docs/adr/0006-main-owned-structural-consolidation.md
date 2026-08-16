@@ -1,9 +1,10 @@
 # ADR-0006: external review前の構造収束をmain sessionが所有する
 
-- Status: accepted
+- Status: superseded
 - Date: 2026-07-25
 - Amends: ADR-0005
 - Related: ADR-0004
+- Superseded by: ADR-0019
 
 ## Context
 
