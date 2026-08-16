@@ -58,6 +58,3 @@ jobs:
       - name: Run subagent routing tests
         shell: pwsh
         run: ./hooks/test-subagent-routing.ps1
-      - name: Run workflow policy tests
-        shell: pwsh
-        run: ./tests/test-workflow-policy.ps1

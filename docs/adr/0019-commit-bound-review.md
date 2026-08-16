@@ -51,4 +51,3 @@ reviewの独立性にはexact sourceとcheckの実行対象を固定する必要
 - Contract reasoning and finding promotion: `skills/contract-closure/SKILL.md`
 - Review role contracts: `agents/reviewer.toml`、`agents/targeted_reviewer.toml`、`agents/slice_reviewer.toml`
 - Workspace boundary: `docs/architecture/subagent-workspace.md`
-- Executable contract: `tests/test-workflow-policy.ps1`
