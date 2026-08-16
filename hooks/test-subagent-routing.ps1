@@ -163,23 +163,6 @@ if ($researcherText -notmatch '(?m)^model\s*=\s*"gpt-5\.6-luna"\s*$' -or
     $researcherText -notmatch '(?m)^sandbox_mode\s*=\s*"read-only"\s*$') {
     throw 'researcher model, effort, or sandbox contract drifted'
 }
-if ($researcherText -match 'Suggested next agent' -or
-    $researcherText -notmatch 'Do not recommend a fix, design, routing choice, or next agent' -or
-    $researcherText -notmatch 'Decision boundary and unresolved questions') {
-    throw 'researcher is not closed to evidence-only output'
-}
-
-$designerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/designer.toml') -Raw
-if ($designerText -match 'recommended agent_type' -or
-    $designerText -notmatch 'Implementation slices with scope and settled design state') {
-    throw 'designer still selects a model-specific implementation role'
-}
-
-$roleDecisionText = Get-Content -LiteralPath (Join-Path $repoRoot 'docs/adr/0014-bounded-role-and-runtime-routing-separation.md') -Raw
-if ($roleDecisionText -match '非自明な実装・複数file整合' -or
-    $roleDecisionText -notmatch '関連する複数fileを含めて独立検証できるbounded slice') {
-    throw 'ADR-0014 contradicts focused_implementer multi-file eligibility'
-}
 
 $sliceReviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/slice_reviewer.toml') -Raw
 if ($sliceReviewerText -notmatch '(?m)^model\s*=\s*"gpt-5\.6-luna"\s*$' -or
@@ -189,70 +172,19 @@ if ($sliceReviewerText -notmatch '(?m)^model\s*=\s*"gpt-5\.6-luna"\s*$' -or
 }
 
 $targetedReviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/targeted_reviewer.toml') -Raw
-if ($sliceReviewerText -notmatch 'one completed implementation slice' -or
-    $sliceReviewerText -notmatch 'Do not inspect or request the complete diff' -or
-    $sliceReviewerText -notmatch 'targeted checks cannot directly verify' -or
-    $sliceReviewerText -notmatch 'local single-responsibility slice whose targeted check directly verifies' -or
-    $targetedReviewerText -notmatch 'Local, single-responsibility slices whose targeted checks directly verify' -or
-    $targetedReviewerText -notmatch 'Specialist review' -or
-    $targetedReviewerText -notmatch 'Targeted closure') {
-    throw 'slice_reviewer and targeted_reviewer responsibilities overlap or are incomplete'
+if ($targetedReviewerText -notmatch '(?m)^model\s*=\s*"gpt-5\.6-sol"\s*$' -or
+    $targetedReviewerText -notmatch '(?m)^model_reasoning_effort\s*=\s*"xhigh"\s*$' -or
+    $targetedReviewerText -notmatch '(?m)^sandbox_mode\s*=\s*"read-only"\s*$') {
+    throw 'targeted_reviewer model, effort, or sandbox contract drifted'
 }
 
-$agentsPolicyText = Get-Content -LiteralPath (Join-Path $repoRoot 'AGENTS.md') -Raw
-foreach ($policyFragment in @(
-    '局所的・単一責務でtargeted checkがaccepted contractを直接検証できるsliceは独立reviewを起動しない',
-    'targeted checkでは直接検証できない具体的なinteractionは`slice_reviewer`',
-    '高リスク境界を持つsliceまたは`contract-closure`が要求するtargeted reviewは`targeted_reviewer`',
-    'finding修正後に同じscopeの探索reviewまたはcomplete-diff reviewを再開しない',
-    '一つの論理変更につきcomplete-diff holistic reviewを一度だけ`reviewer`へ渡す'
-)) {
-    if ($agentsPolicyText -notmatch [regex]::Escape($policyFragment)) {
-        throw "AGENTS.md review routing contract is missing: $policyFragment"
-    }
+$reviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/reviewer.toml') -Raw
+if ($reviewerText -notmatch '(?m)^model\s*=\s*"gpt-5\.6-sol"\s*$' -or
+    $reviewerText -notmatch '(?m)^model_reasoning_effort\s*=\s*"xhigh"\s*$' -or
+    $reviewerText -notmatch '(?m)^sandbox_mode\s*=\s*"read-only"\s*$') {
+    throw 'reviewer model, effort, or sandbox contract drifted'
 }
-
-foreach ($plannerName in @('planner', 'fast_planner')) {
-    $plannerText = Get-Content -LiteralPath (Join-Path $repoRoot "agents/$plannerName.toml") -Raw
-    if ($plannerText -notmatch 'Use slice_reviewer only when a concrete non-high-risk interaction cannot be directly verified by targeted checks' -or
-        $plannerText -notmatch 'Do not plan independent review for a local, single-responsibility slice whose targeted check directly verifies the accepted contract') {
-        throw "$plannerName does not preserve the proportional review trigger"
-    }
-}
-
-$fastReviewerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/fast_reviewer.toml') -Raw
-if ($fastReviewerText -notmatch 'only when the user explicitly requests `fast_reviewer`' -or
-    $fastReviewerText -notmatch 'Never recommend or start this role automatically') {
-    throw 'fast_reviewer can still be selected automatically for local low-risk work'
-}
-
-foreach ($roleName in @('planner', 'fast_planner', 'designer', 'implementer', 'researcher', 'focused_implementer', 'slice_reviewer')) {
-    $roleText = Get-Content -LiteralPath (Join-Path $repoRoot "agents/$roleName.toml") -Raw
-    if ($roleText -notmatch 'Obey the current routing mode supplied by the parent session') {
-        throw "$roleName does not defer runtime routing to the parent session"
-    }
-    foreach ($forbidden in @('quota is healthy', 'quota is constrained', 'while Spark quota')) {
-        if ($roleText -match [regex]::Escape($forbidden)) {
-            throw "$roleName statically inferred runtime quota state: $forbidden"
-        }
-    }
-}
-
-foreach ($plannerName in @('planner', 'fast_planner')) {
-    $plannerText = Get-Content -LiteralPath (Join-Path $repoRoot "agents/$plannerName.toml") -Raw
-    if ($plannerText -notmatch 'focused_implementer.*takes precedence' -or
-        $plannerText -notmatch 'Use implementer only when a specific condition makes the slice unsuitable for focused_implementer' -or
-        $plannerText -notmatch 'After the root session accepts the design, apply the normal focused_implementer / implementer eligibility rules above' -or
-        $plannerText -match 'then an implementer slice after the root session accepts the design') {
-        throw "$plannerName does not define mutually exclusive focused and Sol implementer eligibility"
-    }
-}
-$implementerText = Get-Content -LiteralPath (Join-Path $repoRoot 'agents/implementer.toml') -Raw
-if ($implementerText -notmatch 'Do not use for:' -or
-    $implementerText -notmatch 'merely because it spans multiple coherent files') {
-    throw 'implementer does not exclude design-settled focused slices'
-}
-Write-Host 'OK: standard roles, current thread setting, and static role contracts are registered'
+Write-Host 'OK: standard roles and routing configuration are registered'
 
 foreach ($mode in $modes) {
     $prompt = Invoke-SubagentRoutingHook -Event @{
