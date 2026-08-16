@@ -1,9 +1,14 @@
 # ADR-0018: 標準workflowを最小化し、独立reviewをriskに比例させる
 
-- Status: accepted
+- Status: accepted, partially superseded by ADR-0019
 - Date: 2026-08-13
 - Partially supersedes: ADR-0005, ADR-0007, ADR-0008, ADR-0011, ADR-0012, ADR-0013
 - Amends: ADR-0016
+- Partially superseded by: ADR-0019 (2026-08-16)
+
+## Amendment
+
+ADR-0019はCandidate snapshot、Review Brief builder、`consolidate-structure` Skillを廃止し、Git commitをsource identityとするreviewへ置き換える。本ADRの最小workflow、risk比例review、runtime gapをvalidation gapとして扱う決定は維持する。
 
 ## Context
 

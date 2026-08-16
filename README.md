@@ -29,7 +29,6 @@
 | --- | --- | --- |
 | `commit-note` | 軽量 | commit message と commit 前後の短い記録を整える |
 | `contract-closure` | 専門 | 高リスクな契約変更の不変条件を兄弟入口、状態遷移、failure timing、scopeへ展開し、直接検証と反証reviewで閉じる |
-| `consolidate-structure` | 専門 | review前に、具体的なtopology evidenceがある変更だけを一回のbounded consolidationで収束させる |
 | `withmate-memory` | runtime管理 | WithMateが自動配置し、injected Character context、MCP優先のCharacter Memory / affect / semantic Memoryの運用契約を提供する |
 | `relaygraph` | 専門 | RelayGraph の関係グラフ調査、検証、ルール作成を行う |
 | `japanese-tech-writing-review` | 専門 | 日本語の技術文書を論証、読み手の負荷、用語、Markdown表記の観点で推敲する |
@@ -57,7 +56,8 @@
 - ADR に該当する決定は必ず残し、それ以外の恒久設計文書は複数 subsystem / process / repo / 外部 service に波及し、code と executable contract から復元できない非局所情報だけに限定する
 - task-local な設計メモを repo 設計書へ同期する workflow は採用しない
 - 汎用templatesはADR、例外的なfile plan、review、非局所architecture文書の最小骨格に留め、Skill固有templateは各Skill内を正本とする
-- 専用作業領域や分離作業ツリーは標準契約にしない
+- 通常の実装に専用作業領域や分離作業ツリーを要求しない
+- exact source stateを必要とする独立reviewはGit commitへ固定し、cleanなdetached worktreeで実行する。Git未管理または未commitのsourceにはsnapshot fallbackを設けない
 
 ## Model and Routing
 

@@ -1,9 +1,10 @@
 # ADR-0013: review kindごとにsubagent roleとrouting責務を分離する
 
-- Status: accepted, partially superseded by ADR-0018
+- Status: accepted, partially superseded by ADR-0018 and ADR-0019
 - Date: 2026-08-03
 - Amends: ADR-0004, ADR-0007, ADR-0012
 - Related: ADR-0008, ADR-0011
+- Partially superseded by: ADR-0019 (2026-08-16)
 
 ## Context
 
