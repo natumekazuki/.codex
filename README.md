@@ -58,6 +58,7 @@
 - 汎用templatesはADR、例外的なfile plan、review、非局所architecture文書の最小骨格に留め、Skill固有templateは各Skill内を正本とする
 - 通常の実装に専用作業領域や分離作業ツリーを要求しない
 - exact source stateを必要とする独立reviewはGit commitへ固定し、cleanなdetached worktreeで実行する。Git未管理または未commitのsourceにはsnapshot fallbackを設けない
+- review worktreeはSessionFolder配下を第一候補、gitignore済みの`.agent-worktrees/reviews/`をfallbackとし、review用branchを作らず全reviewer終了後に安全確認して削除する
 
 ## Model and Routing
 

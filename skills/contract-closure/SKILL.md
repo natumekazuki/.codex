@@ -67,6 +67,7 @@ Gate: ready / unresolved
 
 - exact source stateを必要とするreviewは、Git管理されたrepositoryのcommit済みsourceだけで行う。非Gitまたは未commitのsourceへsnapshot fallbackを作らない。review必須ならvalidation gap、任意ならdirect checkのみとして扱う。
 - rootまたはruntimeに、immutableな`baseCommitOid`と`reviewCommitOid`を固定させ、`reviewCommitOid`をcheckoutしたcleanなdetached worktreeを`reviewTarget`として用意させる。実装branchはreview中も進めてよい。
+- `reviewTarget`の配置と後始末は`AGENTS.md`のSessionFolder優先、gitignore済みrepository fallback、全終了経路cleanup契約へ従わせる。review用branchを作らせず、path、HEAD、cleanlinessが一致しないworktreeを`--force`で削除させない。
 - review task messageへ`reviewTarget`、両OID、included / excluded scope、accepted contractとInvariant、`executedOnCommitOid`付きの実行済みcheck、割り当てるlensまたはtrigger、有限のdeadlineを含める。
 - reviewerに、明示されたtargetでHEAD一致、tracked / untrackedのcleanliness、commit objectの存在、base ancestryをread-onlyで確認させる。preflightが失敗した場合はsubstantive reviewを行わずvalidation gapを返させる。
 - checkとreview結果を対象commitへ固定する。commit Aのholistic resultを修正commit Bへ付け替えない。B上のdirect checkとA..Bのfinding family / resulting deltaに限定したtargeted closureで閉じ、holistic reviewを再実行しない。

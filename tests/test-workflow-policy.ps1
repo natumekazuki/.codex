@@ -71,6 +71,13 @@ $agentsContracts = @(
     @{ Label = 'immutable base OID'; Pattern = 'baseCommitOid' },
     @{ Label = 'immutable review OID'; Pattern = 'reviewCommitOid' },
     @{ Label = 'explicit detached review target'; Pattern = 'detached worktree.+reviewTarget' },
+    @{ Label = 'SessionFolder-first review root'; Pattern = 'SessionFolder.+review-worktrees.+repositoryId.+reviewCommitOid' },
+    @{ Label = 'gitignored repository fallback'; Pattern = 'gitignore済み.+\.agent-worktrees/reviews' },
+    @{ Label = 'review branch prohibition'; Pattern = 'review用branchは作らない' },
+    @{ Label = 'terminal-path cleanup'; Pattern = 'approve.+finding.+validation gap.+deadline.+interrupt' },
+    @{ Label = 'safe worktree removal'; Pattern = 'git worktree remove' },
+    @{ Label = 'force removal prohibition'; Pattern = '--force.+削除せずvalidation gap' },
+    @{ Label = 'implementation branch preservation'; Pattern = '実装branchとreview対象commitは後始末の対象にしない' },
     @{ Label = 'commit-bound check evidence'; Pattern = 'executedOnCommitOid' },
     @{ Label = 'non-Git review gap'; Pattern = 'Git未管理または未commit.+validation gap' },
     @{ Label = 'repair commit closure'; Pattern = 'A\.\.B.+targeted closure' },
@@ -102,6 +109,10 @@ foreach ($required in @(
     'baseCommitOid',
     'reviewCommitOid',
     'executedOnCommitOid',
+    'SessionFolder優先',
+    '全終了経路cleanup',
+    'review用branchを作らせず',
+    '--force',
     'python -X utf8 <skill-creator>/scripts/quick_validate.py skills/contract-closure'
 )) {
     if ($contractSkillText -notmatch [regex]::Escape($required)) {
@@ -180,7 +191,7 @@ if (-not (Test-Path -LiteralPath $adrPath)) {
     throw 'Commit-bound review ADR is missing'
 }
 $adrText = Get-Content -LiteralPath $adrPath -Raw
-foreach ($required in @('Status: accepted', 'Candidate snapshot', 'Git未管理または未commit', 'baseCommitOid', 'reviewCommitOid', 'executedOnCommitOid', 'Supersedes: ADR-0006, ADR-0008')) {
+foreach ($required in @('Status: accepted', 'Candidate snapshot', 'Git未管理または未commit', 'baseCommitOid', 'reviewCommitOid', 'executedOnCommitOid', 'SessionFolder', '.agent-worktrees/reviews', 'git worktree remove', 'review用branchは作らない', '--force', 'Supersedes: ADR-0006, ADR-0008')) {
     if ($adrText -notmatch [regex]::Escape($required)) {
         throw "Commit-bound review ADR is missing decision context: $required"
     }

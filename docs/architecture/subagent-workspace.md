@@ -20,11 +20,15 @@ root session と child agent が同じ task を扱うときの、成果返却、
 | validation workspace-write | test、build、lint、typecheck、smoke check | validator は check 実行のため workspace-write sandbox を使うが source を意図的に編集せず、生成物や lockfile などの副作用を報告する |
 | shared working tree | 対象ファイルが明確で、他の編集 slice と重ならない実装 | child は割り当て範囲だけ編集し、root が差分を統合する |
 | task worktree | 競合する並列編集、破壊的または大規模な試行、隔離が必要な検証 | `.agent-worktrees/<task>/<agent-task>/` を root が明示的に選ぶ |
-| detached review worktree | exact source stateを必要とする独立review | rootまたはruntimeが`reviewCommitOid`をdetached checkoutしたcleanな`reviewTarget`を用意し、reviewerはread-only preflight後に明示scopeだけを確認する |
+| detached review worktree | exact source stateを必要とする独立review | rootまたはruntimeがSessionFolder配下を第一候補、gitignore済みの`.agent-worktrees/reviews/`をfallbackとして、`reviewCommitOid`をdetached checkoutしたcleanな`reviewTarget`を用意する |
 
 同じファイルを複数の write-capable child に同時に割り当てない。root は同じ生成物や lockfile に触れる validator と implementer を並行実行しない。shared working tree の既存変更はユーザーまたは他の slice の所有物として保護する。
 
-detached review worktreeでは、`baseCommitOid`と`reviewCommitOid`をimmutableなsource identityとする。reviewerは明示された`reviewTarget`だけを読み、HEAD一致、cleanliness、commit object、base ancestryを確認する。実装branchはreview中も進めてよく、review worktreeの作成と後始末はrootまたはruntimeが所有する。Git未管理または未commitのsourceにはreview用workspace fallbackを作らない。
+detached review worktreeでは、`baseCommitOid`と`reviewCommitOid`をimmutableなsource identityとする。reviewerは明示された`reviewTarget`だけを読み、HEAD一致、cleanliness、commit object、base ancestryを確認する。実装branchはreview中も進めてよい。
+
+`reviewTarget`は、System PromptにSessionFolderがありfilesystem authority内で利用できる場合、`<SessionFolder>/review-worktrees/<repositoryId>/<reviewCommitOid>`へ作る。SessionFolderがない場合だけ、repository内でgitignore済みの`.agent-worktrees/reviews/<reviewCommitOid>`へfallbackする。Codex設定ディレクトリやOSのTEMPへ別のfallbackを作らない。どちらも利用できなければvalidation gapとする。
+
+review worktreeの作成と後始末はrootまたはruntimeが所有する。review用branchは作らない。全reviewerがapprove、finding、validation gap、deadline、interruptのいずれかで終了してから、正規化済みpathが選択したroot配下にあること、HEADが`reviewCommitOid`であること、tracked / untrackedともcleanであることを確認し、`git worktree remove`で削除する。不一致やdirty stateでは`--force`を使わず、残ったworktreeをvalidation gapとして報告する。実装branchとreview対象commitは削除しない。Git未管理または未commitのsourceにはreview用workspace fallbackを作らない。
 
 ## Durable Artifacts
 
