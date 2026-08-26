@@ -19,7 +19,7 @@
 - `docs/adr/`: 長期的または後戻り困難な設計判断とその理由
 - `docs/architecture/`: 複数 subsystem / process / repo / 外部 service に波及し、code と executable contract から復元できない非局所設計
 - `docs/runbooks/`: 端末ごとに実行する共有運用手順
-- `hooks/`: subagent routing などの Codex hook
+- `hooks/`: implementation restraint と subagent routing などの Codex hook
 - `config/agents.example.toml`: agent registry へ登録する場合の例
 - `config.example.toml`: 別端末へ移す共有設定の例
 
@@ -39,7 +39,7 @@
 - Git 管理する正本は `AGENTS.md`、`README.md`、`agents/`、`docs/adr/`、`docs/architecture/`、`docs/runbooks/`、`hooks/`、`hooks.json`、`skills/`（`skills/withmate-memory/`を除く）、`templates/`、`config.example.toml`、`config/agents.example.toml` とする
 - `config.toml` は端末固有の local file として Git 管理しない。`projects.*`、`hooks.state`、runtime/plugin の `source`、MCP server の `command` / `env`、通知コマンド、Chrome native host 設定は端末ごとに生成または調整する
 - 新しい端末ではこの repo を `$HOME/.codex` に配置し、既存の `config.toml` に `config.example.toml` と `config/agents.example.toml` の必要 section だけを移す
-- hook は `hooks.json` から `$HOME/.codex/hooks/subagent-routing.ps1` を呼び出す。Windows では `commandWindows` が `%USERPROFILE%\.codex` を使う
+- hook は `hooks.json` から `$HOME/.codex/hooks/implementation-restraint.ps1` と `$HOME/.codex/hooks/subagent-routing.ps1` を呼び出す。Windows では `commandWindows` が `%USERPROFILE%\.codex` を使う
 - Spark routing の現在 mode は `hooks/subagent-routing.local.json` に保存される。このファイルは端末ごとの一時状態なので Git 管理しない
 - WithMateを使う端末では、起動後に`skills/withmate-memory/`が自動配置され、managed markerの`bundleVersion`とSkill一覧への認識を確認する
 - Character context MCPを使う端末では、`config.example.toml`の`withmate-character-context`設定をlocal `config.toml`へ反映し、WithMate起動後の新しいCodex sessionで`codex mcp list`と公開toolを確認する。詳細は`docs/runbooks/withmate-character-context.md`を参照する
@@ -69,9 +69,10 @@
 
 ## Hook 方針
 
+- `hooks/implementation-restraint.ps1` は `UserPromptSubmit` と `SubagentStart` で、要求に根拠のない後方互換性、fallback、回帰test、抽象化を追加しないための短い実装制約を追加する
 - `agents/*.toml` は静的な role 責務、禁止事項、出力契約、model、sandbox の正本とする
 - `hooks/subagent-routing.ps1` は `UserPromptSubmit` と `SubagentStart` で、現在の Spark mode と quota fallback など実行時差分だけを追加する
 - hook の切替状態は ignored な `hooks/subagent-routing.local.json` に保存する。環境変数 `CODEX_SUBAGENT_SPARK_MODE` がある場合はそれを優先する
 - mode は `balanced`、`spark-first`、`standard-only` を使う。既定は `balanced`
 - standing authorization、role 選択、risk gate、成果返却、統合責務は `AGENTS.md` を正本とし、hook へ複製しない
-- hook 検証は PowerShell pipeline ではなく、子 `pwsh -File` に JSON stdin を渡して本番の `Console.In` に近い形で行う
+- JSONを解釈するhookの検証は PowerShell pipeline ではなく、子 `pwsh -File` に JSON stdin を渡して本番の `Console.In` に近い形で行う。固定文面だけを返すhookは、子 `pwsh -File` の標準出力を直接確認する
