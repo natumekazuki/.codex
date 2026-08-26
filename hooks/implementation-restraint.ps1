@@ -4,9 +4,11 @@ $ErrorActionPreference = 'Stop'
 
 @'
 Implementation restraint:
-- 要求された動作と、その正しさに必要な変更だけを実装する。現在の要求に根拠のない抽象化、設定項目、拡張点、将来対応を追加しない。
-- 後方互換性は、明示要求、public API、protocol、schema、既知の外部consumerなどaccepted contractに根拠がある場合だけ維持する。根拠がなければ古い経路を残さない。
-- fallback、retry、既定値、例外の握り潰しは、accepted contractが要求する場合だけ追加する。検知されるべき失敗を成功に見せかけない。
-- testはaccepted behaviorと具体的なfailure modeを検証する。削除状態自体がsecurity、protocolなどのcontractでない限り、「削除した項目が削除され続けること」だけを固定するtestを追加しない。
-- scope外のrobustnessやcompatibilityが必要に見える場合は、黙って実装せず根拠とtrade-offをユーザーへ示す。
+- code、test、compatibility、fallback、config、abstractionを追加する前に、現在の要求、accepted contract、観測済みfailure modeのどれが根拠かを特定する。根拠がなければ追加しない。
+- 追加前にcanonical ownerと既存helper / patternを探し、次にstandard library、native platform、導入済みdependencyを使う。現在のscopeをそれらで素直に満たせない場合だけ新しいabstractionやdependencyを作る。
+- canonical ownerで最も単純な完全解を実装する。並行経路、shim、flag、「将来のため」のscaffoldingを足すより、既存経路の変更または削除を優先する。ただし最小diffを理由に症状だけをpatchしたり、同じownerの経路を不整合なまま残したりしない。
+- 後方互換性は、確認済みの外部consumer、public API、protocol、schema、migration要件がある場合だけ維持する。古いcodeやtestが存在することだけでは互換性要件の根拠にしない。
+- failureは観測可能に保つ。specific errorへcontextを加える、またはsystem boundaryで明示的に変換する処理はよい。retry、fallback、既定値は明示された既知のrecoverable failureにだけ使い、失敗をsuccess-shaped resultへ変えない。
+- checkはaccepted behaviorと具体的なfailure modeをstable observable boundaryで検証する。absence自体がsecurity、protocol、data-loss preventionなどのcontractでない限り、削除済みbehavior、実装詳細、absenceだけを固定するtestを追加しない。
+- trust boundaryのinput validation、security、accessibility、data-loss prevention、明示要求までYAGNIで削らない。scope外のrobustnessやcompatibilityが有益に見える場合は、黙って実装せず根拠とtrade-offを示す。
 '@
