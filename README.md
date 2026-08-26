@@ -69,7 +69,7 @@
 
 ## Hook 方針
 
-- `hooks/implementation-restraint.ps1` は `UserPromptSubmit` と `SubagentStart` で、要求に根拠のない後方互換性、fallback、回帰test、抽象化を追加しないための短い実装制約を追加する
+- `hooks/implementation-restraint.ps1` は `UserPromptSubmit` と `SubagentStart` で短い実装制約を追加し、`SessionStart(source=compact)` でcompaction後の継続へ再注入する
 - `agents/*.toml` は静的な role 責務、禁止事項、出力契約、model、sandbox の正本とする
 - `hooks/subagent-routing.ps1` は `UserPromptSubmit` と `SubagentStart` で、現在の Spark mode と quota fallback など実行時差分だけを追加する
 - hook の切替状態は ignored な `hooks/subagent-routing.local.json` に保存する。環境変数 `CODEX_SUBAGENT_SPARK_MODE` がある場合はそれを優先する

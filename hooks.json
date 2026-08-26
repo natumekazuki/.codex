@@ -40,6 +40,20 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "^compact$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/implementation-restraint.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/implementation-restraint.ps1')\"",
+            "timeout": 5,
+            "statusMessage": "Restoring implementation restraint"
+          }
+        ]
+      }
     ]
   }
 }
