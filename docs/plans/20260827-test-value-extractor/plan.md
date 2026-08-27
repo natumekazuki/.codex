@@ -255,12 +255,12 @@ Skillは次を行う。
 
 ## Steps
 
-- [ ] Skill名と配置を確定し、`skill-creator`のinitializerで`SKILL.md`、`agents/openai.yaml`、`scripts/`、`references/`を生成する。
-- [ ] コメント形式とnormalized outputのv1 schemaを、scriptとtest fixtureの正本へ落とす。
-- [ ] Python source adapterとCLIを実装する。
-- [ ] parser、binding、projection、diagnosticを直接検証するtestを追加する。
-- [ ] Skill workflowからCLIを呼び、抽出されたrecordだけをAI審査へ渡す。
-- [ ] このplanの定義と実装済みschema、source、testの差を確認し、長期判断が残る場合だけADRへ移す。
+- [x] Skill名と配置を確定し、`skill-creator`のinitializerで`SKILL.md`、`agents/openai.yaml`、`scripts/`、`references/`を生成する。
+- [x] コメント形式とnormalized outputのv1 schemaを、scriptとtest fixtureの正本へ落とす。
+- [x] Python source adapterとCLIを実装する。
+- [x] parser、binding、projection、diagnosticを直接検証するtestを追加する。
+- [x] Skill workflowからCLIを呼び、抽出されたrecordだけをAI審査へ渡す。
+- [x] このplanの定義と実装済みschema、source、testの差を確認し、長期判断をADR-0020へ移す。
 
 ## Validation
 

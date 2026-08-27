@@ -1,0 +1,491 @@
+from __future__ import annotations
+
+import argparse
+import ast
+import hashlib
+import io
+import json
+import sys
+import tomllib
+import tokenize
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+from typing import Any, Sequence
+
+
+SCHEMA_VERSION = 1
+ADAPTER = "python-source-v1"
+COVERAGE = "python-source-declarations-v1"
+START_MARKER = "@test-value v1"
+END_MARKER = "@end-test-value"
+
+KINDS = {
+    "contract",
+    "invariant",
+    "regression",
+    "security",
+    "reference",
+    "compatibility",
+}
+LIFECYCLES = {"permanent", "characterization", "ephemeral"}
+ORACLE_TYPES = {
+    "contract",
+    "schema",
+    "adr",
+    "issue",
+    "incident",
+    "reference-model",
+    "characterization",
+}
+REQUIRED_FIELDS = {"kind", "claim", "oracle", "failure_mode", "scope", "lifecycle"}
+OPTIONAL_FIELDS = {"distinction", "expires_on", "review_when"}
+ALLOWED_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS
+
+
+@dataclass(frozen=True)
+class CommentBlock:
+    start_line: int
+    end_line: int | None
+    indent: str
+    payload: tuple[str, ...]
+
+
+def diagnostic(code: str, path: str, line: int, message: str) -> dict[str, Any]:
+    return {"code": code, "path": path, "line": line, "message": message}
+
+
+def sha256_text(value: str) -> str:
+    return f"sha256:{hashlib.sha256(value.encode('utf-8')).hexdigest()}"
+
+
+def canonical_json(value: Any) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def render_result(result: dict[str, Any]) -> str:
+    return json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+
+
+def normalized_lines(source: str) -> tuple[str, list[str]]:
+    normalized = source.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized, normalized.splitlines(keepends=True)
+
+
+def python_comment_lines(source: str) -> dict[int, tuple[str, str]]:
+    comments: dict[int, tuple[str, str]] = {}
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        if token.type != tokenize.COMMENT:
+            continue
+        line_number, column = token.start
+        indent = token.line[:column]
+        if indent.strip():
+            continue
+        value = token.string[1:]
+        if value.startswith(" "):
+            value = value[1:]
+        comments[line_number] = (indent, value)
+    return comments
+
+
+def comment_content(
+    comments: dict[int, tuple[str, str]], line_number: int, indent: str
+) -> str | None:
+    comment = comments.get(line_number)
+    if comment is None or comment[0] != indent:
+        return None
+    return comment[1]
+
+
+def scan_comment_blocks(
+    source: str, lines: Sequence[str]
+) -> list[CommentBlock]:
+    blocks: list[CommentBlock] = []
+    comments = python_comment_lines(source)
+    index = 1
+    while index <= len(lines):
+        comment = comments.get(index)
+        if comment is None or comment[1] != START_MARKER:
+            index += 1
+            continue
+        indent = comment[0]
+        payload: list[str] = []
+        cursor = index + 1
+        end_line: int | None = None
+        while cursor <= len(lines):
+            value = comment_content(comments, cursor, indent)
+            if value is None:
+                break
+            if value == END_MARKER:
+                end_line = cursor
+                cursor += 1
+                break
+            payload.append(value)
+            cursor += 1
+        blocks.append(
+            CommentBlock(
+                start_line=index,
+                end_line=end_line,
+                indent=indent,
+                payload=tuple(payload),
+            )
+        )
+        index = max(cursor, index + 1)
+    return blocks
+
+
+def nonempty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def validate_metadata(value: Any) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(value, dict):
+        return ["metadata root must be a TOML table"]
+
+    keys = set(value)
+    missing = sorted(REQUIRED_FIELDS - keys)
+    unknown = sorted(keys - ALLOWED_FIELDS)
+    if missing:
+        errors.append(f"missing fields: {', '.join(missing)}")
+    if unknown:
+        errors.append(f"unknown fields: {', '.join(unknown)}")
+
+    kind = value.get("kind")
+    if kind is not None and (not isinstance(kind, str) or kind not in KINDS):
+        errors.append("kind is not supported")
+
+    lifecycle = value.get("lifecycle")
+    if lifecycle is not None and (
+        not isinstance(lifecycle, str) or lifecycle not in LIFECYCLES
+    ):
+        errors.append("lifecycle is not supported")
+
+    for field in ("claim", "failure_mode", "scope"):
+        if field in value and not nonempty_string(value[field]):
+            errors.append(f"{field} must be a non-blank string")
+    for field in ("distinction", "review_when"):
+        if field in value and not nonempty_string(value[field]):
+            errors.append(f"{field} must be a non-blank string")
+
+    oracle = value.get("oracle")
+    if oracle is not None:
+        if not isinstance(oracle, dict):
+            errors.append("oracle must be an inline table")
+        else:
+            oracle_keys = set(oracle)
+            if oracle_keys != {"type", "ref"}:
+                errors.append("oracle must contain only type and ref")
+            oracle_type = oracle.get("type")
+            if not isinstance(oracle_type, str) or oracle_type not in ORACLE_TYPES:
+                errors.append("oracle.type is not supported")
+            if not nonempty_string(oracle.get("ref")):
+                errors.append("oracle.ref must be a non-blank string")
+
+    expires_on = value.get("expires_on")
+    review_when = value.get("review_when")
+    if lifecycle == "characterization":
+        if expires_on is None and review_when is None:
+            errors.append("characterization requires expires_on or review_when")
+    elif expires_on is not None or review_when is not None:
+        errors.append("expires_on and review_when require characterization lifecycle")
+
+    if expires_on is not None:
+        if not isinstance(expires_on, str):
+            errors.append("expires_on must be a YYYY-MM-DD string")
+        else:
+            try:
+                parsed = date.fromisoformat(expires_on)
+            except ValueError:
+                errors.append("expires_on must be a valid YYYY-MM-DD date")
+            else:
+                if parsed.isoformat() != expires_on:
+                    errors.append("expires_on must use canonical YYYY-MM-DD format")
+
+    return errors
+
+
+def parse_metadata(block: CommentBlock) -> tuple[dict[str, Any] | None, str | None, str | None]:
+    try:
+        value = tomllib.loads("\n".join(block.payload))
+    except tomllib.TOMLDecodeError as error:
+        return None, "TEST_VALUE_PARSE_ERROR", str(error)
+    errors = validate_metadata(value)
+    if errors:
+        return None, "TEST_VALUE_SCHEMA_ERROR", "; ".join(errors)
+    return value, None, None
+
+
+def parent_map(tree: ast.AST) -> dict[ast.AST, ast.AST]:
+    return {
+        child: parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+
+
+def declaration_info(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    parents: dict[ast.AST, ast.AST],
+) -> tuple[bool, str]:
+    names = [node.name]
+    current: ast.AST = parents[node]
+    while not isinstance(current, ast.Module):
+        if not isinstance(current, ast.ClassDef):
+            return False, node.name
+        names.append(current.name)
+        current = parents[current]
+    names.reverse()
+    return True, ".".join(names)
+
+
+def declaration_start(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
+    if node.decorator_list:
+        return min(decorator.lineno for decorator in node.decorator_list)
+    return node.lineno
+
+
+def declaration_indent(lines: Sequence[str], start_line: int) -> str:
+    line = lines[start_line - 1]
+    return line[: len(line) - len(line.lstrip(" \t"))]
+
+
+def source_slice(lines: Sequence[str], start_line: int, end_line: int) -> str:
+    return "".join(lines[start_line - 1 : end_line])
+
+
+def extract_python_source(path: Path, relative_path: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    try:
+        raw = path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError as error:
+        return [], [
+            diagnostic(
+                "SOURCE_DECODE_ERROR",
+                relative_path,
+                0,
+                f"source is not valid UTF-8: {error}",
+            )
+        ]
+
+    source, lines = normalized_lines(raw)
+    try:
+        tree = ast.parse(source, filename=relative_path)
+    except SyntaxError as error:
+        return [], [
+            diagnostic(
+                "SOURCE_SYNTAX_ERROR",
+                relative_path,
+                error.lineno or 0,
+                error.msg,
+            )
+        ]
+
+    blocks = scan_comment_blocks(source, lines)
+    complete_blocks = [block for block in blocks if block.end_line is not None]
+    consumed: set[CommentBlock] = set()
+    duplicate_blocks: set[CommentBlock] = set()
+    records: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+    parents = parent_map(tree)
+
+    functions = sorted(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name.startswith("test")
+        ),
+        key=lambda item: (item.lineno, item.col_offset, item.name),
+    )
+    for node in functions:
+        supported, symbol = declaration_info(node, parents)
+        if not supported:
+            diagnostics.append(
+                diagnostic(
+                    "TEST_DECLARATION_UNSUPPORTED",
+                    relative_path,
+                    node.lineno,
+                    "test declaration is nested in an unsupported scope",
+                )
+            )
+            continue
+
+        start_line = declaration_start(node)
+        indent = declaration_indent(lines, start_line)
+        immediate = [
+            block
+            for block in complete_blocks
+            if block.end_line == start_line - 1 and block.indent == indent
+        ]
+        chain: list[CommentBlock] = immediate[:]
+        if chain:
+            cursor = chain[0]
+            while True:
+                previous = [
+                    block
+                    for block in complete_blocks
+                    if block.end_line == cursor.start_line - 1
+                    and block.indent == indent
+                ]
+                if not previous:
+                    break
+                cursor = previous[0]
+                chain.insert(0, cursor)
+
+        metadata: dict[str, Any] | None = None
+        metadata_hash: str | None = None
+        metadata_start: int | None = None
+        metadata_end: int | None = None
+        if len(chain) > 1:
+            consumed.update(chain)
+            duplicate_blocks.update(chain)
+            diagnostics.append(
+                diagnostic(
+                    "TEST_VALUE_DUPLICATE",
+                    relative_path,
+                    chain[0].start_line,
+                    "multiple adjacent test-value blocks target one declaration",
+                )
+            )
+        elif len(chain) == 1:
+            block = chain[0]
+            consumed.add(block)
+            metadata_start = block.start_line
+            metadata_end = block.end_line
+            metadata, error_code, error_message = parse_metadata(block)
+            if error_code:
+                diagnostics.append(
+                    diagnostic(
+                        error_code,
+                        relative_path,
+                        block.start_line,
+                        error_message or "invalid test-value metadata",
+                    )
+                )
+            else:
+                metadata_hash = sha256_text(canonical_json(metadata))
+        else:
+            diagnostics.append(
+                diagnostic(
+                    "TEST_VALUE_MISSING",
+                    relative_path,
+                    start_line,
+                    "test declaration has no adjacent test-value block",
+                )
+            )
+
+        end_line = node.end_lineno or node.lineno
+        extracted_source = source_slice(lines, start_line, end_line)
+        records.append(
+            {
+                "source": {
+                    "path": relative_path,
+                    "symbol": symbol,
+                    "metadata_start_line": metadata_start,
+                    "metadata_end_line": metadata_end,
+                    "declaration_start_line": start_line,
+                    "declaration_end_line": end_line,
+                },
+                "metadata": metadata,
+                "source_text": extracted_source,
+                "source_hash": sha256_text(extracted_source),
+                "metadata_hash": metadata_hash,
+            }
+        )
+
+    for block in blocks:
+        if block not in consumed and block not in duplicate_blocks:
+            diagnostics.append(
+                diagnostic(
+                    "TEST_VALUE_UNBOUND",
+                    relative_path,
+                    block.start_line,
+                    "test-value block is not adjacent to a supported declaration",
+                )
+            )
+
+    return records, diagnostics
+
+
+def extract_repository(
+    repository_root: Path,
+    source_paths: Sequence[str],
+) -> tuple[dict[str, Any], int]:
+    root = repository_root.resolve(strict=True)
+    resolved_paths: dict[str, Path] = {}
+    diagnostics: list[dict[str, Any]] = []
+
+    for raw_path in source_paths:
+        supplied = Path(raw_path)
+        candidate = supplied if supplied.is_absolute() else root / supplied
+        resolved = candidate.resolve(strict=False)
+        if not resolved.is_relative_to(root):
+            diagnostics.append(
+                diagnostic(
+                    "SOURCE_OUTSIDE_ROOT",
+                    supplied.name or ".",
+                    0,
+                    "source path resolves outside repository root",
+                )
+            )
+            continue
+        relative = resolved.relative_to(root).as_posix()
+        resolved_paths[relative] = resolved
+
+    records: list[dict[str, Any]] = []
+    for relative, path in sorted(resolved_paths.items()):
+        source_records, source_diagnostics = extract_python_source(path, relative)
+        records.extend(source_records)
+        diagnostics.extend(source_diagnostics)
+
+    records.sort(
+        key=lambda item: (
+            item["source"]["path"],
+            item["source"]["declaration_start_line"],
+            item["source"]["symbol"],
+        )
+    )
+    diagnostics.sort(key=lambda item: (item["path"], item["line"], item["code"]))
+    result = {
+        "schema_version": SCHEMA_VERSION,
+        "adapter": ADAPTER,
+        "coverage": COVERAGE,
+        "repository_root": ".",
+        "tests": records,
+        "diagnostics": diagnostics,
+    }
+    return result, 1 if diagnostics else 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Extract Python test declarations and adjacent test-value comments."
+    )
+    parser.add_argument("--root", required=True, type=Path, help="Repository root")
+    parser.add_argument("paths", nargs="+", help="Python source paths to extract")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        result, exit_status = extract_repository(args.root, args.paths)
+    except (OSError, ValueError) as error:
+        print(f"extract_test_values: {error}", file=sys.stderr)
+        return 2
+    rendered = render_result(result)
+    if hasattr(sys.stdout, "buffer"):
+        sys.stdout.buffer.write(rendered.encode("utf-8"))
+    else:
+        sys.stdout.write(rendered)
+    return exit_status
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
