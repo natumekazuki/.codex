@@ -46,6 +46,11 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8", newline="")
 
+    def write_utf8_bom(self, relative: str, content: str) -> None:
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"\xef\xbb\xbf" + content.encode("utf-8"))
+
     def extract(self, *paths: str) -> tuple[dict, int]:
         return EXTRACTOR.extract_repository(self.root, list(paths))
 
@@ -90,6 +95,55 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertEqual(
             [item["code"] for item in result["diagnostics"]],
             ["TEST_DECLARATION_UNSUPPORTED"],
+        )
+
+    def test_typescript_rejects_unsupported_modifier(self) -> None:
+        self.write(
+            "tests/concurrent.test.ts",
+            'test.concurrent("parallel", () => {});\n',
+        )
+
+        result, exit_status = self.extract("tests/concurrent.test.ts")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_DECLARATION_UNSUPPORTED"],
+        )
+
+    def test_typescript_rejects_dynamic_describe_and_nested_test(self) -> None:
+        self.write(
+            "tests/dynamic-describe.test.ts",
+            'const group = "payment";\n'
+            "describe(group, () => {\n"
+            '  test("retry", () => {});\n'
+            "});\n",
+        )
+
+        result, exit_status = self.extract("tests/dynamic-describe.test.ts")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_DECLARATION_UNSUPPORTED"],
+        )
+
+    def test_typescript_rejects_multiple_declarations_on_one_line(self) -> None:
+        self.write(
+            "tests/same-line.test.ts",
+            metadata_block("//")
+            + 'test("A", () => {}); test("B", () => {});\n',
+        )
+
+        result, exit_status = self.extract("tests/same-line.test.ts")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertIn(
+            "TEST_DECLARATION_UNSUPPORTED",
+            [item["code"] for item in result["diagnostics"]],
         )
 
     def test_typescript_syntax_error_does_not_emit_partial_records(self) -> None:
@@ -219,6 +273,56 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             "SOURCE_SYNTAX_ERROR",
             [item["code"] for item in result["diagnostics"]],
         )
+
+    def test_csharp_rejects_conditional_compilation_regions(self) -> None:
+        self.write(
+            "tests/ConditionalTests.cs",
+            "#if DEBUG\n"
+            "public class ConditionalTests\n"
+            "{\n"
+            "    [Fact]\n"
+            "    public void DebugOnly() { }\n"
+            "}\n"
+            "#endif\n",
+        )
+
+        result, exit_status = self.extract("tests/ConditionalTests.cs")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_DECLARATION_UNSUPPORTED"],
+        )
+
+    def test_utf8_bom_is_removed_for_all_adapters(self) -> None:
+        cases = (
+            (
+                "tests/test_bom.py",
+                metadata_block("#") + "def test_bom():\n    assert True\n",
+            ),
+            (
+                "tests/bom.test.ts",
+                metadata_block("//") + 'test("bom", () => {});\n',
+            ),
+            (
+                "tests/BomTests.cs",
+                "public class BomTests\n"
+                "{\n"
+                + metadata_block("//", "    ")
+                + "    [Fact]\n"
+                + "    public void Bom() { }\n"
+                + "}\n",
+            ),
+        )
+
+        for relative, source in cases:
+            with self.subTest(relative=relative):
+                self.write_utf8_bom(relative, source)
+                result, exit_status = self.extract(relative)
+                self.assertEqual(exit_status, 0)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertNotIn("\ufeff", result["tests"][0]["source_text"])
 
     def test_mixed_languages_are_rejected_as_invalid_invocation(self) -> None:
         self.write("tests/test_one.py", "def test_one():\n    assert True\n")

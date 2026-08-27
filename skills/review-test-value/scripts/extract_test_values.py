@@ -490,16 +490,37 @@ def bind_analysis(
     records: list[dict[str, Any]] = []
     diagnostics = list(analysis.diagnostics)
 
+    declaration_counts: dict[tuple[int, str], int] = {}
+    for declaration in analysis.declarations:
+        key = (declaration.start_line, declaration.indent)
+        declaration_counts[key] = declaration_counts.get(key, 0) + 1
+    ambiguous_declarations = {
+        key for key, count in declaration_counts.items() if count > 1
+    }
+    for start_line, _indent in sorted(ambiguous_declarations):
+        diagnostics.append(
+            diagnostic(
+                "TEST_DECLARATION_UNSUPPORTED",
+                relative_path,
+                start_line,
+                "multiple test declarations on one line cannot be bound unambiguously",
+            )
+        )
+
     for declaration in sorted(
         analysis.declarations,
         key=lambda item: (item.start_line, item.symbol),
     ):
         start_line = declaration.start_line
         indent = declaration.indent
+        if (start_line, indent) in ambiguous_declarations:
+            continue
         immediate = [
             block
             for block in complete_blocks
-            if block.end_line == start_line - 1 and block.indent == indent
+            if block not in consumed
+            and block.end_line == start_line - 1
+            and block.indent == indent
         ]
         chain: list[CommentBlock] = immediate[:]
         if chain:
@@ -508,7 +529,8 @@ def bind_analysis(
                 previous = [
                     block
                     for block in complete_blocks
-                    if block.end_line == cursor.start_line - 1
+                    if block not in consumed
+                    and block.end_line == cursor.start_line - 1
                     and block.indent == indent
                 ]
                 if not previous:
@@ -597,7 +619,7 @@ def extract_source(
     profile: AdapterProfile,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     try:
-        raw = path.read_bytes().decode("utf-8")
+        raw = path.read_bytes().decode("utf-8-sig")
     except UnicodeDecodeError as error:
         return [], [
             diagnostic(

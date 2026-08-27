@@ -43,6 +43,9 @@ function propertyParts(expression) {
 }
 
 function testCallInfo(node) {
+  if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+    return null;
+  }
   let expression = node.expression;
   let parameterized = false;
   let parameterizedRoot = null;
@@ -66,9 +69,12 @@ function testCallInfo(node) {
   const modifiers = parts.slice(1);
   const supportedModifiers = new Set(["only", "skip", "todo", "fixme", "fail"]);
   if (modifiers.some((part) => !supportedModifiers.has(part))) {
-    return null;
+    return {
+      supported: false,
+      message: `unsupported test declaration modifier: ${modifiers.join(".")}`,
+    };
   }
-  return { parameterized, titleArgument: node.arguments[0] };
+  return { supported: true, parameterized, titleArgument: node.arguments[0] };
 }
 
 function describeCallInfo(node) {
@@ -76,13 +82,27 @@ function describeCallInfo(node) {
   if (parts === null) {
     return null;
   }
-  const supported =
+  const isDescribe =
     parts[0] === "describe" ||
     (parts[0] === "test" && parts.length >= 2 && parts[1] === "describe");
-  if (!supported) {
+  if (!isDescribe) {
     return null;
   }
-  return staticTitle(node.arguments[0]);
+  const modifierStart = parts[0] === "describe" ? 1 : 2;
+  if (parts.length > modifierStart) {
+    return {
+      supported: false,
+      message: `unsupported describe modifier: ${parts.slice(modifierStart).join(".")}`,
+    };
+  }
+  const title = staticTitle(node.arguments[0]);
+  if (title === null) {
+    return {
+      supported: false,
+      message: "describe declaration title must be a static string",
+    };
+  }
+  return { supported: true, title };
 }
 
 function enclosingDescribeTitles(node) {
@@ -90,9 +110,12 @@ function enclosingDescribeTitles(node) {
   let current = node.parent;
   while (current !== undefined) {
     if (ts.isCallExpression(current)) {
-      const title = describeCallInfo(current);
-      if (title !== null) {
-        titles.push(title);
+      const info = describeCallInfo(current);
+      if (info !== null) {
+        if (!info.supported) {
+          return null;
+        }
+        titles.push(info.title);
       }
     }
     current = current.parent;
@@ -138,8 +161,29 @@ function collectDeclarations(sourceFile) {
 
   function visit(node) {
     if (ts.isCallExpression(node)) {
+      const describeInfo = describeCallInfo(node);
+      if (describeInfo !== null) {
+        if (!describeInfo.supported) {
+          diagnostics.push({
+            code: "TEST_DECLARATION_UNSUPPORTED",
+            line: lineNumber(sourceFile, node.getStart(sourceFile, false)),
+            message: describeInfo.message,
+          });
+        }
+        ts.forEachChild(node, visit);
+        return;
+      }
       const info = testCallInfo(node);
       if (info !== null) {
+        if (!info.supported) {
+          diagnostics.push({
+            code: "TEST_DECLARATION_UNSUPPORTED",
+            line: lineNumber(sourceFile, node.getStart(sourceFile, false)),
+            message: info.message,
+          });
+          ts.forEachChild(node, visit);
+          return;
+        }
         const statement = expressionStatement(node);
         const start = statement.getStart(sourceFile, false);
         const title = info.titleArgument ? staticTitle(info.titleArgument) : null;
@@ -150,7 +194,12 @@ function collectDeclarations(sourceFile) {
             message: "test declaration title must be a static string",
           });
         } else {
-          const symbol = [...enclosingDescribeTitles(node), title].join(" > ");
+          const describeTitles = enclosingDescribeTitles(node);
+          if (describeTitles === null) {
+            ts.forEachChild(node, visit);
+            return;
+          }
+          const symbol = [...describeTitles, title].join(" > ");
           declarations.push({
             symbol,
             start_line: lineNumber(sourceFile, start),

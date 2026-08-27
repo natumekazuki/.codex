@@ -23,7 +23,8 @@ Result fields:
 - Parameterization: `test.each(...)(...)`と`it.each(...)(...)`を一つのsource declarationとして抽出する
 - Grouping: `describe()`と`test.describe()`のstatic titleをqualified symbolへ含める
 - Supported modifiers: `only`、`skip`、`todo`、`fixme`、`fail`
-- Excluded: alias経由のcall、computed property、動的title、factory生成、runtime parameter case
+- Unsupported diagnostic: 未対応modifier、動的titleのtest / describe、同一行に複数あるtest declaration
+- Excluded: alias経由のcall、computed property、factory生成、runtime parameter case
 
 Jest、Vitest、Playwrightのpackage identityやimport解決は行わない。上記のcall構文をtest declarationとして扱う。
 
@@ -42,6 +43,7 @@ Result fields:
   - MSTest: `TestMethod`、`DataTestMethod`
 - `Attribute` suffixとnamespace-qualified nameを許可する
 - Parameterization: data attributeを含む一つのsource declarationとして抽出する
+- Unsupported diagnostic: project固有のpreprocessor symbolが必要な条件付きコンパイル領域
 - Excluded: attribute aliasの意味解決、source generator、継承やruntime discoveryだけで生成されるtest、展開後data row
 
 Result fields:
@@ -53,4 +55,5 @@ Result fields:
 
 - syntax errorを含むfileから部分recordを出力しない。
 - staticに識別できるtest declarationが未対応形なら`TEST_DECLARATION_UNSUPPORTED`を返す。
+- UTF-8 BOMはencoding markerとして除去し、source内容やindentには含めない。
 - frameworkのimport、runner設定、skip状態、実行結果は検証しない。

@@ -72,8 +72,22 @@ var diagnostics = tree.GetDiagnostics()
     .Cast<object>()
     .ToList();
 
-var declarations = root.DescendantNodes()
-    .OfType<MethodDeclarationSyntax>()
+var conditionalDirective = root.DescendantTrivia(descendIntoTrivia: true)
+    .FirstOrDefault(trivia => trivia.IsKind(SyntaxKind.IfDirectiveTrivia));
+var hasConditionalCompilation = conditionalDirective != default;
+if (hasConditionalCompilation)
+{
+    diagnostics.Add(new
+    {
+        code = "TEST_DECLARATION_UNSUPPORTED",
+        line = LineNumber(tree, conditionalDirective.SpanStart),
+        message = "conditional compilation requires project-specific preprocessor symbols",
+    });
+}
+
+var declarations = (hasConditionalCompilation
+        ? Enumerable.Empty<MethodDeclarationSyntax>()
+        : root.DescendantNodes().OfType<MethodDeclarationSyntax>())
     .Where(IsTestMethod)
     .Select(method =>
     {
