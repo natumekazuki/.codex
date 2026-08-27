@@ -49,15 +49,23 @@
 - Direct verification: 各failure fixtureで安定したdiagnostic codeとnon-zero exitを検証する。
 - Gate: ready。
 
+#### TVE-005: 言語adapterは共通metadata契約を迂回しない
+
+- Accepted anchor: Pythonに加えてC#とTypeScriptも同じ目的で扱うというユーザー要求。
+- Scope / owner: 言語native parser、共通binding、metadata validator、JSON projection。
+- Failure mode: adapterごとにコメントschemaやprojectionが分岐し、同じ価値コメントから異なる意味のAI入力を生成する。
+- Direct verification: Python、TypeScript、C#の等価fixtureで同じmetadata objectとhashを生成し、言語固有fieldはresult-levelの`adapter`と`coverage`だけで表すことを検証する。
+- Gate: ready。
+
 ## Structured Comment Format v1
 
 ### Syntax
 
 - ブロックの開始行を`@test-value v1`、終了行を`@end-test-value`とする。
 - 開始行と終了行の間は、言語固有の行コメントprefixを除去した後にTOMLとして解釈する。
-- Pythonでは行コメントprefixを`#`とし、`#`直後の半角空白を一つだけ除去する。
-- ブロック全体は、結合対象となるテスト宣言または最初のdecoratorと同じindentに置く。
-- 終了行とテスト宣言または最初のdecoratorの間へ、空行、通常コメント、別の文を置かない。
+- Pythonでは行コメントprefixを`#`、TypeScriptとC#では`//`とし、prefix直後の半角空白を一つだけ除去する。
+- ブロック全体は、結合対象となるテスト宣言または最初のdecorator / attributeと同じindentに置く。
+- 終了行とテスト宣言または最初のdecorator / attributeの間へ、空行、通常コメント、別の文を置かない。
 - 一つのテスト宣言へ複数の`@test-value`ブロックを結合しない。
 
 ```python
@@ -139,7 +147,9 @@ schema validatorはTOMLの構文だけでなく、root field、`oracle`内のfie
 
 名前が`test`で始まるnested functionなど、AST上で検出できるがsupported scope外の宣言は`TEST_DECLARATION_UNSUPPORTED`とする。`setattr`、metaclass、loopなどによる動的生成は網羅的に検出できないため、diagnosticを保証しない。出力の`coverage`でsource declarationだけを対象にした結果であることを明示する。
 
-### Binding algorithm
+TypeScriptとC#のsupported declaration、framework構文、parameterization、対象外は`skills/review-test-value/references/source-adapters-v1.md`を正本とする。各native parserは宣言範囲と行コメントtokenを返し、TOML parse、schema validation、binding、projectionは共通CLIが行う。
+
+### Python binding algorithm
 
 1. ASTからsupported declarationとsource rangeを取得する。
 2. 宣言の最初のdecorator、decoratorがなければ`def`の直前行を調べる。
@@ -195,9 +205,9 @@ schema validatorはTOMLの構文だけでなく、root field、`oracle`内のfie
 - source textの改行はLFへ正規化する。Unicode normalizationは行わない。
 - `source_hash`はLFへ正規化したUTF-8のsource textから算出する。
 - `metadata_hash`はkey順を固定したcanonical JSONから算出する。
-- `source_text`は最初のdecoratorからASTの`end_lineno`までとし、構造化コメントブロックを含めない。
+- `source_text`は言語adapterが返した最初のdecorator、attribute、またはtest callからdeclaration末尾までとし、構造化コメントブロックを含めない。
 - `metadata_start_line`と`metadata_end_line`は開始markerと終了markerを含む。metadataがないrecordでは両方を`null`とする。
-- `declaration_start_line`は最初のdecorator、decoratorがなければ`def`の行とする。
+- `declaration_start_line`は最初のdecorator、attribute、またはtest callの行とする。
 - JSONはUTF-8、`ensure_ascii=false`、固定key順、末尾改行一つで出力する。
 - repository外を指すpathと、repository外へ解決されるsymlinkは拒否する。
 
@@ -237,6 +247,8 @@ Skillは次を行う。
 
 - 新しいSkillのtriggerとworkflowの定義。
 - Python source adapter v1。
+- TypeScript source adapter v1。
+- C# source adapter v1。
 - `@test-value v1`コメントblockのparseとvalidation。
 - 明示されたrepository内pathからのtest record抽出。
 - normalized JSON、hash、diagnostic、exit status。
@@ -246,7 +258,7 @@ Skillは次を行う。
 
 - pytest、`unittest`などのtest runnerによるruntime collectionとの照合。
 - 動的生成、metaclass、継承だけで生成されるテストの発見。
-- JavaScript、TypeScript、Java、C#、Go、Rust用adapter。
+- JavaScript、Java、Go、Rust用adapter。
 - Git diffからの対象test自動選択。
 - oracle参照先の存在確認、内容抽出、hash生成。
 - AI reviewerのmodel、prompt、出力schema、cache、CI gate。
@@ -261,6 +273,9 @@ Skillは次を行う。
 - [x] parser、binding、projection、diagnosticを直接検証するtestを追加する。
 - [x] Skill workflowからCLIを呼び、抽出されたrecordだけをAI審査へ渡す。
 - [x] このplanの定義と実装済みschema、source、testの差を確認し、長期判断をADR-0020へ移す。
+- [x] TypeScript Compiler APIによるJest、Vitest、Playwright形式のsource adapterを追加する。
+- [x] RoslynによるxUnit、NUnit、MSTest形式のsource adapterを追加する。
+- [x] 言語固有parserを共通metadata validationとJSON projectionへ接続する。
 
 ## Validation
 
@@ -269,11 +284,16 @@ Skillは次を行う。
 - valid、missing、duplicate、unbound、parse error、schema errorの各コメントblockを検証する。
 - decorator付き、class method、async function、nested function、parameterized declarationのsource bindingを検証する。
 - repository外pathとsymlink境界を拒否することを検証する。
+- TypeScriptのstatic title、modifier、`describe`、`test.each`、TSX、syntax errorを検証する。
+- C#のxUnit、NUnit、MSTest attribute、parameterized declaration、syntax errorを検証する。
+- 複数言語を一回のCLI呼び出しへ混在させた場合にexit `2`で拒否することを検証する。
 - Skill folderを`skill-creator`の`quick_validate.py`で検証する。
 
 ## Risks
 
 - Pythonの`test*`命名だけではruntime runnerの収集集合と一致しない。この差はv1で意図的に受け入れ、runtime collection対応時に別adapter contractとして扱う。
+- TypeScriptはcall構文、C#はattribute構文だけを認識し、import、alias、runner設定を意味解決しない。誤認を避けるため対象source pathを明示し、coverageをruntime collectionとして扱わない。
+- TypeScriptとC# adapterは固定済み外部依存のrestoreを必要とする。依存未準備は部分JSONを返さないexit `2`として扱う。
 - TOML comment blockは機械的に扱いやすい一方、作者の記述量が増える。実利用で負荷が高い場合も、曖昧な自由記述へ戻さずauthoring helperを追加する。
 - oracle参照をv1で解決しないため、存在しない参照や循環した根拠は抽出後のAI審査または後続resolverまで検出できない。
 - 既存テストへ適用するenforcement policyは未定義であり、このplanだけではCI導入できない。

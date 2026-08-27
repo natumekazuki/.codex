@@ -2,11 +2,13 @@
 
 ## Binding
 
-- Pythonのmodule直下またはclass直下にある、名前が`test`で始まる`def`または`async def`へ付ける。
+- 対応するtest declarationは[source-adapters-v1.md](source-adapters-v1.md)に従う。
 - `@test-value v1`から`@end-test-value`までを同じindentの連続した行コメントとして書く。
-- 終了markerの直後へ、空行を挟まず最初のdecoratorまたはtest declarationを置く。
-- payloadは行頭の`#`と直後の空白一つを除去した後、TOMLとして成立させる。
+- 終了markerの直後へ、空行を挟まず最初のdecorator、attribute、またはtest declarationを置く。
+- payloadは言語固有の行コメントprefixと直後の空白一つを除去した後、TOMLとして成立させる。
 - 一つのtest declarationへ複数blockを付けない。
+
+行コメントprefixはPythonが`#`、TypeScriptとC#が`//`である。block commentとdoc commentはmetadataとして扱わない。
 
 ```python
 class PaymentTests(unittest.TestCase):
@@ -21,6 +23,36 @@ class PaymentTests(unittest.TestCase):
     # @end-test-value
     def test_retry_after_response_loss(self):
         ...
+```
+
+```typescript
+// @test-value v1
+// kind = "invariant"
+// claim = "同一keyによる再試行で請求件数が1件を超えない"
+// oracle = { type = "contract", ref = "PAYMENT-004" }
+// failure_mode = "応答喪失後の再送で請求を二重に永続化する"
+// scope = "payment-api"
+// lifecycle = "permanent"
+// @end-test-value
+test("retry after response loss", async () => {
+  // ...
+});
+```
+
+```csharp
+// @test-value v1
+// kind = "invariant"
+// claim = "同一keyによる再試行で請求件数が1件を超えない"
+// oracle = { type = "contract", ref = "PAYMENT-004" }
+// failure_mode = "応答喪失後の再送で請求を二重に永続化する"
+// scope = "payment-api"
+// lifecycle = "permanent"
+// @end-test-value
+[Fact]
+public async Task RetryAfterResponseLoss()
+{
+    // ...
+}
 ```
 
 長い値にはTOMLの複数行文字列を使う。
@@ -62,4 +94,4 @@ class PaymentTests(unittest.TestCase):
 
 ## Identity
 
-v1は安定IDを持たない。blockは隣接規則でtest declarationへ結合し、抽出recordはrepository相対pathとqualified symbolで識別する。この組をrenameをまたぐ恒久identityとして扱わない。
+v1は安定IDを持たない。blockは言語別の隣接規則でtest declarationへ結合し、抽出recordはrepository相対pathとqualified symbolで識別する。この組をrenameをまたぐ恒久identityとして扱わない。

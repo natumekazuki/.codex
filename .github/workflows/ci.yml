@@ -50,6 +50,42 @@ jobs:
           skills/audit-codex-work-quality/scripts/audit_history.py
           skills/review-test-value/scripts/extract_test_values.py
 
+  test-value-multilang:
+    name: Test value adapters (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Set up Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: skills/review-test-value/scripts/adapters/typescript/package-lock.json
+      - name: Set up .NET
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v5.0.0
+        with:
+          dotnet-version: "8.0.x"
+      - name: Restore TypeScript adapter
+        run: npm ci --prefix skills/review-test-value/scripts/adapters/typescript
+      - name: Restore C# adapter
+        run: dotnet restore skills/review-test-value/scripts/adapters/csharp/TestValue.CSharpExtractor.csproj
+      - name: Run multilanguage adapter tests
+        run: python -m unittest skills/review-test-value/scripts/test_extract_test_values_multilang.py
+
   routing-tests:
     name: Subagent routing tests (Windows)
     runs-on: windows-latest

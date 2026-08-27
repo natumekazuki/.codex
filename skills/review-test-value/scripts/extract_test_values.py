@@ -5,6 +5,7 @@ import ast
 import hashlib
 import io
 import json
+import subprocess
 import sys
 import tomllib
 import tokenize
@@ -15,10 +16,37 @@ from typing import Any, Sequence
 
 
 SCHEMA_VERSION = 1
-ADAPTER = "python-source-v1"
-COVERAGE = "python-source-declarations-v1"
 START_MARKER = "@test-value v1"
 END_MARKER = "@end-test-value"
+
+
+@dataclass(frozen=True)
+class AdapterProfile:
+    language: str
+    extensions: frozenset[str]
+    adapter: str
+    coverage: str
+
+
+PYTHON_PROFILE = AdapterProfile(
+    language="python",
+    extensions=frozenset({".py"}),
+    adapter="python-source-v1",
+    coverage="python-source-declarations-v1",
+)
+TYPESCRIPT_PROFILE = AdapterProfile(
+    language="typescript",
+    extensions=frozenset({".ts", ".tsx"}),
+    adapter="typescript-source-v1",
+    coverage="typescript-source-declarations-v1",
+)
+CSHARP_PROFILE = AdapterProfile(
+    language="csharp",
+    extensions=frozenset({".cs"}),
+    adapter="csharp-source-v1",
+    coverage="csharp-source-declarations-v1",
+)
+ADAPTER_PROFILES = (PYTHON_PROFILE, TYPESCRIPT_PROFILE, CSHARP_PROFILE)
 
 KINDS = {
     "contract",
@@ -49,6 +77,25 @@ class CommentBlock:
     end_line: int | None
     indent: str
     payload: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Declaration:
+    symbol: str
+    start_line: int
+    end_line: int
+    indent: str
+
+
+@dataclass(frozen=True)
+class SourceAnalysis:
+    declarations: tuple[Declaration, ...]
+    comments: dict[int, tuple[str, str]]
+    diagnostics: tuple[dict[str, Any], ...]
+
+
+class AdapterError(RuntimeError):
+    pass
 
 
 def diagnostic(code: str, path: str, line: int, message: str) -> dict[str, Any]:
@@ -103,10 +150,9 @@ def comment_content(
 
 
 def scan_comment_blocks(
-    source: str, lines: Sequence[str]
+    comments: dict[int, tuple[str, str]], lines: Sequence[str]
 ) -> list[CommentBlock]:
     blocks: list[CommentBlock] = []
-    comments = python_comment_lines(source)
     index = 1
     while index <= len(lines):
         comment = comments.get(index)
@@ -259,40 +305,28 @@ def source_slice(lines: Sequence[str], start_line: int, end_line: int) -> str:
     return "".join(lines[start_line - 1 : end_line])
 
 
-def extract_python_source(path: Path, relative_path: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    try:
-        raw = path.read_bytes().decode("utf-8")
-    except UnicodeDecodeError as error:
-        return [], [
-            diagnostic(
-                "SOURCE_DECODE_ERROR",
-                relative_path,
-                0,
-                f"source is not valid UTF-8: {error}",
-            )
-        ]
-
-    source, lines = normalized_lines(raw)
+def analyze_python_source(
+    source: str, lines: Sequence[str], relative_path: str
+) -> SourceAnalysis:
     try:
         tree = ast.parse(source, filename=relative_path)
     except SyntaxError as error:
-        return [], [
-            diagnostic(
-                "SOURCE_SYNTAX_ERROR",
-                relative_path,
-                error.lineno or 0,
-                error.msg,
-            )
-        ]
+        return SourceAnalysis(
+            declarations=(),
+            comments={},
+            diagnostics=(
+                diagnostic(
+                    "SOURCE_SYNTAX_ERROR",
+                    relative_path,
+                    error.lineno or 0,
+                    error.msg,
+                ),
+            ),
+        )
 
-    blocks = scan_comment_blocks(source, lines)
-    complete_blocks = [block for block in blocks if block.end_line is not None]
-    consumed: set[CommentBlock] = set()
-    duplicate_blocks: set[CommentBlock] = set()
-    records: list[dict[str, Any]] = []
+    declarations: list[Declaration] = []
     diagnostics: list[dict[str, Any]] = []
     parents = parent_map(tree)
-
     functions = sorted(
         (
             node
@@ -314,9 +348,154 @@ def extract_python_source(path: Path, relative_path: str) -> tuple[list[dict[str
                 )
             )
             continue
-
         start_line = declaration_start(node)
-        indent = declaration_indent(lines, start_line)
+        declarations.append(
+            Declaration(
+                symbol=symbol,
+                start_line=start_line,
+                end_line=node.end_lineno or node.lineno,
+                indent=declaration_indent(lines, start_line),
+            )
+        )
+    return SourceAnalysis(
+        declarations=tuple(declarations),
+        comments=python_comment_lines(source),
+        diagnostics=tuple(diagnostics),
+    )
+
+
+def parse_native_analysis(
+    payload: str, relative_path: str
+) -> SourceAnalysis:
+    try:
+        value = json.loads(payload)
+        raw_declarations = value["declarations"]
+        raw_comments = value["comments"]
+        raw_diagnostics = value["diagnostics"]
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        raise AdapterError(f"adapter returned invalid JSON: {error}") from error
+
+    try:
+        declarations = tuple(
+            Declaration(
+                symbol=item["symbol"],
+                start_line=item["start_line"],
+                end_line=item["end_line"],
+                indent=item["indent"],
+            )
+            for item in raw_declarations
+        )
+        comments = {
+            item["line"]: (item["indent"], item["text"])
+            for item in raw_comments
+        }
+        diagnostics = tuple(
+            diagnostic(
+                item["code"],
+                relative_path,
+                item["line"],
+                item["message"],
+            )
+            for item in raw_diagnostics
+        )
+    except (KeyError, TypeError) as error:
+        raise AdapterError(f"adapter returned an invalid analysis shape: {error}") from error
+    return SourceAnalysis(declarations, comments, diagnostics)
+
+
+def run_process(command: Sequence[str], source: str, adapter_name: str) -> str:
+    try:
+        completed = subprocess.run(
+            command,
+            input=source,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except OSError as error:
+        raise AdapterError(f"{adapter_name} adapter is unavailable: {error}") from error
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise AdapterError(
+            f"{adapter_name} adapter failed with exit {completed.returncode}: {detail}"
+        )
+    return completed.stdout
+
+
+def analyze_typescript_source(
+    source: str, suffix: str, relative_path: str
+) -> SourceAnalysis:
+    adapter_dir = Path(__file__).parent / "adapters" / "typescript"
+    if not (adapter_dir / "node_modules" / "typescript" / "package.json").is_file():
+        raise AdapterError(
+            "TypeScript adapter dependency is missing; run "
+            "npm ci --prefix <skill-dir>/scripts/adapters/typescript"
+        )
+    payload = run_process(
+        ["node", str(adapter_dir / "extract.mjs"), suffix],
+        source,
+        "TypeScript",
+    )
+    return parse_native_analysis(payload, relative_path)
+
+
+def csharp_helper_dll(adapter_dir: Path) -> Path:
+    project = adapter_dir / "TestValue.CSharpExtractor.csproj"
+    helper = adapter_dir / "bin" / "Release" / "net8.0" / "TestValue.CSharpExtractor.dll"
+    source_inputs = (project, adapter_dir / "Program.cs", adapter_dir / "packages.lock.json")
+    rebuild = not helper.is_file() or any(
+        item.stat().st_mtime_ns > helper.stat().st_mtime_ns for item in source_inputs
+    )
+    if rebuild:
+        run_process(
+            [
+                "dotnet",
+                "build",
+                str(project),
+                "--configuration",
+                "Release",
+                "--nologo",
+                "--verbosity",
+                "quiet",
+            ],
+            "",
+            "C# build",
+        )
+    if not helper.is_file():
+        raise AdapterError("C# adapter build did not produce the expected helper")
+    return helper
+
+
+def analyze_csharp_source(source: str, relative_path: str) -> SourceAnalysis:
+    adapter_dir = Path(__file__).parent / "adapters" / "csharp"
+    helper = csharp_helper_dll(adapter_dir)
+    payload = run_process(["dotnet", str(helper)], source, "C#")
+    return parse_native_analysis(payload, relative_path)
+
+
+def bind_analysis(
+    source: str,
+    lines: Sequence[str],
+    relative_path: str,
+    analysis: SourceAnalysis,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if any(item["code"] == "SOURCE_SYNTAX_ERROR" for item in analysis.diagnostics):
+        return [], list(analysis.diagnostics)
+
+    blocks = scan_comment_blocks(analysis.comments, lines)
+    complete_blocks = [block for block in blocks if block.end_line is not None]
+    consumed: set[CommentBlock] = set()
+    duplicate_blocks: set[CommentBlock] = set()
+    records: list[dict[str, Any]] = []
+    diagnostics = list(analysis.diagnostics)
+
+    for declaration in sorted(
+        analysis.declarations,
+        key=lambda item: (item.start_line, item.symbol),
+    ):
+        start_line = declaration.start_line
+        indent = declaration.indent
         immediate = [
             block
             for block in complete_blocks
@@ -379,13 +558,13 @@ def extract_python_source(path: Path, relative_path: str) -> tuple[list[dict[str
                 )
             )
 
-        end_line = node.end_lineno or node.lineno
+        end_line = declaration.end_line
         extracted_source = source_slice(lines, start_line, end_line)
         records.append(
             {
                 "source": {
                     "path": relative_path,
-                    "symbol": symbol,
+                    "symbol": declaration.symbol,
                     "metadata_start_line": metadata_start,
                     "metadata_end_line": metadata_end,
                     "declaration_start_line": start_line,
@@ -410,6 +589,35 @@ def extract_python_source(path: Path, relative_path: str) -> tuple[list[dict[str
             )
 
     return records, diagnostics
+
+
+def extract_source(
+    path: Path,
+    relative_path: str,
+    profile: AdapterProfile,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    try:
+        raw = path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError as error:
+        return [], [
+            diagnostic(
+                "SOURCE_DECODE_ERROR",
+                relative_path,
+                0,
+                f"source is not valid UTF-8: {error}",
+            )
+        ]
+
+    source, lines = normalized_lines(raw)
+    if profile == PYTHON_PROFILE:
+        analysis = analyze_python_source(source, lines, relative_path)
+    elif profile == TYPESCRIPT_PROFILE:
+        analysis = analyze_typescript_source(source, path.suffix.lower(), relative_path)
+    elif profile == CSHARP_PROFILE:
+        analysis = analyze_csharp_source(source, relative_path)
+    else:
+        raise AdapterError(f"unsupported adapter profile: {profile.language}")
+    return bind_analysis(source, lines, relative_path, analysis)
 
 
 def extract_repository(
@@ -437,9 +645,33 @@ def extract_repository(
         relative = resolved.relative_to(root).as_posix()
         resolved_paths[relative] = resolved
 
+    profiles = {
+        profile
+        for path in resolved_paths.values()
+        for profile in ADAPTER_PROFILES
+        if path.suffix.lower() in profile.extensions
+    }
+    unsupported_extensions = sorted(
+        {
+            path.suffix.lower() or "<none>"
+            for path in resolved_paths.values()
+            if not any(
+                path.suffix.lower() in profile.extensions
+                for profile in ADAPTER_PROFILES
+            )
+        }
+    )
+    if unsupported_extensions:
+        raise ValueError(
+            f"unsupported source extension: {', '.join(unsupported_extensions)}"
+        )
+    if len(profiles) > 1:
+        raise ValueError("source paths must use one language per invocation")
+    profile = next(iter(profiles), PYTHON_PROFILE)
+
     records: list[dict[str, Any]] = []
     for relative, path in sorted(resolved_paths.items()):
-        source_records, source_diagnostics = extract_python_source(path, relative)
+        source_records, source_diagnostics = extract_source(path, relative, profile)
         records.extend(source_records)
         diagnostics.extend(source_diagnostics)
 
@@ -453,8 +685,8 @@ def extract_repository(
     diagnostics.sort(key=lambda item: (item["path"], item["line"], item["code"]))
     result = {
         "schema_version": SCHEMA_VERSION,
-        "adapter": ADAPTER,
-        "coverage": COVERAGE,
+        "adapter": profile.adapter,
+        "coverage": profile.coverage,
         "repository_root": ".",
         "tests": records,
         "diagnostics": diagnostics,
@@ -464,10 +696,17 @@ def extract_repository(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Extract Python test declarations and adjacent test-value comments."
+        description=(
+            "Extract Python, TypeScript, or C# test declarations and adjacent "
+            "test-value comments."
+        )
     )
     parser.add_argument("--root", required=True, type=Path, help="Repository root")
-    parser.add_argument("paths", nargs="+", help="Python source paths to extract")
+    parser.add_argument(
+        "paths",
+        nargs="+",
+        help="Source paths from one supported language to extract",
+    )
     return parser
 
 
@@ -476,7 +715,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         result, exit_status = extract_repository(args.root, args.paths)
-    except (OSError, ValueError) as error:
+    except (AdapterError, OSError, ValueError) as error:
         print(f"extract_test_values: {error}", file=sys.stderr)
         return 2
     rendered = render_result(result)
