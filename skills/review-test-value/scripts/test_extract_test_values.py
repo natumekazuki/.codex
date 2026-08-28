@@ -217,6 +217,22 @@ def test_oracle_table_with_decoy():
             result["diagnostics"][0]["message"],
         )
 
+    def test_oracle_accepts_escaped_quoted_key_with_inline_table(self) -> None:
+        metadata = VALID_METADATA.replace(
+            '# oracle = { type = "contract", ref = "PAYMENT-004" }',
+            '# "or\\u0061cle" = { type = "contract", ref = "PAYMENT-004" }',
+        )
+        self.write(
+            "tests/test_quoted_oracle.py",
+            metadata + "def test_quoted_oracle():\n    assert True\n",
+        )
+
+        result, exit_status = self.extract("tests/test_quoted_oracle.py")
+
+        self.assertEqual(exit_status, 0)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(result["tests"][0]["metadata"]["oracle"]["ref"], "PAYMENT-004")
+
     def test_wrong_types_and_invalid_lifecycle_combination_are_schema_errors(self) -> None:
         wrong_type = VALID_METADATA.replace(
             '# kind = "invariant"',

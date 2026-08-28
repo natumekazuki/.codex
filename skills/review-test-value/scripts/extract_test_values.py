@@ -5,7 +5,6 @@ import ast
 import hashlib
 import io
 import json
-import re
 import subprocess
 import sys
 import tomllib
@@ -70,9 +69,6 @@ ORACLE_TYPES = {
 REQUIRED_FIELDS = {"kind", "claim", "oracle", "failure_mode", "scope", "lifecycle"}
 OPTIONAL_FIELDS = {"distinction", "expires_on", "review_when"}
 ALLOWED_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS
-ORACLE_INLINE_ASSIGNMENT = re.compile(
-    r'''^\s*(?:oracle|"oracle"|'oracle')\s*=\s*\{'''
-)
 
 
 @dataclass(frozen=True)
@@ -262,13 +258,17 @@ def validate_metadata(value: Any) -> list[str]:
 
 def has_inline_oracle_source(payload: Sequence[str], oracle: Any) -> bool:
     for end_line, line in enumerate(payload, start=1):
-        if ORACLE_INLINE_ASSIGNMENT.match(line) is None:
+        if not any(
+            suffix.lstrip().startswith("{")
+            for suffix in line.split("=")[1:]
+        ):
             continue
         try:
+            before = tomllib.loads("\n".join(payload[: end_line - 1]))
             prefix = tomllib.loads("\n".join(payload[:end_line]))
         except tomllib.TOMLDecodeError:
             continue
-        if prefix.get("oracle") == oracle:
+        if "oracle" not in before and prefix.get("oracle") == oracle:
             return True
     return False
 

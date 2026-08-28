@@ -80,6 +80,8 @@ public async Task RetryAfterResponseLoss()
 
 `characterization`には`expires_on`または`review_when`を一つ以上書く。他のlifecycleでは両fieldを書かない。
 
+`oracle`はinline tableのkey-valueとして書く。通常tableの`[oracle]`や`oracle.type`のようなdotted keyでは書かない。
+
 `oracle.type`は次のいずれかとする。
 
 - `contract`
