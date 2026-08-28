@@ -5,6 +5,7 @@ import ast
 import hashlib
 import io
 import json
+import re
 import subprocess
 import sys
 import tomllib
@@ -69,6 +70,9 @@ ORACLE_TYPES = {
 REQUIRED_FIELDS = {"kind", "claim", "oracle", "failure_mode", "scope", "lifecycle"}
 OPTIONAL_FIELDS = {"distinction", "expires_on", "review_when"}
 ALLOWED_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS
+ORACLE_INLINE_ASSIGNMENT = re.compile(
+    r'''^\s*(?:oracle|"oracle"|'oracle')\s*=\s*\{'''
+)
 
 
 @dataclass(frozen=True)
@@ -256,11 +260,32 @@ def validate_metadata(value: Any) -> list[str]:
     return errors
 
 
+def has_inline_oracle_source(payload: Sequence[str], oracle: Any) -> bool:
+    for end_line, line in enumerate(payload, start=1):
+        if ORACLE_INLINE_ASSIGNMENT.match(line) is None:
+            continue
+        try:
+            prefix = tomllib.loads("\n".join(payload[:end_line]))
+        except tomllib.TOMLDecodeError:
+            continue
+        if prefix.get("oracle") == oracle:
+            return True
+    return False
+
+
 def parse_metadata(block: CommentBlock) -> tuple[dict[str, Any] | None, str | None, str | None]:
     try:
         value = tomllib.loads("\n".join(block.payload))
     except tomllib.TOMLDecodeError as error:
         return None, "TEST_VALUE_PARSE_ERROR", str(error)
+    if isinstance(value, dict) and "oracle" in value and not has_inline_oracle_source(
+        block.payload, value["oracle"]
+    ):
+        return (
+            None,
+            "TEST_VALUE_SCHEMA_ERROR",
+            "oracle must use inline table syntax",
+        )
     errors = validate_metadata(value)
     if errors:
         return None, "TEST_VALUE_SCHEMA_ERROR", "; ".join(errors)

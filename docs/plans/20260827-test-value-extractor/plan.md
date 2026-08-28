@@ -30,7 +30,7 @@
 - Accepted anchor: 抽出器の主体は決定論的な抽出であり、価値判断は下流AIが行う。
 - Scope / owner: parser、validator、JSON projection。
 - Failure mode: 欠落項目や曖昧な値を抽出器が補完し、作者が書いていない主張をAI入力へ混入する。
-- Direct verification: 欠落、unknown field、不正enum、不正TOMLを入力し、補完せずdiagnosticを返すことを検証する。
+- Direct verification: 欠落、unknown field、不正enum、不正TOML、inline table以外の`oracle`を入力し、補完せずdiagnosticを返すことを検証する。
 - Gate: ready。
 
 #### TVE-003: 同じ入力は同じJSONを生成する

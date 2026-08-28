@@ -146,6 +146,77 @@ def test_malformed():
             {"TEST_VALUE_PARSE_ERROR", "TEST_VALUE_SCHEMA_ERROR"},
         )
 
+    def test_oracle_requires_inline_table_syntax(self) -> None:
+        table_oracle = VALID_METADATA.replace(
+            '# oracle = { type = "contract", ref = "PAYMENT-004" }\n',
+            "",
+        ).replace(
+            "# @end-test-value\n",
+            '# [oracle]\n# type = "contract"\n# ref = "PAYMENT-004"\n'
+            "# @end-test-value\n",
+        )
+        dotted_oracle = VALID_METADATA.replace(
+            '# oracle = { type = "contract", ref = "PAYMENT-004" }',
+            '# oracle.type = "contract"\n# oracle.ref = "PAYMENT-004"',
+        )
+        self.write(
+            "tests/test_oracle_table.py",
+            table_oracle + "def test_oracle_table():\n    assert True\n",
+        )
+        self.write(
+            "tests/test_oracle_dotted.py",
+            dotted_oracle + "def test_oracle_dotted():\n    assert True\n",
+        )
+
+        result, exit_status = self.extract(
+            "tests/test_oracle_table.py", "tests/test_oracle_dotted.py"
+        )
+
+        self.assertEqual(exit_status, 1)
+        self.assertTrue(all(record["metadata"] is None for record in result["tests"]))
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_VALUE_SCHEMA_ERROR", "TEST_VALUE_SCHEMA_ERROR"],
+        )
+        self.assertTrue(
+            all(
+                "oracle must use inline table syntax" in item["message"]
+                for item in result["diagnostics"]
+            )
+        )
+
+    def test_oracle_shape_ignores_inline_table_text_in_multiline_string(self) -> None:
+        source = '''# @test-value v1
+# kind = "invariant"
+# claim = """
+# oracle = { type = "contract", ref = "DECOY" }
+# claim text
+# """
+# failure_mode = "誤ったoracle構文を受理する"
+# scope = "metadata-parser"
+# lifecycle = "permanent"
+# [oracle]
+# type = "contract"
+# ref = "PAYMENT-004"
+# @end-test-value
+def test_oracle_table_with_decoy():
+    assert True
+'''
+        self.write("tests/test_oracle_decoy.py", source)
+
+        result, exit_status = self.extract("tests/test_oracle_decoy.py")
+
+        self.assertEqual(exit_status, 1)
+        self.assertIsNone(result["tests"][0]["metadata"])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_VALUE_SCHEMA_ERROR"],
+        )
+        self.assertIn(
+            "oracle must use inline table syntax",
+            result["diagnostics"][0]["message"],
+        )
+
     def test_wrong_types_and_invalid_lifecycle_combination_are_schema_errors(self) -> None:
         wrong_type = VALID_METADATA.replace(
             '# kind = "invariant"',
