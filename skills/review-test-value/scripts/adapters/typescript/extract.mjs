@@ -57,42 +57,75 @@ function isInnerCalleeCall(node) {
   return ts.isCallExpression(parent) && parent.expression === expression;
 }
 
+const nonDeclarationApis = new Set([
+  "abort",
+  "afterAll",
+  "afterEach",
+  "beforeAll",
+  "beforeEach",
+  "expect",
+  "extend",
+  "info",
+  "setTimeout",
+  "slow",
+  "step",
+  "step.skip",
+  "use",
+]);
+
+function terminalBuilderInfo(expression) {
+  const trailingMembers = [];
+  let current = expression;
+  while (ts.isPropertyAccessExpression(current)) {
+    trailingMembers.unshift(current.name.text);
+    current = current.expression;
+  }
+  if (ts.isCallExpression(current)) {
+    return {
+      kind: "call",
+      parts: propertyParts(current.expression),
+      trailingMembers,
+    };
+  }
+  if (ts.isTaggedTemplateExpression(current)) {
+    return {
+      kind: "tagged",
+      parts: propertyParts(current.tag),
+      trailingMembers,
+    };
+  }
+  return null;
+}
+
 function testCallInfo(node) {
   if (isInnerCalleeCall(node)) {
     return null;
   }
-  if (
-    ts.isPropertyAccessExpression(node.expression) &&
-    ts.isCallExpression(node.expression.expression)
-  ) {
-    const innerParts = propertyParts(node.expression.expression.expression);
-    if (innerParts !== null && ["test", "it"].includes(innerParts[0])) {
-      return {
-        kind: "unsupported",
-        message: `unsupported test declaration call chain: ${[
-          ...innerParts.slice(1),
-          node.expression.name.text,
-        ].join(".")}`,
-      };
-    }
-  }
-  if (ts.isTaggedTemplateExpression(node.expression)) {
-    const taggedParts = propertyParts(node.expression.tag);
-    if (taggedParts !== null && ["test", "it"].includes(taggedParts[0])) {
-      return {
-        kind: "unsupported",
-        message: `unsupported tagged test declaration call chain: ${taggedParts.slice(1).join(".")}`,
-      };
-    }
-  }
-  const builder = ts.isCallExpression(node.expression) ? node.expression : null;
-  const parts = propertyParts(builder === null ? node.expression : builder.expression);
+  const builder = terminalBuilderInfo(node.expression);
+  const parts = builder === null ? propertyParts(node.expression) : builder.parts;
   if (parts === null || !["test", "it"].includes(parts[0])) {
     return null;
   }
 
   const members = parts.slice(1);
   if (builder !== null) {
+    const memberPath = members.join(".");
+    if (parts[0] === "test" && nonDeclarationApis.has(memberPath)) {
+      return { kind: "ignore" };
+    }
+    const chainPath = [...members, ...builder.trailingMembers].join(".");
+    if (builder.kind === "tagged") {
+      return {
+        kind: "unsupported",
+        message: `unsupported tagged test declaration call chain: ${chainPath}`,
+      };
+    }
+    if (builder.trailingMembers.length > 0) {
+      return {
+        kind: "unsupported",
+        message: `unsupported test declaration call chain: ${chainPath}`,
+      };
+    }
     if (members.at(-1) !== "each") {
       return {
         kind: "unsupported",
@@ -126,21 +159,6 @@ function testCallInfo(node) {
   }
 
   const memberPath = members.join(".");
-  const nonDeclarationApis = new Set([
-    "abort",
-    "afterAll",
-    "afterEach",
-    "beforeAll",
-    "beforeEach",
-    "expect",
-    "extend",
-    "info",
-    "setTimeout",
-    "slow",
-    "step",
-    "step.skip",
-    "use",
-  ]);
   if (parts[0] === "test" && nonDeclarationApis.has(memberPath)) {
     return { kind: "ignore" };
   }

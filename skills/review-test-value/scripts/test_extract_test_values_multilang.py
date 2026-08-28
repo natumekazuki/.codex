@@ -118,7 +118,9 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             'test.concurrent.each([1, 2])("parallel %s", () => {});\n'
             + 'it.concurrent.each([1, 2])("also parallel %s", () => {});\n'
             + 'test.each([1, 2]).only("focused %s", () => {});\n'
-            + 'test.each`value | expected\n${1} | ${1}`("tagged", () => {});\n',
+            + 'test.each([1, 2]).only.concurrent("deep %s", () => {});\n'
+            + 'test.each`value | expected\n${1} | ${1}`("tagged", () => {});\n'
+            + 'test.each`value | expected\n${1} | ${1}`.only("tagged modifier", () => {});\n',
         )
 
         result, exit_status = self.extract("tests/concurrent-each.test.ts")
@@ -127,7 +129,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertEqual(result["tests"], [])
         self.assertEqual(
             [item["code"] for item in result["diagnostics"]],
-            ["TEST_DECLARATION_UNSUPPORTED"] * 4,
+            ["TEST_DECLARATION_UNSUPPORTED"] * 6,
         )
 
     def test_typescript_ignores_playwright_hooks_config_and_runtime_annotations(self) -> None:
@@ -150,6 +152,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             + "  test.slow(browserName === 'chromium', 'Slow path');\n"
             + "  test.info();\n"
             + "  await test.step('step', async () => {});\n"
+            + "  await test.expect(browserName).toBe('chromium');\n"
             + "  test.abort('stop');\n"
             + "});\n",
         )
