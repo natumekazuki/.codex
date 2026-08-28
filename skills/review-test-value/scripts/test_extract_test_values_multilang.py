@@ -119,8 +119,10 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             + 'it.concurrent.each([1, 2])("also parallel %s", () => {});\n'
             + 'test.each([1, 2]).only("focused %s", () => {});\n'
             + 'test.each([1, 2]).only.concurrent("deep %s", () => {});\n'
+            + '(test.each([1, 2])).only("wrapped %s", () => {});\n'
             + 'test.each`value | expected\n${1} | ${1}`("tagged", () => {});\n'
-            + 'test.each`value | expected\n${1} | ${1}`.only("tagged modifier", () => {});\n',
+            + 'test.each`value | expected\n${1} | ${1}`.only("tagged modifier", () => {});\n'
+            + '(test.each`value | expected\n${1} | ${1}`).only("wrapped tagged", () => {});\n',
         )
 
         result, exit_status = self.extract("tests/concurrent-each.test.ts")
@@ -129,7 +131,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertEqual(result["tests"], [])
         self.assertEqual(
             [item["code"] for item in result["diagnostics"]],
-            ["TEST_DECLARATION_UNSUPPORTED"] * 6,
+            ["TEST_DECLARATION_UNSUPPORTED"] * 8,
         )
 
     def test_typescript_ignores_playwright_hooks_config_and_runtime_annotations(self) -> None:

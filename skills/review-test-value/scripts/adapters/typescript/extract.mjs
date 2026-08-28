@@ -47,12 +47,39 @@ function declarationArguments(args) {
   return staticTitle(args[0]) === null ? null : { titleArgument: args[0] };
 }
 
+function isTransparentExpression(node) {
+  return (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isTypeAssertionExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isSatisfiesExpression(node)
+  );
+}
+
+function unwrapTransparentExpression(node) {
+  let current = node;
+  while (isTransparentExpression(current)) {
+    current = current.expression;
+  }
+  return current;
+}
+
 function isInnerCalleeCall(node) {
   let expression = node;
   let parent = node.parent;
-  while (ts.isPropertyAccessExpression(parent) && parent.expression === expression) {
-    expression = parent;
-    parent = parent.parent;
+  while (true) {
+    if (isTransparentExpression(parent) && parent.expression === expression) {
+      expression = parent;
+      parent = parent.parent;
+      continue;
+    }
+    if (ts.isPropertyAccessExpression(parent) && parent.expression === expression) {
+      expression = parent;
+      parent = parent.parent;
+      continue;
+    }
+    break;
   }
   return ts.isCallExpression(parent) && parent.expression === expression;
 }
@@ -75,10 +102,10 @@ const nonDeclarationApis = new Set([
 
 function terminalBuilderInfo(expression) {
   const trailingMembers = [];
-  let current = expression;
+  let current = unwrapTransparentExpression(expression);
   while (ts.isPropertyAccessExpression(current)) {
     trailingMembers.unshift(current.name.text);
-    current = current.expression;
+    current = unwrapTransparentExpression(current.expression);
   }
   if (ts.isCallExpression(current)) {
     return {
