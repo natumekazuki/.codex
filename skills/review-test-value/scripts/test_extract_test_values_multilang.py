@@ -609,6 +609,37 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertEqual(completed.stdout, "")
         self.assertIn("unsupported source extension: .js", completed.stderr)
 
+    def test_outside_root_path_preserves_requested_language_profile(self) -> None:
+        cases = (
+            (
+                "outside.test.ts",
+                "typescript-source-v1",
+                "typescript-source-declarations-v1",
+            ),
+            (
+                "OutsideTests.cs",
+                "csharp-source-v1",
+                "csharp-source-declarations-v1",
+            ),
+        )
+        for filename, adapter, coverage in cases:
+            with self.subTest(filename=filename):
+                outside = self.root.parent / f"{self.root.name}-{filename}"
+                outside.write_text("not read", encoding="utf-8")
+                try:
+                    result, exit_status = self.extract(str(outside))
+                finally:
+                    outside.unlink(missing_ok=True)
+
+                self.assertEqual(exit_status, 1)
+                self.assertEqual(result["adapter"], adapter)
+                self.assertEqual(result["coverage"], coverage)
+                self.assertEqual(result["tests"], [])
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["SOURCE_OUTSIDE_ROOT"],
+                )
+
     def test_language_adapters_share_metadata_projection(self) -> None:
         self.write(
             "tests/value.test.ts",

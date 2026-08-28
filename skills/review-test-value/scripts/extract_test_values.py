@@ -675,8 +675,32 @@ def extract_repository(
     resolved_paths: dict[str, Path] = {}
     diagnostics: list[dict[str, Any]] = []
 
-    for raw_path in source_paths:
-        supplied = Path(raw_path)
+    supplied_paths = [Path(raw_path) for raw_path in source_paths]
+    profiles = {
+        profile
+        for path in supplied_paths
+        for profile in ADAPTER_PROFILES
+        if path.suffix.lower() in profile.extensions
+    }
+    unsupported_extensions = sorted(
+        {
+            path.suffix.lower() or "<none>"
+            for path in supplied_paths
+            if not any(
+                path.suffix.lower() in profile.extensions
+                for profile in ADAPTER_PROFILES
+            )
+        }
+    )
+    if unsupported_extensions:
+        raise ValueError(
+            f"unsupported source extension: {', '.join(unsupported_extensions)}"
+        )
+    if len(profiles) > 1:
+        raise ValueError("source paths must use one language per invocation")
+    profile = next(iter(profiles), PYTHON_PROFILE)
+
+    for supplied in supplied_paths:
         candidate = supplied if supplied.is_absolute() else root / supplied
         resolved = candidate.resolve(strict=False)
         if not resolved.is_relative_to(root):
@@ -691,30 +715,6 @@ def extract_repository(
             continue
         relative = resolved.relative_to(root).as_posix()
         resolved_paths[relative] = resolved
-
-    profiles = {
-        profile
-        for path in resolved_paths.values()
-        for profile in ADAPTER_PROFILES
-        if path.suffix.lower() in profile.extensions
-    }
-    unsupported_extensions = sorted(
-        {
-            path.suffix.lower() or "<none>"
-            for path in resolved_paths.values()
-            if not any(
-                path.suffix.lower() in profile.extensions
-                for profile in ADAPTER_PROFILES
-            )
-        }
-    )
-    if unsupported_extensions:
-        raise ValueError(
-            f"unsupported source extension: {', '.join(unsupported_extensions)}"
-        )
-    if len(profiles) > 1:
-        raise ValueError("source paths must use one language per invocation")
-    profile = next(iter(profiles), PYTHON_PROFILE)
 
     records: list[dict[str, Any]] = []
     for relative, path in sorted(resolved_paths.items()):
