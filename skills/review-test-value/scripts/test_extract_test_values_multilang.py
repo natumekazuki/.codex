@@ -79,6 +79,36 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertIn("namedHandler", record["source_text"])
         self.assertEqual(record["metadata"]["oracle"]["ref"], "PAYMENT-004")
 
+    def test_record_locator_is_unique_when_qualified_symbols_collide(self) -> None:
+        self.write(
+            "tests/colliding-symbols.test.ts",
+            'describe("a > b", () => {\n'
+            + metadata_block("//", "  ")
+            + '  test("c", () => {});\n'
+            + '});\n'
+            + 'describe("a", () => {\n'
+            + metadata_block("//", "  ")
+            + '  test("b > c", () => {});\n'
+            + '});\n',
+        )
+
+        result, exit_status = self.extract("tests/colliding-symbols.test.ts")
+
+        self.assertEqual(exit_status, 0)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["a > b > c", "a > b > c"],
+        )
+        locators = {
+            (
+                record["source"]["path"],
+                record["source"]["declaration_start_line"],
+            )
+            for record in result["tests"]
+        }
+        self.assertEqual(len(locators), 2)
+
     def test_typescript_rejects_dynamic_title_without_inference(self) -> None:
         self.write(
             "tests/dynamic.test.ts",

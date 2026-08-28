@@ -2,7 +2,7 @@
 
 ## Input Boundary
 
-抽出器が返した一つのtest recordを審査単位にする。metadata、source text、line locatorを変更、補完、再対応付けしない。
+抽出器が返した一つのtest recordを審査単位にする。同じ抽出結果内では`source.path`と`source.declaration_start_line`の組をrecord locatorとして扱い、`source.symbol`をrecord keyにしない。metadata、source text、line locatorを変更、補完、再対応付けしない。
 
 抽出recordだけでは確認できないoracle本文、production behavior、既存testとの重複を想像で補わない。`oracle.type`と`oracle.ref`だけから、参照先の存在、claimの裏付け、非循環性を確認済みとして扱わない。
 

@@ -157,7 +157,7 @@ function testCallInfo(node) {
         message: `unsupported test declaration call chain: ${chainPath}`,
       };
     }
-    if (members.at(-1) !== "each") {
+    if (members[members.length - 1] !== "each") {
       return {
         kind: "unsupported",
         message: `unsupported test declaration call chain: ${members.join(".")}`,

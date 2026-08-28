@@ -19,7 +19,7 @@
 - Pythonは`ast`と`tokenize`、TypeScriptはTypeScript Compiler API、C#はRoslynをsource parserとして使う。metadataのTOML parse、schema validation、binding、projectionは共通のPython CLIが所有する。
 - 一つのJSON resultは一つのsource adapterだけを表す。複数言語のpathは言語ごとにCLI呼び出しを分け、既存のoutput schema v1を維持する。
 - AIは抽出済みrecordを入力として価値コメントとtest本文を審査し、結合、補完、source range決定を行わない。
-- v1は安定ID、sidecar、runtime collection照合、動的生成testの発見を持たない。recordはrepository相対pathとqualified symbolで識別するが、renameをまたぐ恒久identityとはみなさない。
+- v1は安定ID、sidecar、runtime collection照合、動的生成testの発見を持たない。一つの抽出結果かつ同じsource revision内では、repository相対pathとdeclaration start lineの組を一意なrecord locatorとする。qualified symbolは人間向けの表示値であり、一意性を持たない。record locatorをsourceの編集、移動、renameをまたぐ恒久identityとはみなさない。
 - JSONはsourceから再生成できる派生物とし、repositoryの正本として永続化しない。
 
 ## Alternatives

@@ -57,6 +57,14 @@
 - Direct verification: Python、TypeScript、C#の等価fixtureで同じmetadata objectとhashを生成し、言語固有fieldはresult-levelの`adapter`と`coverage`だけで表すことを検証する。
 - Gate: ready。
 
+#### TVE-006: 一つの抽出結果内でrecord locatorを一意にする
+
+- Accepted anchor: 下流consumerが抽出recordを別のtestへ誤対応または上書きせず、一件ずつ審査できること。
+- Scope / owner: source adapterと共通JSON projection。
+- Failure mode: 人間向けのqualified symbolが衝突し、consumerが別testのreview結果を誤対応または上書きする。
+- Direct verification: 同じpath内でqualified symbolが衝突するfixtureから、異なるdeclaration start lineを持つ二つのrecordを抽出し、pathとstart lineの組が一意であることを検証する。
+- Gate: ready。
+
 ## Structured Comment Format v1
 
 ### Syntax
@@ -129,7 +137,7 @@ def test_retry_after_response_loss():
 
 unknown field、unknown enum、型不一致はerrorとする。抽出器は既定値を補わない。
 
-v1は安定IDを持たない。コメントは隣接規則によってテスト宣言へ結合し、出力recordはrepository相対pathとqualified symbolで識別する。この識別子はrenameをまたぐ恒久identityとして扱わない。
+v1は安定IDを持たない。コメントは隣接規則によってテスト宣言へ結合する。一つの抽出結果かつ同じsource revision内では、repository相対pathとdeclaration start lineの組を一意なrecord locatorとする。qualified symbolは人間向けの表示値であり、一意性を持たない。record locatorをsourceの編集、移動、renameをまたぐ恒久identityとして扱わない。
 
 schema validatorはTOMLの構文だけでなく、root field、`oracle`内のfield、enum、文字列の非空白、`lifecycle`と見直しfieldの組合せを検証する。`expires_on`と`review_when`は`characterization`でだけ許可する。
 
@@ -202,6 +210,7 @@ TypeScriptとC#のsupported declaration、framework構文、parameterization、�
 
 - pathはrepository root相対のPOSIX区切りへ正規化する。
 - 入力pathは正規化後のpath、source start line、symbolの順でsortする。
+- 一つの抽出結果かつ同じsource revision内では、`source.path`と`source.declaration_start_line`の組を一意なrecord locatorとする。`source.symbol`はrecord keyに使わない。
 - source textの改行はLFへ正規化する。Unicode normalizationは行わない。
 - `source_hash`はLFへ正規化したUTF-8のsource textから算出する。
 - `metadata_hash`はkey順を固定したcanonical JSONから算出する。

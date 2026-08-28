@@ -94,4 +94,4 @@ public async Task RetryAfterResponseLoss()
 
 ## Identity
 
-v1は安定IDを持たない。blockは言語別の隣接規則でtest declarationへ結合し、抽出recordはrepository相対pathとqualified symbolで識別する。この組をrenameをまたぐ恒久identityとして扱わない。
+v1は安定IDを持たない。blockは言語別の隣接規則でtest declarationへ結合する。一つの抽出結果かつ同じsource revision内では、`source.path`と`source.declaration_start_line`の組をrecord locatorとし、この組は一意である。`source.symbol`は人間向けの表示と説明に使う値であり、一意性を持たないためrecord keyに使わない。record locatorをsourceの編集、移動、renameをまたぐ恒久identityとして扱わない。
