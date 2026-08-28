@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -68,7 +67,7 @@ var diagnostics = tree.GetDiagnostics()
     {
         code = "SOURCE_SYNTAX_ERROR",
         line = item.Location == Location.None ? 0 : item.Location.GetLineSpan().StartLinePosition.Line + 1,
-        message = item.GetMessage(CultureInfo.InvariantCulture),
+        message = DiagnosticProjection.Message(item),
     })
     .Cast<object>()
     .ToList();

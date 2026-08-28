@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -464,40 +463,37 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
     def test_csharp_syntax_diagnostic_uses_invariant_culture(self) -> None:
         self.write("tests/CultureInvariant.cs", "public class Broken {")
 
-        previous = os.environ.get("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT")
-        results = []
-        try:
-            for mode in ("0", "1"):
-                os.environ["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = mode
-                results.append(self.extract("tests/CultureInvariant.cs"))
-        finally:
-            if previous is None:
-                os.environ.pop("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", None)
-            else:
-                os.environ["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = previous
-
-        self.assertEqual(
-            EXTRACTOR.render_result(results[0][0]),
-            EXTRACTOR.render_result(results[1][0]),
-        )
-        result, exit_status = results[0]
+        result, exit_status = self.extract("tests/CultureInvariant.cs")
         self.assertEqual(exit_status, 1)
         self.assertEqual(result["tests"], [])
         self.assertEqual(
-            result["diagnostics"],
-            [
-                {
-                    "code": "SOURCE_SYNTAX_ERROR",
-                    "path": "tests/CultureInvariant.cs",
-                    "line": 1,
-                    "message": "} expected",
-                }
-            ],
+            [item["code"] for item in result["diagnostics"]],
+            ["SOURCE_SYNTAX_ERROR"],
         )
-        program = (
-            SCRIPT.parent / "adapters" / "csharp" / "Program.cs"
-        ).read_text(encoding="utf-8")
-        self.assertIn("GetMessage(CultureInfo.InvariantCulture)", program)
+
+        check_project = (
+            SCRIPT.parent
+            / "adapters"
+            / "csharp"
+            / "culture-check"
+            / "CultureCheck.csproj"
+        )
+        completed = subprocess.run(
+            [
+                "dotnet",
+                "run",
+                "--project",
+                str(check_project),
+                "--configuration",
+                "Release",
+                "--nologo",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_csharp_rejects_conditional_compilation_regions(self) -> None:
         self.write(

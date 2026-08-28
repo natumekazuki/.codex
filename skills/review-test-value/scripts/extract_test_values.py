@@ -468,7 +468,12 @@ def analyze_typescript_source(
 def csharp_helper_dll(adapter_dir: Path) -> Path:
     project = adapter_dir / "TestValue.CSharpExtractor.csproj"
     helper = adapter_dir / "bin" / "Release" / "net8.0" / "TestValue.CSharpExtractor.dll"
-    source_inputs = (project, adapter_dir / "Program.cs", adapter_dir / "packages.lock.json")
+    source_inputs = (
+        project,
+        adapter_dir / "Program.cs",
+        adapter_dir / "DiagnosticProjection.cs",
+        adapter_dir / "packages.lock.json",
+    )
     rebuild = not helper.is_file() or any(
         item.stat().st_mtime_ns > helper.stat().st_mtime_ns for item in source_inputs
     )
