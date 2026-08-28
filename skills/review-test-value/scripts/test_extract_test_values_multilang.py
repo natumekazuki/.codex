@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -459,6 +460,44 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             "SOURCE_SYNTAX_ERROR",
             [item["code"] for item in result["diagnostics"]],
         )
+
+    def test_csharp_syntax_diagnostic_uses_invariant_culture(self) -> None:
+        self.write("tests/CultureInvariant.cs", "public class Broken {")
+
+        previous = os.environ.get("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT")
+        results = []
+        try:
+            for mode in ("0", "1"):
+                os.environ["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = mode
+                results.append(self.extract("tests/CultureInvariant.cs"))
+        finally:
+            if previous is None:
+                os.environ.pop("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", None)
+            else:
+                os.environ["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = previous
+
+        self.assertEqual(
+            EXTRACTOR.render_result(results[0][0]),
+            EXTRACTOR.render_result(results[1][0]),
+        )
+        result, exit_status = results[0]
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            result["diagnostics"],
+            [
+                {
+                    "code": "SOURCE_SYNTAX_ERROR",
+                    "path": "tests/CultureInvariant.cs",
+                    "line": 1,
+                    "message": "} expected",
+                }
+            ],
+        )
+        program = (
+            SCRIPT.parent / "adapters" / "csharp" / "Program.cs"
+        ).read_text(encoding="utf-8")
+        self.assertIn("GetMessage(CultureInfo.InvariantCulture)", program)
 
     def test_csharp_rejects_conditional_compilation_regions(self) -> None:
         self.write(

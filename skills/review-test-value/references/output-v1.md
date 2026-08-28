@@ -36,6 +36,7 @@ stdoutへUTF-8 JSON objectを一つ出力する。
 一つの抽出結果かつ同じsource revision内では、`source.path`と`source.declaration_start_line`の組をrecord locatorとし、この組は一意である。`source.symbol`は人間向けの表示と説明に使う値であり、一意性を持たない。consumerはrecord keyとして使わない。record locatorはsourceの編集、移動、renameをまたぐ安定IDではない。
 
 path、record、diagnostic、JSON keyの順序は固定する。pathはPOSIX区切り、改行はLFへ正規化する。Unicode normalizationは行わない。
+C# parser由来のdiagnostic messageはinvariant cultureで生成する。
 
 ## Diagnostic Codes
 

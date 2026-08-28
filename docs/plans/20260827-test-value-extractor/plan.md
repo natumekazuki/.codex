@@ -38,7 +38,7 @@
 - Accepted anchor: AI入力を決定論的に生成するというユーザー要求。
 - Scope / owner: path正規化、source slice、metadata canonicalization、record順序、hash生成。
 - Failure mode: OS、filesystem列挙順、改行コード、JSON key順序によってAI入力やhashが変わる。
-- Direct verification: 入力順、CRLF / LF、Windows / POSIX形式のpath表現を変えてbyte-equivalentなJSONを検証する。
+- Direct verification: 入力順、CRLF / LF、Windows / POSIX形式のpath表現、parser diagnosticのUI cultureを変えてbyte-equivalentなJSONを検証する。
 - Gate: ready。
 
 #### TVE-004: 対応できないsourceを成功として扱わない
