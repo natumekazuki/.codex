@@ -25,19 +25,23 @@ function lineIndent(source, sourceFile, position) {
 }
 
 function staticTitle(node) {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+  if (
+    node !== undefined &&
+    (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+  ) {
     return node.text;
   }
   return null;
 }
 
 function propertyParts(expression) {
-  if (ts.isIdentifier(expression)) {
-    return [expression.text];
+  const current = unwrapTransparentExpression(expression);
+  if (ts.isIdentifier(current)) {
+    return [current.text];
   }
-  if (ts.isPropertyAccessExpression(expression)) {
-    const left = propertyParts(expression.expression);
-    return left === null ? null : [...left, expression.name.text];
+  if (ts.isPropertyAccessExpression(current)) {
+    const left = propertyParts(current.expression);
+    return left === null ? null : [...left, current.name.text];
   }
   return null;
 }

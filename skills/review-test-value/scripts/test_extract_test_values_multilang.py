@@ -97,6 +97,54 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             ["TEST_DECLARATION_UNSUPPORTED"],
         )
 
+    def test_typescript_extracts_declarations_through_transparent_wrappers(self) -> None:
+        self.write(
+            "tests/wrapped.test.ts",
+            metadata_block("//")
+            + '(test)("parenthesized", () => {});\n'
+            + metadata_block("//")
+            + '(test as any)("asserted", () => {});\n'
+            + metadata_block("//")
+            + '(test!).only("non-null", () => {});\n'
+            + '(test.describe)("group", () => {\n'
+            + metadata_block("//", "  ")
+            + '  test("child", () => {});\n'
+            + '});\n',
+        )
+
+        result, exit_status = self.extract("tests/wrapped.test.ts")
+
+        self.assertEqual(exit_status, 0)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["parenthesized", "asserted", "non-null", "group > child"],
+        )
+
+    def test_typescript_reports_argumentless_calls_and_preserves_valid_record(self) -> None:
+        self.write(
+            "tests/argumentless.test.ts",
+            "test();\n"
+            + "test.only();\n"
+            + "describe();\n"
+            + "test.describe();\n"
+            + "test.each([1])();\n"
+            + metadata_block("//")
+            + 'test("valid", () => {});\n',
+        )
+
+        result, exit_status = self.extract("tests/argumentless.test.ts")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["valid"],
+        )
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_DECLARATION_UNSUPPORTED"] * 5,
+        )
+
     def test_typescript_rejects_unsupported_modifier(self) -> None:
         self.write(
             "tests/concurrent.test.ts",
