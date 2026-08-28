@@ -42,42 +42,134 @@ function propertyParts(expression) {
   return null;
 }
 
+function declarationArguments(args) {
+  // v1 is syntax-only: a static first argument distinguishes declaration overloads.
+  return staticTitle(args[0]) === null ? null : { titleArgument: args[0] };
+}
+
+function isInnerCalleeCall(node) {
+  let expression = node;
+  let parent = node.parent;
+  while (ts.isPropertyAccessExpression(parent) && parent.expression === expression) {
+    expression = parent;
+    parent = parent.parent;
+  }
+  return ts.isCallExpression(parent) && parent.expression === expression;
+}
+
 function testCallInfo(node) {
-  if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
+  if (isInnerCalleeCall(node)) {
     return null;
   }
-  let expression = node.expression;
-  let parameterized = false;
-  let parameterizedRoot = null;
-  if (ts.isCallExpression(expression)) {
-    const innerParts = propertyParts(expression.expression);
-    if (
-      innerParts !== null &&
-      innerParts.length === 2 &&
-      ["test", "it"].includes(innerParts[0]) &&
-      innerParts[1] === "each"
-    ) {
-      parameterized = true;
-      parameterizedRoot = innerParts[0];
+  if (
+    ts.isPropertyAccessExpression(node.expression) &&
+    ts.isCallExpression(node.expression.expression)
+  ) {
+    const innerParts = propertyParts(node.expression.expression.expression);
+    if (innerParts !== null && ["test", "it"].includes(innerParts[0])) {
+      return {
+        kind: "unsupported",
+        message: `unsupported test declaration call chain: ${[
+          ...innerParts.slice(1),
+          node.expression.name.text,
+        ].join(".")}`,
+      };
     }
   }
-
-  const parts = parameterizedRoot === null ? propertyParts(expression) : [parameterizedRoot];
+  if (ts.isTaggedTemplateExpression(node.expression)) {
+    const taggedParts = propertyParts(node.expression.tag);
+    if (taggedParts !== null && ["test", "it"].includes(taggedParts[0])) {
+      return {
+        kind: "unsupported",
+        message: `unsupported tagged test declaration call chain: ${taggedParts.slice(1).join(".")}`,
+      };
+    }
+  }
+  const builder = ts.isCallExpression(node.expression) ? node.expression : null;
+  const parts = propertyParts(builder === null ? node.expression : builder.expression);
   if (parts === null || !["test", "it"].includes(parts[0])) {
     return null;
   }
-  const modifiers = parts.slice(1);
-  const supportedModifiers = new Set(["only", "skip", "todo", "fixme", "fail"]);
-  if (modifiers.some((part) => !supportedModifiers.has(part))) {
+
+  const members = parts.slice(1);
+  if (builder !== null) {
+    if (members.at(-1) !== "each") {
+      return {
+        kind: "unsupported",
+        message: `unsupported test declaration call chain: ${members.join(".")}`,
+      };
+    }
+    const modifiers = members.slice(0, -1);
+    if (modifiers.length > 0) {
+      return {
+        kind: "unsupported",
+        message: `unsupported test declaration modifier: ${modifiers.join(".")}`,
+      };
+    }
+    const declaration = declarationArguments(node.arguments);
+    return declaration === null
+      ? {
+          kind: "unsupported",
+          message: "parameterized test declaration requires a static title",
+        }
+      : { kind: "declaration", parameterized: true, ...declaration };
+  }
+
+  if (members.length === 0) {
+    const declaration = declarationArguments(node.arguments);
+    return declaration === null
+      ? {
+          kind: "unsupported",
+          message: "test declaration requires a static title",
+        }
+      : { kind: "declaration", parameterized: false, ...declaration };
+  }
+
+  const memberPath = members.join(".");
+  const nonDeclarationApis = new Set([
+    "abort",
+    "afterAll",
+    "afterEach",
+    "beforeAll",
+    "beforeEach",
+    "expect",
+    "extend",
+    "info",
+    "setTimeout",
+    "slow",
+    "step",
+    "step.skip",
+    "use",
+  ]);
+  if (parts[0] === "test" && nonDeclarationApis.has(memberPath)) {
+    return { kind: "ignore" };
+  }
+
+  const declarationModifiers = new Set(["only", "skip", "todo", "fixme", "fail", "fail.only"]);
+  if (!declarationModifiers.has(memberPath)) {
     return {
-      supported: false,
-      message: `unsupported test declaration modifier: ${modifiers.join(".")}`,
+      kind: "unsupported",
+      message: `unsupported test declaration modifier: ${memberPath}`,
     };
   }
-  return { supported: true, parameterized, titleArgument: node.arguments[0] };
+
+  const declaration = declarationArguments(node.arguments);
+  if (declaration !== null) {
+    return { kind: "declaration", parameterized: false, ...declaration };
+  }
+  if (parts[0] === "test" && ["skip", "fixme", "fail"].includes(memberPath)) {
+    return { kind: "ignore" };
+  }
+  return {
+    kind: "unsupported",
+    message: `unsupported ${memberPath} test declaration arguments`,
+  };
 }
 
 function describeCallInfo(node) {
+  if (isInnerCalleeCall(node)) {
+    return null;
+  }
   const parts = propertyParts(node.expression);
   if (parts === null) {
     return null;
@@ -89,20 +181,26 @@ function describeCallInfo(node) {
     return null;
   }
   const modifierStart = parts[0] === "describe" ? 1 : 2;
-  if (parts.length > modifierStart) {
+  const modifiers = parts.slice(modifierStart);
+  const modifierPath = modifiers.join(".");
+  if (parts[0] === "test" && modifierPath === "configure") {
+    return { kind: "ignore" };
+  }
+  const supportedModifiers = new Set(["", "only", "skip", "fixme", "parallel", "serial", "parallel.only", "serial.only"]);
+  if (!supportedModifiers.has(modifierPath)) {
     return {
-      supported: false,
-      message: `unsupported describe modifier: ${parts.slice(modifierStart).join(".")}`,
+      kind: "unsupported",
+      message: `unsupported describe modifier: ${modifierPath}`,
     };
   }
   const title = staticTitle(node.arguments[0]);
   if (title === null) {
     return {
-      supported: false,
+      kind: "unsupported",
       message: "describe declaration title must be a static string",
     };
   }
-  return { supported: true, title };
+  return { kind: "declaration", title };
 }
 
 function enclosingDescribeTitles(node) {
@@ -112,10 +210,12 @@ function enclosingDescribeTitles(node) {
     if (ts.isCallExpression(current)) {
       const info = describeCallInfo(current);
       if (info !== null) {
-        if (!info.supported) {
+        if (info.kind === "unsupported") {
           return null;
         }
-        titles.push(info.title);
+        if (info.kind === "declaration") {
+          titles.push(info.title);
+        }
       }
     }
     current = current.parent;
@@ -158,12 +258,13 @@ function collectComments(source, sourceFile, scriptKind) {
 function collectDeclarations(sourceFile) {
   const declarations = [];
   const diagnostics = [];
+  const unsupportedDeclarationLines = new Set();
 
   function visit(node) {
     if (ts.isCallExpression(node)) {
       const describeInfo = describeCallInfo(node);
       if (describeInfo !== null) {
-        if (!describeInfo.supported) {
+        if (describeInfo.kind === "unsupported") {
           diagnostics.push({
             code: "TEST_DECLARATION_UNSUPPORTED",
             line: lineNumber(sourceFile, node.getStart(sourceFile, false)),
@@ -175,12 +276,16 @@ function collectDeclarations(sourceFile) {
       }
       const info = testCallInfo(node);
       if (info !== null) {
-        if (!info.supported) {
+        if (info.kind === "unsupported") {
           diagnostics.push({
             code: "TEST_DECLARATION_UNSUPPORTED",
             line: lineNumber(sourceFile, node.getStart(sourceFile, false)),
             message: info.message,
           });
+          ts.forEachChild(node, visit);
+          return;
+        }
+        if (info.kind === "ignore") {
           ts.forEachChild(node, visit);
           return;
         }
@@ -200,11 +305,25 @@ function collectDeclarations(sourceFile) {
             return;
           }
           const symbol = [...describeTitles, title].join(" > ");
+          const indent = lineIndent(sourceFile.text, sourceFile, start);
+          if (indent === null) {
+            const declarationLine = lineNumber(sourceFile, start);
+            if (!unsupportedDeclarationLines.has(declarationLine)) {
+              unsupportedDeclarationLines.add(declarationLine);
+              diagnostics.push({
+                code: "TEST_DECLARATION_UNSUPPORTED",
+                line: declarationLine,
+                message: "test declaration must begin after indentation only",
+              });
+            }
+            ts.forEachChild(node, visit);
+            return;
+          }
           declarations.push({
             symbol,
             start_line: lineNumber(sourceFile, start),
             end_line: lineNumber(sourceFile, statement.getEnd()),
-            indent: lineIndent(sourceFile.text, sourceFile, start) ?? "",
+            indent,
           });
         }
       }
@@ -213,7 +332,12 @@ function collectDeclarations(sourceFile) {
   }
 
   visit(sourceFile);
-  return { declarations, diagnostics };
+  return {
+    declarations: declarations.filter(
+      (declaration) => !unsupportedDeclarationLines.has(declaration.start_line),
+    ),
+    diagnostics,
+  };
 }
 
 const source = await readStdin();

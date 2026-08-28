@@ -22,8 +22,11 @@ Result fields:
 - Declarations: `test()`、`it()`、`test.only()`、`it.skip()`などのstatic call
 - Parameterization: `test.each(...)(...)`と`it.each(...)(...)`を一つのsource declarationとして抽出する
 - Grouping: `describe()`と`test.describe()`のstatic titleをqualified symbolへ含める
-- Supported modifiers: `only`、`skip`、`todo`、`fixme`、`fail`
-- Unsupported diagnostic: 未対応modifier、動的titleのtest / describe、同一行に複数あるtest declaration
+- Supported declaration modifiers: `only`、`skip`、`todo`、`fixme`、`fail`、`fail.only`
+- Supported group modifiers: `only`、`skip`、`fixme`、`parallel`、`serial`と、`parallel.only`、`serial.only`
+- Overload classification: importやtypeを解決せず、先頭引数のstatic titleをdeclaration overloadの識別に使う。`test.skip()`、`test.fail()`、`test.fixme()`の先頭引数がstatic titleでなければruntime annotationとして扱う
+- Non-declaration API: Playwrightのhook、`test.use()`、`test.extend()`、`test.info()`、`test.setTimeout()`、`test.step()`、`test.abort()`、`test.describe.configure()`、runtime annotation overloadなどはtest recordにしない
+- Unsupported diagnostic: 未対応modifier、未対応のnested / tagged call chain、動的titleのtest / describe、同一行に複数あるtest declaration、行頭から宣言までに空白以外がある形
 - Excluded: alias経由のcall、computed property、factory生成、runtime parameter case
 
 Jest、Vitest、Playwrightのpackage identityやimport解決は行わない。上記のcall構文をtest declarationとして扱う。
@@ -55,5 +58,6 @@ Result fields:
 
 - syntax errorを含むfileから部分recordを出力しない。
 - staticに識別できるtest declarationが未対応形なら`TEST_DECLARATION_UNSUPPORTED`を返す。
+- 行頭からtest declarationまでに空白以外がある行は、同じ行の全test declarationを除外し、物理行につき一件の`TEST_DECLARATION_UNSUPPORTED`を返す。直前のmetadata blockは`TEST_VALUE_UNBOUND`とする。
 - UTF-8 BOMはencoding markerとして除去し、source内容やindentには含めない。
 - frameworkのimport、runner設定、skip状態、実行結果は検証しない。

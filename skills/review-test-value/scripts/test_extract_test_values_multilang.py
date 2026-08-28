@@ -57,12 +57,12 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
     def test_typescript_extracts_describe_and_parameterized_declaration(self) -> None:
         self.write(
             "tests/payment.test.ts",
-            "describe(\"payment\", () => {\n"
+            "const namedHandler = (attempt) => {\n"
+            + "  expect(chargeCount(attempt)).toBe(1);\n"
+            + "};\n"
+            + "describe(\"payment\", () => {\n"
             + metadata_block("//", "  ")
-            + "  test.each([1, 2])(\"retry %s\", (attempt) => {\n"
-            + "    const marker = `// @test-value v1`;\n"
-            + "    expect(chargeCount(attempt)).toBe(1);\n"
-            + "  });\n"
+            + '  test.each([1, 2])("retry %s", namedHandler);\n'
             + "});\n",
         )
 
@@ -76,7 +76,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         record = result["tests"][0]
         self.assertEqual(record["source"]["symbol"], "payment > retry %s")
         self.assertTrue(record["source_text"].startswith("  test.each"))
-        self.assertIn("expect(chargeCount(attempt)).toBe(1)", record["source_text"])
+        self.assertIn("namedHandler", record["source_text"])
         self.assertEqual(record["metadata"]["oracle"]["ref"], "PAYMENT-004")
 
     def test_typescript_rejects_dynamic_title_without_inference(self) -> None:
@@ -112,6 +112,89 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             ["TEST_DECLARATION_UNSUPPORTED"],
         )
 
+    def test_typescript_rejects_unsupported_modifier_in_each_chain(self) -> None:
+        self.write(
+            "tests/concurrent-each.test.ts",
+            'test.concurrent.each([1, 2])("parallel %s", () => {});\n'
+            + 'it.concurrent.each([1, 2])("also parallel %s", () => {});\n'
+            + 'test.each([1, 2]).only("focused %s", () => {});\n'
+            + 'test.each`value | expected\n${1} | ${1}`("tagged", () => {});\n',
+        )
+
+        result, exit_status = self.extract("tests/concurrent-each.test.ts")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_DECLARATION_UNSUPPORTED"] * 4,
+        )
+
+    def test_typescript_ignores_playwright_hooks_config_and_runtime_annotations(self) -> None:
+        self.write(
+            "tests/playwright.test.ts",
+            "test.beforeAll(async () => {});\n"
+            "test.beforeEach(async () => {});\n"
+            "test.beforeEach('titled setup', async () => {});\n"
+            "test.afterEach(async () => {});\n"
+            "test.afterAll(async () => {});\n"
+            "test.use({ locale: 'en-US' });\n"
+            "test.setTimeout(30_000);\n"
+            "const extended = test.extend({});\n"
+            "test.describe.configure({ mode: 'parallel' });\n"
+            + metadata_block("//")
+            + 'test("playwright", async ({ browserName }) => {\n'
+            + "  test.skip(browserName !== 'webkit', 'Safari only');\n"
+            + "  test.fail(browserName === 'webkit', 'Known failure');\n"
+            + "  test.fixme(browserName === 'firefox', 'Needs work');\n"
+            + "  test.slow(browserName === 'chromium', 'Slow path');\n"
+            + "  test.info();\n"
+            + "  await test.step('step', async () => {});\n"
+            + "  test.abort('stop');\n"
+            + "});\n",
+        )
+
+        result, exit_status = self.extract("tests/playwright.test.ts")
+
+        self.assertEqual(exit_status, 0)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["playwright"],
+        )
+
+    def test_typescript_rejects_dynamic_it_modifier_title(self) -> None:
+        self.write(
+            "tests/dynamic-it.test.ts",
+            'const title = "dynamic";\n'
+            "it.skip(title, () => {});\n",
+        )
+
+        result, exit_status = self.extract("tests/dynamic-it.test.ts")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_DECLARATION_UNSUPPORTED"],
+        )
+
+    def test_typescript_rejects_declaration_after_code_on_same_line(self) -> None:
+        self.write(
+            "tests/prefixed.test.ts",
+            metadata_block("//")
+            + 'const before = 1; test("prefixed", () => {});\n',
+        )
+
+        result, exit_status = self.extract("tests/prefixed.test.ts")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_VALUE_UNBOUND", "TEST_DECLARATION_UNSUPPORTED"],
+        )
+
     def test_typescript_rejects_dynamic_describe_and_nested_test(self) -> None:
         self.write(
             "tests/dynamic-describe.test.ts",
@@ -141,9 +224,9 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
         self.assertEqual(exit_status, 1)
         self.assertEqual(result["tests"], [])
-        self.assertIn(
-            "TEST_DECLARATION_UNSUPPORTED",
+        self.assertEqual(
             [item["code"] for item in result["diagnostics"]],
+            ["TEST_VALUE_UNBOUND", "TEST_DECLARATION_UNSUPPORTED"],
         )
 
     def test_typescript_syntax_error_does_not_emit_partial_records(self) -> None:
@@ -164,10 +247,15 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
     def test_typescript_supports_tsx_and_common_test_modifiers(self) -> None:
         self.write(
             "tests/component.test.tsx",
-            metadata_block("//")
+            "const namedHandler = () => { expect(true).toBe(true); };\n"
+            + metadata_block("//")
             + 'it.only("renders", () => { expect(<div />).toBeTruthy(); });\n'
             + metadata_block("//")
-            + 'test.skip("disabled", () => { expect(true).toBe(true); });\n',
+            + 'test.skip("disabled", namedHandler);\n'
+            + metadata_block("//")
+            + 'test.fail.only("focused failure", namedHandler);\n'
+            + metadata_block("//")
+            + 'test.todo("not implemented");\n',
         )
 
         result, exit_status = self.extract("tests/component.test.tsx")
@@ -175,8 +263,23 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertEqual(exit_status, 0)
         self.assertEqual(
             [record["source"]["symbol"] for record in result["tests"]],
-            ["renders", "disabled"],
+            ["renders", "disabled", "focused failure", "not implemented"],
         )
+
+    def test_typescript_supports_playwright_describe_modifier(self) -> None:
+        self.write(
+            "tests/group.test.ts",
+            'test.describe.only("group", () => {\n'
+            + metadata_block("//", "  ")
+            + '  test("child", () => {});\n'
+            + "});\n",
+        )
+
+        result, exit_status = self.extract("tests/group.test.ts")
+
+        self.assertEqual(exit_status, 0)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(result["tests"][0]["source"]["symbol"], "group > child")
 
     def test_public_cli_dispatches_typescript_adapter(self) -> None:
         self.write(
@@ -293,6 +396,22 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertEqual(
             [item["code"] for item in result["diagnostics"]],
             ["TEST_DECLARATION_UNSUPPORTED"],
+        )
+
+    def test_csharp_rejects_declaration_after_code_on_same_line(self) -> None:
+        self.write(
+            "tests/PrefixedTests.cs",
+            metadata_block("//")
+            + "public class PrefixedTests { [Fact] public void Value() { } }\n",
+        )
+
+        result, exit_status = self.extract("tests/PrefixedTests.cs")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_VALUE_UNBOUND", "TEST_DECLARATION_UNSUPPORTED"],
         )
 
     def test_utf8_bom_is_removed_for_all_adapters(self) -> None:

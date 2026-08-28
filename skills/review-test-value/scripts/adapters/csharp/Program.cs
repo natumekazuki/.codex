@@ -85,10 +85,11 @@ if (hasConditionalCompilation)
     });
 }
 
-var declarations = (hasConditionalCompilation
-        ? Enumerable.Empty<MethodDeclarationSyntax>()
-        : root.DescendantNodes().OfType<MethodDeclarationSyntax>())
-    .Where(IsTestMethod)
+var declarations = new List<object>();
+var methods = hasConditionalCompilation
+    ? Enumerable.Empty<MethodDeclarationSyntax>()
+    : root.DescendantNodes().OfType<MethodDeclarationSyntax>();
+var testMethods = methods.Where(IsTestMethod)
     .Select(method =>
     {
         var start = method.AttributeLists.Count > 0
@@ -96,13 +97,40 @@ var declarations = (hasConditionalCompilation
             : method.SpanStart;
         return new
         {
-            symbol = QualifiedSymbol(method),
-            start_line = LineNumber(tree, start),
-            end_line = LineNumber(tree, method.Span.End),
-            indent = LineIndent(source, tree, start) ?? "",
+            method,
+            start,
+            indent = LineIndent(source, tree, start),
+            line = LineNumber(tree, start),
         };
     })
     .ToList();
+var unsupportedDeclarationLines = testMethods
+    .Where(item => item.indent is null)
+    .Select(item => item.line)
+    .ToHashSet();
+foreach (var line in unsupportedDeclarationLines.Order())
+{
+    diagnostics.Add(new
+    {
+        code = "TEST_DECLARATION_UNSUPPORTED",
+        line,
+        message = "test declaration must begin after indentation only",
+    });
+}
+foreach (var item in testMethods)
+{
+    if (unsupportedDeclarationLines.Contains(item.line))
+    {
+        continue;
+    }
+    declarations.Add(new
+    {
+        symbol = QualifiedSymbol(item.method),
+        start_line = item.line,
+        end_line = LineNumber(tree, item.method.Span.End),
+        indent = item.indent,
+    });
+}
 
 foreach (var local in root.DescendantNodes().OfType<LocalFunctionStatementSyntax>())
 {
