@@ -43,6 +43,34 @@ function Invoke-Git {
     return $exitCode
 }
 
+function Get-SkillManifest {
+    param([Parameter(Mandatory)] [string]$Root)
+
+    $manifest = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+    $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+    $normalizedUtf8 = [Text.UTF8Encoding]::new($false)
+
+    foreach ($file in Get-ChildItem -LiteralPath $Root -Recurse -File -Force) {
+        $relativePath = [IO.Path]::GetRelativePath($Root, $file.FullName).Replace("\", "/")
+        if ($relativePath -match "(^|/)__pycache__/" -or $file.Extension -in @(".pyc", ".pyo")) {
+            continue
+        }
+
+        $bytes = [IO.File]::ReadAllBytes($file.FullName)
+        try {
+            $text = $strictUtf8.GetString($bytes).Replace("`r`n", "`n")
+            $bytes = $normalizedUtf8.GetBytes($text)
+        }
+        catch [Text.DecoderFallbackException] {
+            # Keep non-UTF-8 assets as bytes so binary changes remain observable.
+        }
+
+        $manifest[$relativePath] = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+    }
+
+    return $manifest
+}
+
 Assert-ChildPath -Parent $skillsRoot -Child $destination
 Assert-ChildPath -Parent $skillsRoot -Child $checkoutRoot
 Assert-ChildPath -Parent $skillsRoot -Child $staging
@@ -100,18 +128,29 @@ Local edits under this directory are replaced during synchronization.
     Set-Content -LiteralPath (Join-Path $staging "NOTICE") -Value $notice -Encoding utf8NoBOM
 
     if ($Check) {
-        & git -c core.autocrlf=false diff --no-index --quiet --ignore-space-at-eol -- $destination $staging
-        $diffExitCode = $LASTEXITCODE
-        if ($diffExitCode -eq 0) {
+        $actualManifest = Get-SkillManifest -Root $destination
+        $expectedManifest = Get-SkillManifest -Root $staging
+        $allPaths = @($actualManifest.Keys) + @($expectedManifest.Keys) | Sort-Object -Unique
+        $differences = foreach ($path in $allPaths) {
+            if (-not $actualManifest.ContainsKey($path)) {
+                "A`t$path"
+            }
+            elseif (-not $expectedManifest.ContainsKey($path)) {
+                "D`t$path"
+            }
+            elseif ($actualManifest[$path] -ne $expectedManifest[$path]) {
+                "M`t$path"
+            }
+        }
+
+        if (-not $differences) {
             Write-Output "natural-japanese is synchronized with $revision."
             exit 0
         }
-        if ($diffExitCode -eq 1) {
-            & git -c core.autocrlf=false diff --no-index --name-status --ignore-space-at-eol -- $destination $staging
-            Write-Error "natural-japanese differs from $upstreamUrl at $revision. Run this script without -Check to synchronize it."
-            exit 1
-        }
-        throw "git diff --no-index failed with exit code $diffExitCode"
+
+        $differences | Write-Output
+        Write-Error "natural-japanese differs from $upstreamUrl at $revision. Run this script without -Check to synchronize it."
+        exit 1
     }
 
     $targetStatus = & git -C $repositoryRoot status --porcelain=v1 --untracked-files=all -- $destination
