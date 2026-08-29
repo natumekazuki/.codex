@@ -329,6 +329,11 @@ def _base_change_projection(
             )
         hunk_is_uncertain = source_incomplete or any(
             _hunk_intersects_old_span(hunk, start, end)
+            and not (
+                hunk.old_count
+                and hunk.old_start <= start
+                and hunk.old_end >= end
+            )
             for start, end in unsupported_spans
         )
         if hunk_is_uncertain:

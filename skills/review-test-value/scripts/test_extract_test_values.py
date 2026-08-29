@@ -1060,6 +1060,52 @@ def test_oracle_table_with_decoy():
 
     # @test-value v1
     # kind = "regression"
+    # claim = "未対応test宣言の全削除で直後の未変更testを選択しない"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "全削除anchorを隣接legacy testへ結合してmetadata移行を誤要求する"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # distinction = "未対応宣言がsurviveする本文削除ではなく宣言range全体の削除を扱う"
+    # @end-test-value
+    def test_git_mode_excludes_fully_deleted_unsupported_test(self) -> None:
+        source = (
+            "def helper():\n"
+            "    pass\n"
+            "    def test_nested():\n"
+            "        assert True\n"
+            "\n"
+            "def test_survivor():\n"
+            "    assert True\n"
+        )
+        path = self.write("tests/test_unsupported_deletion.py", source)
+        base = self.initialize_git()
+        path.write_text(
+            source.replace(
+                "    def test_nested():\n        assert True\n",
+                "",
+            ),
+            encoding="utf-8",
+        )
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_unsupported_deletion.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "delete unsupported test")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(result["tests"], [])
+                self.assertEqual(result["diagnostics"], [])
+
+    # @test-value v1
+    # kind = "regression"
     # claim = "unrelatedなunsupported宣言があってもtest全削除を隣接testへ投影しない"
     # oracle = { type = "adr", ref = "ADR-0021" }
     # failure_mode = "別位置のunsupported diagnosticで未変更legacy testを移行対象にする"
