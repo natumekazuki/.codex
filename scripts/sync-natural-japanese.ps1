@@ -9,9 +9,11 @@ Set-StrictMode -Version Latest
 
 $upstreamUrl = "https://github.com/coji/natural-japanese.git"
 $upstreamSkillPath = "skills/natural-japanese"
+$expectedLicenseBlobOid = "56950aa7c7db5662b10027ba4deb34787ee24b0e"
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $skillsRoot = [IO.Path]::GetFullPath((Join-Path $repositoryRoot "skills"))
 $destination = [IO.Path]::GetFullPath((Join-Path $skillsRoot "natural-japanese"))
+$lockPath = [IO.Path]::GetFullPath((Join-Path $repositoryRoot ".natural-japanese.sync.lock"))
 $operationId = [Guid]::NewGuid().ToString("N")
 $checkoutRoot = [IO.Path]::GetFullPath((Join-Path $skillsRoot ".natural-japanese.checkout-$operationId"))
 $staging = [IO.Path]::GetFullPath((Join-Path $skillsRoot ".natural-japanese.staging-$operationId"))
@@ -71,12 +73,46 @@ function Get-SkillManifest {
     return $manifest
 }
 
+function Compare-SkillManifests {
+    param(
+        [Parameter(Mandatory)] $Actual,
+        [Parameter(Mandatory)] $Expected
+    )
+
+    $allPaths = @($Actual.Keys) + @($Expected.Keys) | Sort-Object -Unique
+    foreach ($path in $allPaths) {
+        if (-not $Actual.ContainsKey($path)) {
+            "A`t$path"
+        }
+        elseif (-not $Expected.ContainsKey($path)) {
+            "D`t$path"
+        }
+        elseif ($Actual[$path] -ne $Expected[$path]) {
+            "M`t$path"
+        }
+    }
+}
+
 Assert-ChildPath -Parent $skillsRoot -Child $destination
 Assert-ChildPath -Parent $skillsRoot -Child $checkoutRoot
 Assert-ChildPath -Parent $skillsRoot -Child $staging
 Assert-ChildPath -Parent $skillsRoot -Child $backup
+$repositoryPrefix = $repositoryRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+if (-not $lockPath.StartsWith($repositoryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to use a sync lock outside $repositoryRoot`: $lockPath"
+}
 
+$syncLock = $null
 try {
+    if (-not $Check) {
+        try {
+            $syncLock = [IO.File]::Open($lockPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        }
+        catch [IO.IOException] {
+            throw "Another natural-japanese synchronization is already running."
+        }
+    }
+
     New-Item -ItemType Directory -Path $checkoutRoot | Out-Null
     Invoke-Git -Arguments @("-C", $checkoutRoot, "init", "--quiet") | Out-Null
     Invoke-Git -Arguments @("-C", $checkoutRoot, "fetch", "--quiet", "--depth", "1", $upstreamUrl, $Ref) | Out-Null
@@ -93,23 +129,36 @@ try {
         throw "Upstream skill not found at $upstreamSkillPath for ref $Ref."
     }
 
+    $upstreamLicensePath = Join-Path $checkoutRoot "LICENSE"
+    if (-not (Test-Path -LiteralPath $upstreamLicensePath -PathType Leaf)) {
+        throw "The upstream LICENSE file is missing. Review the upstream change before synchronizing."
+    }
+    $actualLicenseBlobOid = (& git -C $checkoutRoot rev-parse "HEAD:LICENSE").Trim()
+    if ($LASTEXITCODE -ne 0 -or $actualLicenseBlobOid -ne $expectedLicenseBlobOid) {
+        throw "The upstream LICENSE no longer matches the reviewed MIT license. Review the upstream change before synchronizing."
+    }
+
     Copy-Item -LiteralPath $source -Destination $staging -Recurse
-    Copy-Item -LiteralPath (Join-Path $checkoutRoot "LICENSE") -Destination (Join-Path $staging "LICENSE")
+    Copy-Item -LiteralPath $upstreamLicensePath -Destination (Join-Path $staging "LICENSE")
 
     $skillDefinitionPath = Join-Path $staging "SKILL.md"
     $skillDefinition = Get-Content -LiteralPath $skillDefinitionPath -Raw
     $argumentHintPattern = "(?m)^argument-hint:.*\r?\n"
-    if ($skillDefinition -notmatch $argumentHintPattern) {
-        throw "The expected upstream argument-hint frontmatter entry was not found. Review the upstream change before synchronizing."
+    $frontmatter = [regex]::Match($skillDefinition, "\A---\r?\n.*?\r?\n---\r?\n", [Text.RegularExpressions.RegexOptions]::Singleline)
+    $argumentHintMatches = [regex]::Matches($skillDefinition, $argumentHintPattern)
+    if (-not $frontmatter.Success -or $argumentHintMatches.Count -ne 1 -or $argumentHintMatches[0].Index -ge $frontmatter.Length) {
+        throw "Expected exactly one argument-hint entry inside upstream SKILL.md frontmatter. Review the upstream change before synchronizing."
     }
     $skillDefinition = $skillDefinition -replace $argumentHintPattern, ""
 
     $upstreamRouting = "技術文書の章構成やMarkdownフォーマットの整形自体（一文一行化・引用ブロック・脚注記法など）は対象外——それは別スキルの領域であり、本スキルは文章の自然さ・読みやすさ・わかりやすさに特化する。"
     $codexRouting = "技術文書の章構成やMarkdownフォーマットの整形自体（一文一行化・引用ブロック・脚注記法など）は対象外であり、japanese-tech-writing-review を使用する。本スキルは文章の自然さ・読みやすさ・わかりやすさに特化する。"
-    if (-not $skillDefinition.Contains($upstreamRouting)) {
-        throw "The expected upstream technical-writing routing text was not found. Review the upstream change before synchronizing."
+    $routingMatches = [regex]::Matches($skillDefinition, [regex]::Escape($upstreamRouting))
+    if ($routingMatches.Count -ne 1) {
+        throw "Expected exactly one upstream technical-writing routing statement. Review the upstream change before synchronizing."
     }
     $skillDefinition = $skillDefinition.Replace($upstreamRouting, $codexRouting)
+    $skillDefinition = $skillDefinition.Replace("`r`n", "`n").Replace("`n", [Environment]::NewLine)
     Set-Content -LiteralPath $skillDefinitionPath -Value $skillDefinition -Encoding utf8NoBOM -NoNewline
 
     $notice = @"
@@ -125,23 +174,13 @@ Codex adaptations: removes the unsupported argument-hint frontmatter entry and
 routes technical-document structure and Markdown formatting to japanese-tech-writing-review.
 Local edits under this directory are replaced during synchronization.
 "@
+    $notice = $notice.Replace("`r`n", "`n").Replace("`n", [Environment]::NewLine)
     Set-Content -LiteralPath (Join-Path $staging "NOTICE") -Value $notice -Encoding utf8NoBOM
 
     if ($Check) {
         $actualManifest = Get-SkillManifest -Root $destination
         $expectedManifest = Get-SkillManifest -Root $staging
-        $allPaths = @($actualManifest.Keys) + @($expectedManifest.Keys) | Sort-Object -Unique
-        $differences = foreach ($path in $allPaths) {
-            if (-not $actualManifest.ContainsKey($path)) {
-                "A`t$path"
-            }
-            elseif (-not $expectedManifest.ContainsKey($path)) {
-                "D`t$path"
-            }
-            elseif ($actualManifest[$path] -ne $expectedManifest[$path]) {
-                "M`t$path"
-            }
-        }
+        $differences = @(Compare-SkillManifests -Actual $actualManifest -Expected $expectedManifest)
 
         if (-not $differences) {
             Write-Output "natural-japanese is synchronized with $revision."
@@ -153,6 +192,7 @@ Local edits under this directory are replaced during synchronization.
         exit 1
     }
 
+    $preMoveManifest = Get-SkillManifest -Root $destination
     $targetStatus = & git -C $repositoryRoot status --porcelain=v1 --untracked-files=all -- $destination
     if ($LASTEXITCODE -ne 0) {
         throw "Could not inspect local changes under $destination."
@@ -176,12 +216,32 @@ Local edits under this directory are replaced during synchronization.
     }
 
     if (Test-Path -LiteralPath $backup) {
+        $backupManifest = Get-SkillManifest -Root $backup
+        $concurrentChanges = @(Compare-SkillManifests -Actual $backupManifest -Expected $preMoveManifest)
+        if ($concurrentChanges) {
+            try {
+                Move-Item -LiteralPath $destination -Destination $staging
+                Move-Item -LiteralPath $backup -Destination $destination
+            }
+            catch {
+                throw "The previous skill changed during synchronization and could not be restored automatically. Preserved paths: $destination and $backup"
+            }
+            throw "The previous skill changed during synchronization. The new copy was discarded and the previous skill was restored."
+        }
         Remove-Item -LiteralPath $backup -Recurse -Force
+    }
+
+    $trackedSkillPaths = @(& git -C $repositoryRoot ls-files -- $destination)
+    if ($LASTEXITCODE -eq 0 -and $trackedSkillPaths) {
+        & git -C $repositoryRoot update-index --refresh -- $trackedSkillPaths *> $null
     }
 
     Write-Output "Synchronized natural-japanese from $upstreamUrl at $revision."
 }
 finally {
+    if ($null -ne $syncLock) {
+        $syncLock.Dispose()
+    }
     foreach ($temporaryPath in @($checkoutRoot, $staging)) {
         Assert-ChildPath -Parent $skillsRoot -Child $temporaryPath
         if (Test-Path -LiteralPath $temporaryPath) {
