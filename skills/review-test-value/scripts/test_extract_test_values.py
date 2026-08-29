@@ -613,9 +613,9 @@ def test_oracle_table_with_decoy():
 
     # @test-value v1
     # kind = "regression"
-    # claim = "削除だけのhunkもsurviving testとmetadata欠落を選択する"
+    # claim = "部分削除はsurviving testを選びtest全体の削除は隣接testを選ばない"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "assertionやtest-value blockの削除を変更なしとして成功扱いする"
+    # failure_mode = "部分削除を見落とすか全削除を隣接testの変更と誤認する"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -627,8 +627,16 @@ def test_oracle_table_with_decoy():
             + "    assert observed() == 1\n"
         )
         metadata_source = VALID_METADATA + "def test_metadata():\n    assert True\n"
+        removed_source = (
+            VALID_METADATA
+            + "def test_removed():\n"
+            + "    assert True\n\n"
+            + "def test_survivor():\n"
+            + "    assert True\n"
+        )
         body = self.write("tests/test_body.py", body_source)
         metadata = self.write("tests/test_metadata.py", metadata_source)
+        removed = self.write("tests/test_removed.py", removed_source)
         base = self.initialize_git()
         body.write_text(
             body_source.replace("    assert observed() == 1\n", ""),
@@ -638,9 +646,18 @@ def test_oracle_table_with_decoy():
             "def test_metadata():\n    assert True\n",
             encoding="utf-8",
         )
+        removed.write_text(
+            "def test_survivor():\n    assert True\n",
+            encoding="utf-8",
+        )
 
         working = self.extract_git(base)
-        self.git("add", "tests/test_body.py", "tests/test_metadata.py")
+        self.git(
+            "add",
+            "tests/test_body.py",
+            "tests/test_metadata.py",
+            "tests/test_removed.py",
+        )
         staged = self.extract_git(base, "python", "--staged")
         self.git("commit", "--quiet", "-m", "delete lines")
         head = self.git("rev-parse", "HEAD")

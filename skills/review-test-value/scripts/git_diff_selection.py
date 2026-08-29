@@ -25,7 +25,7 @@ DiagnosticFactory = Callable[[str, str, int, str], dict[str, Any]]
 class ChangedFile:
     path: str
     ranges: tuple[tuple[int, int], ...]
-    deletion_anchors: tuple[int, ...] = ()
+    deletion_hunks: tuple["DeletionHunk", ...] = ()
     status: str = "M"
     old_path: str | None = None
     whole_file: bool = False
@@ -35,7 +35,7 @@ class ChangedFile:
 class _ChangedFileBuilder:
     status: str
     ranges: list[tuple[int, int]]
-    deletion_anchors: list[int]
+    deletion_hunks: list["DeletionHunk"]
     old_path: str | None = None
     whole_file: bool = False
 
@@ -46,7 +46,16 @@ class SourceOutsideRootError(ValueError):
         self.path = path
 
 
-_HUNK = re.compile(r"^@@ -(?:\d+)(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+@dataclass(frozen=True)
+class DeletionHunk:
+    old_start: int
+    old_end: int
+    new_anchor: int
+
+
+_HUNK = re.compile(
+    r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"
+)
 
 
 def _git(root: Path, args: Sequence[str], *, text: bool = True) -> str | bytes:
@@ -140,12 +149,20 @@ def changed_files(
         for line in str(_git(root, args)).splitlines():
             m = _HUNK.match(line)
             if m:
-                start = int(m.group(1))
-                count = int(m.group(2) or 1)
-                if count:
-                    item.ranges.append((start, start + count - 1))
+                old_start = int(m.group(1))
+                old_count = int(m.group(2) or 1)
+                new_start = int(m.group(3))
+                new_count = int(m.group(4) or 1)
+                if new_count:
+                    item.ranges.append((new_start, new_start + new_count - 1))
                 else:
-                    item.deletion_anchors.append(start)
+                    item.deletion_hunks.append(
+                        DeletionHunk(
+                            old_start=old_start,
+                            old_end=old_start + old_count - 1,
+                            new_anchor=new_start,
+                        )
+                    )
     if mode == "working":
         untracked = bytes(
             _git(
@@ -164,7 +181,7 @@ def changed_files(
         ChangedFile(
             path=path,
             ranges=tuple(item.ranges),
-            deletion_anchors=tuple(item.deletion_anchors),
+            deletion_hunks=tuple(item.deletion_hunks),
             status=item.status,
             old_path=item.old_path,
             whole_file=item.whole_file,
@@ -191,12 +208,64 @@ def _base_snapshot(root: Path, base: str, item: ChangedFile) -> bytes | None:
     return bytes(_git(root, ["show", f"{base}:{path}"], text=False))
 
 
-def _affects_span(item: ChangedFile, start: int, end: int) -> bool:
+def _affects_span(
+    item: ChangedFile,
+    start: int,
+    end: int,
+    deletion_anchors: tuple[int, ...],
+) -> bool:
     if item.whole_file:
         return True
     if any(start <= high and end >= low for low, high in item.ranges):
         return True
-    return any(start - 1 <= anchor <= end for anchor in item.deletion_anchors)
+    return any(start - 1 <= anchor <= end for anchor in deletion_anchors)
+
+
+def _effective_deletion_anchors(
+    root: Path,
+    base: str,
+    item: ChangedFile,
+    profile: AdapterProfileLike,
+    extract_source_text: ExtractSourceText,
+) -> tuple[int, ...]:
+    if not item.deletion_hunks:
+        return ()
+    base_snapshot = _base_snapshot(root, base, item)
+    if base_snapshot is None:
+        return tuple(hunk.new_anchor for hunk in item.deletion_hunks)
+    try:
+        base_raw = base_snapshot.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return tuple(hunk.new_anchor for hunk in item.deletion_hunks)
+    base_records, _ = extract_source_text(
+        base_raw,
+        item.old_path or item.path,
+        profile,
+        Path(item.old_path or item.path).suffix.lower(),
+    )
+    spans = []
+    for record in base_records:
+        source = record["source"]
+        spans.append(
+            (
+                source["metadata_start_line"]
+                or source["declaration_start_line"],
+                source["declaration_end_line"],
+            )
+        )
+    anchors = []
+    for hunk in item.deletion_hunks:
+        overlapping = [
+            (start, end)
+            for start, end in spans
+            if start <= hunk.old_end and end >= hunk.old_start
+        ]
+        if overlapping and any(
+            hunk.old_start > start or hunk.old_end < end
+            for start, end in overlapping
+        ):
+            anchors.append(hunk.new_anchor)
+    return tuple(anchors)
 
 
 def select_git(
@@ -228,7 +297,7 @@ def select_git(
                 )
             )
             continue
-        if not item.whole_file and not item.ranges and not item.deletion_anchors:
+        if not item.whole_file and not item.ranges and not item.deletion_hunks:
             base_snapshot = _base_snapshot(root, base, item)
             if base_snapshot == snapshot:
                 continue
@@ -254,18 +323,30 @@ def select_git(
             profile,
             Path(item.path).suffix.lower(),
         )
+        deletion_anchors = _effective_deletion_anchors(
+            root,
+            base,
+            item,
+            profile,
+            extract_source_text,
+        )
         selected_spans: list[tuple[int, int]] = []
         for rec in recs:
             s = rec["source"]
             start = s["metadata_start_line"] or s["declaration_start_line"]
             end = s["declaration_end_line"]
-            if _affects_span(item, start, end):
+            if _affects_span(item, start, end, deletion_anchors):
                 tests.append(rec)
                 selected_spans.append((start, end))
         for d in diags:
             if d["code"] in {"SOURCE_SYNTAX_ERROR", "SOURCE_DECODE_ERROR"} or (
                 item.whole_file
-                or _affects_span(item, d["line"], d["line"])
+                or _affects_span(
+                    item,
+                    d["line"],
+                    d["line"],
+                    deletion_anchors,
+                )
                 or any(low <= d["line"] <= high for low, high in selected_spans)
             ):
                 diagnostics.append(d)
