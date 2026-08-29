@@ -42,6 +42,52 @@ class ExtractTestValuesTests(unittest.TestCase):
         path.write_bytes(content.replace("\n", newline).encode("utf-8"))
         return path
 
+    def git(self, *args: str) -> str:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=self.root,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return completed.stdout.strip()
+
+    def initialize_git(self) -> str:
+        self.git("init", "--quiet")
+        self.git("config", "user.name", "Test User")
+        self.git("config", "user.email", "test@example.invalid")
+        self.git("add", "--all")
+        self.git("commit", "--quiet", "--allow-empty", "-m", "base")
+        return self.git("rev-parse", "HEAD")
+
+    def extract_git(
+        self,
+        base: str,
+        language: str = "python",
+        *extra: str,
+    ) -> tuple[dict, int, str]:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--root",
+                str(self.root),
+                "--changed-from",
+                base,
+                "--language",
+                language,
+                *extra,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        result = json.loads(completed.stdout) if completed.stdout else {}
+        return result, completed.returncode, completed.stderr
+
     def extract(self, *paths: str) -> tuple[dict, int]:
         return EXTRACTOR.extract_repository(self.root, list(paths))
 
@@ -361,6 +407,168 @@ def test_oracle_table_with_decoy():
         result = json.loads(completed.stdout)
         self.assertEqual(result["tests"][0]["source"]["symbol"], "test_cli")
         self.assertEqual(result["diagnostics"], [])
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "Git modeは変更testだけを選び未変更legacy testを移行対象にしない"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "未変更testのmetadata欠落で差分審査が停止する"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_changed_test_without_migrating_legacy_test(self) -> None:
+        source = (
+            "def test_legacy():\n"
+            "    assert True\n\n"
+            + VALID_METADATA
+            + "def test_changed():\n"
+            "    assert observed() == 1\n"
+        )
+        path = self.write("tests/test_changed.py", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("observed() == 1", "observed() == 2"), encoding="utf-8")
+
+        result, exit_status, stderr = self.extract_git(base)
+
+        self.assertEqual(exit_status, 0, stderr)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["test_changed"],
+        )
+        self.assertIn("observed() == 2", result["tests"][0]["source_text"])
+
+    # @test-value v1
+    # kind = "contract"
+    # claim = "metadataだけの変更も対応するtest recordを選択する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "価値コメントの意味変更が審査対象から漏れる"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_metadata_only_change(self) -> None:
+        source = VALID_METADATA + "def test_changed():\n    assert True\n"
+        path = self.write("tests/test_metadata.py", source)
+        base = self.initialize_git()
+        path.write_text(
+            source.replace("同じkeyによる再試行", "同じidempotency keyによる再試行"),
+            encoding="utf-8",
+        )
+
+        result, exit_status, stderr = self.extract_git(base)
+
+        self.assertEqual(exit_status, 0, stderr)
+        self.assertEqual(len(result["tests"]), 1)
+        self.assertIn("idempotency key", result["tests"][0]["metadata"]["claim"])
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "working tree比較は未追跡test fileも審査対象に含める"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "新規未追跡testが審査を通らず追加される"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_includes_untracked_test_file(self) -> None:
+        base = self.initialize_git()
+        self.write("tests/日本 語/test untracked.py", "def test_untracked():\n    assert True\n")
+
+        result, exit_status, stderr = self.extract_git(base)
+
+        self.assertEqual(exit_status, 1, stderr)
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["test_untracked"],
+        )
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_VALUE_MISSING"],
+        )
+
+    # @test-value v1
+    # kind = "contract"
+    # claim = "staged modeはworking treeではなくindexのsourceを抽出する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "diff対象と異なるsnapshotの本文をAIへ渡す"
+    # scope = "git-snapshot-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_reads_staged_snapshot_instead_of_worktree(self) -> None:
+        source = VALID_METADATA + "def test_snapshot():\n    assert observed() == 1\n"
+        path = self.write("tests/test_snapshot.py", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("== 1", "== 2"), encoding="utf-8")
+        self.git("add", "tests/test_snapshot.py")
+        path.write_text(source.replace("== 1", "== 3"), encoding="utf-8")
+
+        result, exit_status, stderr = self.extract_git(base, "python", "--staged")
+
+        self.assertEqual(exit_status, 0, stderr)
+        self.assertIn("observed() == 2", result["tests"][0]["source_text"])
+        self.assertNotIn("observed() == 3", result["tests"][0]["source_text"])
+
+    # @test-value v1
+    # kind = "contract"
+    # claim = "head modeは明示commitのsourceを抽出する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "commit審査へ別snapshotの本文が混入する"
+    # scope = "git-snapshot-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_reads_requested_commit_snapshot(self) -> None:
+        source = VALID_METADATA + "def test_snapshot():\n    assert observed() == 1\n"
+        path = self.write("tests/test_snapshot.py", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("== 1", "== 2"), encoding="utf-8")
+        self.git("add", "tests/test_snapshot.py")
+        self.git("commit", "--quiet", "-m", "change")
+        head = self.git("rev-parse", "HEAD")
+        path.write_text(source.replace("== 1", "== 3"), encoding="utf-8")
+
+        result, exit_status, stderr = self.extract_git(
+            base, "python", "--head", head
+        )
+
+        self.assertEqual(exit_status, 0, stderr)
+        self.assertIn("observed() == 2", result["tests"][0]["source_text"])
+        self.assertNotIn("observed() == 3", result["tests"][0]["source_text"])
+
+    # @test-value v1
+    # kind = "contract"
+    # claim = "内容を変えないrenameはtest価値の再審査対象にしない"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "pure renameを新規testと誤認して不要な審査を要求する"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_ignores_pure_rename_and_unchanged_language(self) -> None:
+        source = VALID_METADATA + "def test_renamed():\n    assert True\n"
+        self.write("tests/test_before.py", source)
+        base = self.initialize_git()
+        self.git("mv", "tests/test_before.py", "tests/test_after.py")
+
+        result, exit_status, stderr = self.extract_git(base)
+
+        self.assertEqual(exit_status, 0, stderr)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(result["diagnostics"], [])
+
+    # @test-value v1
+    # kind = "contract"
+    # claim = "解決不能なGit revisionでは部分JSONを返さずinvocation errorにする"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "誤ったbaseで空の審査結果を成功扱いする"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_rejects_invalid_revision_without_partial_result(self) -> None:
+        self.initialize_git()
+
+        result, exit_status, stderr = self.extract_git("missing-revision")
+
+        self.assertEqual(exit_status, 2)
+        self.assertEqual(result, {})
+        self.assertIn("git command failed", stderr)
 
     def test_outside_root_is_rejected_by_public_cli(self) -> None:
         outside = self.root.parent / f"{self.root.name}-outside.py"

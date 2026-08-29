@@ -54,6 +54,46 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
     def extract(self, *paths: str) -> tuple[dict, int]:
         return EXTRACTOR.extract_repository(self.root, list(paths))
 
+    def git(self, *args: str) -> str:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=self.root,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return completed.stdout.strip()
+
+    def initialize_git(self) -> str:
+        self.git("init", "--quiet")
+        self.git("config", "user.name", "Test User")
+        self.git("config", "user.email", "test@example.invalid")
+        self.git("add", "--all")
+        self.git("commit", "--quiet", "--allow-empty", "-m", "base")
+        return self.git("rev-parse", "HEAD")
+
+    def extract_git(self, base: str, language: str) -> tuple[dict, int, str]:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--root",
+                str(self.root),
+                "--changed-from",
+                base,
+                "--language",
+                language,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        result = json.loads(completed.stdout) if completed.stdout else {}
+        return result, completed.returncode, completed.stderr
+
     def test_typescript_extracts_describe_and_parameterized_declaration(self) -> None:
         self.write(
             "tests/payment.test.ts",
@@ -560,6 +600,53 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
                 self.assertEqual(exit_status, 0)
                 self.assertEqual(result["diagnostics"], [])
                 self.assertNotIn("\ufeff", result["tests"][0]["source_text"])
+
+    # @test-value v1
+    # kind = "contract"
+    # claim = "Git modeはTypeScriptとC#でも変更testだけを言語別に選択する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "native adapterの変更testが漏れるか未変更legacy testで停止する"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_changed_typescript_and_csharp_tests(self) -> None:
+        typescript = (
+            'test("legacy", () => { expect(true).toBe(true); });\n'
+            + metadata_block("//")
+            + 'test("changed", () => { expect(observed()).toBe(1); });\n'
+        )
+        csharp = (
+            "using Xunit;\n"
+            "public class ValueTests\n"
+            "{\n"
+            "    [Fact] public void Legacy() { Assert.True(true); }\n"
+            + metadata_block("//", "    ")
+            + "    [Fact] public void Changed() { Assert.Equal(1, Observed()); }\n"
+            "}\n"
+        )
+        ts_path = self.root / "tests/value.test.ts"
+        cs_path = self.root / "tests/ValueTests.cs"
+        self.write("tests/value.test.ts", typescript)
+        self.write("tests/ValueTests.cs", csharp)
+        base = self.initialize_git()
+        ts_path.write_text(typescript.replace("toBe(1)", "toBe(2)"), encoding="utf-8")
+        cs_path.write_text(csharp.replace("Equal(1", "Equal(2"), encoding="utf-8")
+
+        ts_result, ts_status, ts_stderr = self.extract_git(base, "typescript")
+        cs_result, cs_status, cs_stderr = self.extract_git(base, "csharp")
+
+        self.assertEqual(ts_status, 0, ts_stderr)
+        self.assertEqual(cs_status, 0, cs_stderr)
+        self.assertEqual(ts_result["diagnostics"], [])
+        self.assertEqual(cs_result["diagnostics"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in ts_result["tests"]],
+            ["changed"],
+        )
+        self.assertEqual(
+            [record["source"]["symbol"] for record in cs_result["tests"]],
+            ["ValueTests.Changed"],
+        )
 
     def test_mixed_languages_are_rejected_as_invalid_invocation(self) -> None:
         self.write("tests/test_one.py", "def test_one():\n    assert True\n")

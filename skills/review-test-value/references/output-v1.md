@@ -25,6 +25,8 @@ stdoutへUTF-8 JSON objectを一つ出力する。
 
 一つのresultへ複数組を混在させない。複数言語はCLI呼び出しを分ける。
 
+Git modeでも同じoutput schema v1を使う。`tests`とrecord-local diagnosticはGit差分で選択されたtestだけを含み、Git revisionやselection rangeをJSONへ追加しない。base、head、working tree、indexの選択はCLI invocationが所有する。
+
 各`tests` recordは次を持つ。
 
 - `source`: repository相対path、qualified symbol、metadataとdeclarationのline locator
@@ -59,3 +61,5 @@ C# parser由来のdiagnostic messageはinvariant cultureで生成する。
 - `2`: CLI引数、言語混在、未対応extension、adapter依存、I/O、内部処理の失敗により信頼できる結果を構築できなかった。
 
 exit `1`と`2`を同じ失敗として扱わない。`2`のとき部分結果を推測しない。
+
+Git modeで指定言語に対象recordがない場合は、言語に対応する`adapter`と`coverage`、空の`tests`と`diagnostics`を出力してexit `0`とする。Git repository、revision、index、snapshotの解決に失敗した場合はexit `2`とし、stdoutへ部分resultを出さない。

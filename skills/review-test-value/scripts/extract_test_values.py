@@ -660,11 +660,18 @@ def extract_source(
             )
         ]
 
+    return extract_source_text(raw, relative_path, profile, path.suffix.lower())
+
+
+def extract_source_text(
+    raw: str, relative_path: str, profile: AdapterProfile, suffix: str | None = None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     source, lines = normalized_lines(raw)
+    suffix = suffix or Path(relative_path).suffix.lower()
     if profile == PYTHON_PROFILE:
         analysis = analyze_python_source(source, lines, relative_path)
     elif profile == TYPESCRIPT_PROFILE:
-        analysis = analyze_typescript_source(source, path.suffix.lower(), relative_path)
+        analysis = analyze_typescript_source(source, suffix, relative_path)
     elif profile == CSHARP_PROFILE:
         analysis = analyze_csharp_source(source, relative_path)
     else:
@@ -754,11 +761,12 @@ def build_parser() -> argparse.ArgumentParser:
         )
     )
     parser.add_argument("--root", required=True, type=Path, help="Repository root")
-    parser.add_argument(
-        "paths",
-        nargs="+",
-        help="Source paths from one supported language to extract",
-    )
+    parser.add_argument("paths", nargs="*", help="Source paths from one supported language to extract")
+    parser.add_argument("--changed-from", metavar="BASE", help="Git diff base revision")
+    parser.add_argument("--language", choices=[p.language for p in ADAPTER_PROFILES])
+    head = parser.add_mutually_exclusive_group()
+    head.add_argument("--head", metavar="COMMIT")
+    head.add_argument("--staged", action="store_true")
     return parser
 
 
@@ -766,6 +774,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.changed_from is not None:
+            if not args.language or args.paths:
+                raise ValueError("Git mode requires --language and forbids positional paths")
+            from git_diff_selection import select_git
+            mode = "staged" if args.staged else "head" if args.head else "working"
+            result = select_git(args.root, args.changed_from, args.language, mode, args.head)
+            rendered = render_result(result)
+            if hasattr(sys.stdout, "buffer"):
+                sys.stdout.buffer.write(rendered.encode("utf-8"))
+            else:
+                sys.stdout.write(rendered)
+            return 1 if result["diagnostics"] else 0
+        if args.language or args.head or args.staged:
+            raise ValueError("--language, --head, and --staged require --changed-from")
+        if not args.paths:
+            raise ValueError("source paths are required")
         result, exit_status = extract_repository(args.root, args.paths)
     except (AdapterError, OSError, ValueError) as error:
         print(f"extract_test_values: {error}", file=sys.stderr)

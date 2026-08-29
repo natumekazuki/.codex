@@ -21,7 +21,16 @@ npm ci --prefix <skill-dir>/scripts/adapters/typescript
 dotnet restore <skill-dir>/scripts/adapters/csharp/TestValue.CSharpExtractor.csproj
 ```
 
-5. repository rootと明示的な同一言語のsource pathを指定して抽出する。複数言語は言語ごとに実行を分ける。
+5. 新規・意味変更testの審査では[references/git-selection-v1.md](references/git-selection-v1.md)を読み、task開始時に固定したbase commitから対象snapshotまでのGit差分で抽出する。対象pathやline rangeを手で選ばない。複数言語は言語ごとに実行を分ける。
+
+```powershell
+python -X utf8 <skill-dir>/scripts/extract_test_values.py `
+  --root <repository-root> `
+  --changed-from <task-base-commit> `
+  --language python
+```
+
+明示的なfile全体の審査またはmetadata migrationでは、repository rootと同一言語のsource pathを指定する従来modeを使う。
 
 ```powershell
 python -X utf8 <skill-dir>/scripts/extract_test_values.py `
@@ -36,7 +45,8 @@ python -X utf8 <skill-dir>/scripts/extract_test_values.py `
 
 ## Extraction Rules
 
-- 明示されたpathだけをscriptへ渡す。抽出器へ対象testの選択を推測させない。
+- 従来modeでは明示されたpathだけをscriptへ渡す。抽出器へ対象testの選択を推測させない。
+- Git modeでは対象pathとline rangeをGit差分選択器へ任せ、個別指定へ置き換えない。
 - 一回の呼び出しへ`.py`、`.ts` / `.tsx`、`.cs`を混在させない。
 - `metadata`、`source_text`、line locator、hashを抽出結果のまま扱う。
 - 通常コメントやdocstringを構造化metadataへ昇格しない。
@@ -62,5 +72,6 @@ Skillまたはscriptを変更したら次を実行する。
 python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values_multilang.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_values.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/git_diff_selection.py
 python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-value
 ```
