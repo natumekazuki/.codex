@@ -244,6 +244,12 @@ def _map_old_line_to_new(line: int, hunks: tuple[DiffHunk, ...]) -> int:
     return line + delta
 
 
+def _hunk_intersects_old_span(hunk: DiffHunk, start: int, end: int) -> bool:
+    if hunk.old_count == 0:
+        return start <= hunk.old_start < end
+    return start <= hunk.old_end and end >= hunk.old_start
+
+
 def _base_change_projection(
     root: Path,
     base: str,
@@ -251,8 +257,7 @@ def _base_change_projection(
     profile: AdapterProfileLike,
     extract_source_text: ExtractSourceText,
 ) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    old_side_hunks = tuple(hunk for hunk in item.hunks if hunk.old_count)
-    if not old_side_hunks:
+    if not item.hunks:
         return (), ()
     base_snapshot = _base_snapshot(root, base, item)
     if base_snapshot is None:
@@ -260,7 +265,7 @@ def _base_change_projection(
     try:
         base_raw = base_snapshot.decode("utf-8-sig")
     except UnicodeDecodeError:
-        return (), tuple(hunk.new_start for hunk in old_side_hunks)
+        return (), tuple(hunk.new_start for hunk in item.hunks)
     base_records, base_diagnostics = extract_source_text(
         base_raw,
         item.old_path or item.path,
@@ -289,20 +294,28 @@ def _base_change_projection(
         )
     projected_starts: set[int] = set()
     fallback_anchors: set[int] = set()
-    for hunk in old_side_hunks:
+    for hunk in item.hunks:
         overlapping = [
             (start, end, declaration_start)
             for start, end, declaration_start in spans
-            if start <= hunk.old_end and end >= hunk.old_start
+            if _hunk_intersects_old_span(hunk, start, end)
         ]
         for start, end, declaration_start in overlapping:
-            if hunk.old_start <= start and hunk.old_end >= end:
+            if (
+                hunk.old_count
+                and hunk.old_start <= start
+                and hunk.old_end >= end
+            ):
                 continue
             projected_starts.add(
                 _map_old_line_to_new(declaration_start, item.hunks)
             )
         hunk_is_uncertain = source_incomplete or any(
-            hunk.old_start <= line <= hunk.old_end
+            (
+                hunk.old_start <= line <= hunk.old_end
+                if hunk.old_count
+                else line in {hunk.old_start, hunk.old_start + 1}
+            )
             for line in unsupported_lines
         )
         if hunk_is_uncertain and not overlapping:

@@ -890,6 +890,49 @@ def test_oracle_table_with_decoy():
 
     # @test-value v1
     # kind = "regression"
+    # claim = "metadataと宣言の間への純挿入もbase側recordから対応testへ投影する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "挿入hunkにold側rangeがなく結合を失ったtestとdiagnosticが審査から消える"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_inserted_metadata_separator(self) -> None:
+        source = VALID_METADATA + "def test_separated_binding():\n    assert True\n"
+        path = self.write("tests/test_inserted_separator.py", source)
+        base = self.initialize_git()
+        path.write_text(
+            source.replace(
+                "def test_separated_binding():",
+                "SEPARATOR = True\ndef test_separated_binding():",
+            ),
+            encoding="utf-8",
+        )
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_inserted_separator.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "separate metadata binding")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 1, stderr)
+                self.assertEqual(
+                    [record["source"]["symbol"] for record in result["tests"]],
+                    ["test_separated_binding"],
+                )
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_VALUE_MISSING"],
+                )
+
+    # @test-value v1
+    # kind = "regression"
     # claim = "unrelatedなunsupported宣言があってもtest全削除を隣接testへ投影しない"
     # oracle = { type = "adr", ref = "ADR-0021" }
     # failure_mode = "別位置のunsupported diagnosticで未変更legacy testを移行対象にする"
