@@ -1,0 +1,8 @@
+{
+  "name": "review-test-value-typescript-adapter",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "typescript": "5.9.3"
+  }
+}
