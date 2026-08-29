@@ -1,0 +1,11 @@
+natural-japanese
+
+Source: https://github.com/coji/natural-japanese
+Upstream path: skills/natural-japanese
+Revision: 0f1cc1c5a4e2aa7590598c88a15c213a60d9545a
+License: MIT (see LICENSE)
+
+This directory is synchronized by scripts/sync-natural-japanese.ps1.
+Codex adaptations: removes the unsupported argument-hint frontmatter entry and
+routes technical-document structure and Markdown formatting to japanese-tech-writing-review.
+Local edits under this directory are replaced during synchronization.
