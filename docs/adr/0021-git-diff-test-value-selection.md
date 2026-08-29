@@ -47,4 +47,3 @@
 - Extraction integration: `skills/review-test-value/scripts/extract_test_values.py`
 - Tests: `skills/review-test-value/scripts/test_extract_test_values.py`、`skills/review-test-value/scripts/test_extract_test_values_multilang.py`
 - Usage contract: `skills/review-test-value/references/git-selection-v1.md`
-

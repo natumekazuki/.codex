@@ -38,4 +38,3 @@ baseとheadは直接比較する。CLIはmerge-base、upstream、task開始commi
 - 対象言語に変更recordがない場合は空の`tests`と`diagnostics`を返し、exit `0`とする。
 
 明示pathを渡す従来modeは、既存file全体の審査やmigrationにだけ使う。新規・変更testの標準審査でGit modeをpath指定へ置き換えない。
-
