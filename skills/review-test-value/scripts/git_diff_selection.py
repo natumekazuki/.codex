@@ -237,12 +237,18 @@ def _effective_deletion_anchors(
         base_raw = base_snapshot.decode("utf-8-sig")
     except UnicodeDecodeError:
         return tuple(hunk.new_anchor for hunk in item.deletion_hunks)
-    base_records, _ = extract_source_text(
+    base_records, base_diagnostics = extract_source_text(
         base_raw,
         item.old_path or item.path,
         profile,
         Path(item.old_path or item.path).suffix.lower(),
     )
+    if any(
+        base_diagnostic["code"]
+        in {"SOURCE_SYNTAX_ERROR", "TEST_DECLARATION_UNSUPPORTED"}
+        for base_diagnostic in base_diagnostics
+    ):
+        return tuple(hunk.new_anchor for hunk in item.deletion_hunks)
     spans = []
     for record in base_records:
         source = record["source"]

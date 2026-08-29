@@ -634,9 +634,19 @@ def test_oracle_table_with_decoy():
             + "def test_survivor():\n"
             + "    assert True\n"
         )
+        syntax_repair_source = (
+            VALID_METADATA
+            + "def test_syntax_repair():\n"
+            + "    assert True\n"
+            + "    (\n"
+        )
         body = self.write("tests/test_body.py", body_source)
         metadata = self.write("tests/test_metadata.py", metadata_source)
         removed = self.write("tests/test_removed.py", removed_source)
+        syntax_repair = self.write(
+            "tests/test_syntax_repair.py",
+            syntax_repair_source,
+        )
         base = self.initialize_git()
         body.write_text(
             body_source.replace("    assert observed() == 1\n", ""),
@@ -650,6 +660,10 @@ def test_oracle_table_with_decoy():
             "def test_survivor():\n    assert True\n",
             encoding="utf-8",
         )
+        syntax_repair.write_text(
+            syntax_repair_source.replace("    (\n", ""),
+            encoding="utf-8",
+        )
 
         working = self.extract_git(base)
         self.git(
@@ -657,6 +671,7 @@ def test_oracle_table_with_decoy():
             "tests/test_body.py",
             "tests/test_metadata.py",
             "tests/test_removed.py",
+            "tests/test_syntax_repair.py",
         )
         staged = self.extract_git(base, "python", "--staged")
         self.git("commit", "--quiet", "-m", "delete lines")
@@ -672,7 +687,7 @@ def test_oracle_table_with_decoy():
                 self.assertEqual(exit_status, 1, stderr)
                 self.assertEqual(
                     [record["source"]["symbol"] for record in result["tests"]],
-                    ["test_body", "test_metadata"],
+                    ["test_body", "test_metadata", "test_syntax_repair"],
                 )
                 self.assertEqual(
                     [item["code"] for item in result["diagnostics"]],
