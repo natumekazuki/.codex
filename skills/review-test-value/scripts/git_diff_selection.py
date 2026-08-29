@@ -25,7 +25,7 @@ DiagnosticFactory = Callable[[str, str, int, str], dict[str, Any]]
 class ChangedFile:
     path: str
     ranges: tuple[tuple[int, int], ...]
-    deletion_hunks: tuple["DeletionHunk", ...] = ()
+    hunks: tuple["DiffHunk", ...] = ()
     status: str = "M"
     old_path: str | None = None
     whole_file: bool = False
@@ -35,7 +35,7 @@ class ChangedFile:
 class _ChangedFileBuilder:
     status: str
     ranges: list[tuple[int, int]]
-    deletion_hunks: list["DeletionHunk"]
+    hunks: list["DiffHunk"]
     old_path: str | None = None
     whole_file: bool = False
 
@@ -47,10 +47,15 @@ class SourceOutsideRootError(ValueError):
 
 
 @dataclass(frozen=True)
-class DeletionHunk:
+class DiffHunk:
     old_start: int
-    old_end: int
-    new_anchor: int
+    old_count: int
+    new_start: int
+    new_count: int
+
+    @property
+    def old_end(self) -> int:
+        return self.old_start + self.old_count - 1
 
 
 _HUNK = re.compile(
@@ -153,16 +158,16 @@ def changed_files(
                 old_count = int(m.group(2) or 1)
                 new_start = int(m.group(3))
                 new_count = int(m.group(4) or 1)
+                item.hunks.append(
+                    DiffHunk(
+                        old_start=old_start,
+                        old_count=old_count,
+                        new_start=new_start,
+                        new_count=new_count,
+                    )
+                )
                 if new_count:
                     item.ranges.append((new_start, new_start + new_count - 1))
-                else:
-                    item.deletion_hunks.append(
-                        DeletionHunk(
-                            old_start=old_start,
-                            old_end=old_start + old_count - 1,
-                            new_anchor=new_start,
-                        )
-                    )
     if mode == "working":
         untracked = bytes(
             _git(
@@ -181,7 +186,7 @@ def changed_files(
         ChangedFile(
             path=path,
             ranges=tuple(item.ranges),
-            deletion_hunks=tuple(item.deletion_hunks),
+            hunks=tuple(item.hunks),
             status=item.status,
             old_path=item.old_path,
             whole_file=item.whole_file,
@@ -221,35 +226,57 @@ def _affects_span(
     return any(start - 1 <= anchor <= end for anchor in deletion_anchors)
 
 
-def _effective_deletion_anchors(
+def _map_old_line_to_new(line: int, hunks: tuple[DiffHunk, ...]) -> int:
+    delta = 0
+    for hunk in hunks:
+        if hunk.old_count == 0:
+            if line >= hunk.old_start:
+                delta += hunk.new_count
+            continue
+        if line < hunk.old_start:
+            break
+        if line > hunk.old_end:
+            delta += hunk.new_count - hunk.old_count
+            continue
+        if hunk.new_count == 0:
+            return hunk.new_start
+        return hunk.new_start + min(line - hunk.old_start, hunk.new_count - 1)
+    return line + delta
+
+
+def _base_change_projection(
     root: Path,
     base: str,
     item: ChangedFile,
     profile: AdapterProfileLike,
     extract_source_text: ExtractSourceText,
-) -> tuple[int, ...]:
-    if not item.deletion_hunks:
-        return ()
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    old_side_hunks = tuple(hunk for hunk in item.hunks if hunk.old_count)
+    if not old_side_hunks:
+        return (), ()
     base_snapshot = _base_snapshot(root, base, item)
     if base_snapshot is None:
-        return tuple(hunk.new_anchor for hunk in item.deletion_hunks)
+        return (), ()
     try:
         base_raw = base_snapshot.decode("utf-8-sig")
     except UnicodeDecodeError:
-        return tuple(hunk.new_anchor for hunk in item.deletion_hunks)
+        return (), tuple(hunk.new_start for hunk in old_side_hunks)
     base_records, base_diagnostics = extract_source_text(
         base_raw,
         item.old_path or item.path,
         profile,
         Path(item.old_path or item.path).suffix.lower(),
     )
-    if any(
-        base_diagnostic["code"]
-        in {"SOURCE_SYNTAX_ERROR", "TEST_DECLARATION_UNSUPPORTED"}
-        for base_diagnostic in base_diagnostics
-    ):
-        return tuple(hunk.new_anchor for hunk in item.deletion_hunks)
-    spans = []
+    source_incomplete = any(
+        diagnostic["code"] == "SOURCE_SYNTAX_ERROR"
+        for diagnostic in base_diagnostics
+    )
+    unsupported_lines = {
+        diagnostic["line"]
+        for diagnostic in base_diagnostics
+        if diagnostic["code"] == "TEST_DECLARATION_UNSUPPORTED"
+    }
+    spans: list[tuple[int, int, int]] = []
     for record in base_records:
         source = record["source"]
         spans.append(
@@ -257,21 +284,32 @@ def _effective_deletion_anchors(
                 source["metadata_start_line"]
                 or source["declaration_start_line"],
                 source["declaration_end_line"],
+                source["declaration_start_line"],
             )
         )
-    anchors = []
-    for hunk in item.deletion_hunks:
+    projected_starts: set[int] = set()
+    fallback_anchors: set[int] = set()
+    for hunk in old_side_hunks:
         overlapping = [
-            (start, end)
-            for start, end in spans
+            (start, end, declaration_start)
+            for start, end, declaration_start in spans
             if start <= hunk.old_end and end >= hunk.old_start
         ]
-        if overlapping and any(
-            hunk.old_start > start or hunk.old_end < end
-            for start, end in overlapping
-        ):
-            anchors.append(hunk.new_anchor)
-    return tuple(anchors)
+        for start, end, declaration_start in overlapping:
+            if hunk.old_start <= start and hunk.old_end >= end:
+                continue
+            projected_starts.add(
+                _map_old_line_to_new(declaration_start, item.hunks)
+            )
+        hunk_is_uncertain = source_incomplete or any(
+            hunk.old_start <= line <= hunk.old_end
+            for line in unsupported_lines
+        )
+        if hunk_is_uncertain and not overlapping:
+            fallback_anchors.add(hunk.new_start)
+            if hunk.new_count:
+                fallback_anchors.add(hunk.new_start - 1)
+    return tuple(sorted(projected_starts)), tuple(sorted(fallback_anchors))
 
 
 def select_git(
@@ -303,7 +341,7 @@ def select_git(
                 )
             )
             continue
-        if not item.whole_file and not item.ranges and not item.deletion_hunks:
+        if not item.whole_file and not item.hunks:
             base_snapshot = _base_snapshot(root, base, item)
             if base_snapshot == snapshot:
                 continue
@@ -329,7 +367,7 @@ def select_git(
             profile,
             Path(item.path).suffix.lower(),
         )
-        deletion_anchors = _effective_deletion_anchors(
+        projected_starts, fallback_anchors = _base_change_projection(
             root,
             base,
             item,
@@ -341,7 +379,12 @@ def select_git(
             s = rec["source"]
             start = s["metadata_start_line"] or s["declaration_start_line"]
             end = s["declaration_end_line"]
-            if _affects_span(item, start, end, deletion_anchors):
+            if s["declaration_start_line"] in projected_starts or _affects_span(
+                item,
+                start,
+                end,
+                fallback_anchors,
+            ):
                 tests.append(rec)
                 selected_spans.append((start, end))
         for d in diags:
@@ -351,7 +394,7 @@ def select_git(
                     item,
                     d["line"],
                     d["line"],
-                    deletion_anchors,
+                    fallback_anchors,
                 )
                 or any(low <= d["line"] <= high for low, high in selected_spans)
             ):

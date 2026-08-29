@@ -32,8 +32,9 @@ working treeのsource pathがsymlinkなどによってrepository root外へ解�
 ## Selection
 
 - 対象言語の変更fileはGit差分から自動発見する。個別pathやline rangeは受け取らない。
-- test declarationのrange、または直接隣接する`@test-value` blockへnew-side diff hunkが交差したrecordを選ぶ。
+- test declarationのrange、または直接隣接する`@test-value` blockへdiff hunkのold-sideかnew-sideが交差したsurviving recordを選ぶ。
 - test本文だけ、構造化コメントだけを変更した場合も選ぶ。
+- metadata markerや隣接関係を壊してnew-sideでblockを結合できなくなった場合も、base側のrecord対応からsurviving testとdiagnosticを選ぶ。
 - surviving testの本文行または隣接する`@test-value` blockを削除した場合は、new-sideの削除anchorから対応recordを選ぶ。test declaration全体の削除は選ばない。
 - 対応sourceはGit属性の`-diff`やtext conversionを適用せず、raw textとしてhunkを取得する。
 - 変更していないrecordと、そのrecordだけに属するmetadata diagnosticは結果から除外する。

@@ -19,7 +19,7 @@
 - baseと比較対象は直接比較し、merge-base、upstream、task開始commitをCLIが推測しない。task開始時に固定したbaseを呼び出し側が渡す。
 - 比較対象はworking tree、index、明示commitを区別する。抽出sourceも比較対象と同じsnapshotから読む。
 - working tree比較はbase以降のcommit、staged、unstaged、non-ignored untracked fileを含む。filesystemから読むsourceがrepository root外へ解決される場合は、内容を読まず`SOURCE_OUTSIDE_ROOT`にする。
-- test declarationのsource range、直接隣接する`@test-value` block、またはそれらへ接する削除anchorへ差分が交差したrecordだけを抽出する。surviving testの本文行やmetadataだけを削除した場合も対象にする。
+- test declarationのsource range、直接隣接する`@test-value` block、またはそれらへ接するold-side / new-side差分が交差したsurviving recordだけを抽出する。surviving testの本文行やmetadataだけを削除した場合と、metadataのmarkerや隣接関係を壊した場合もbase側recordから対象にする。
 - 対応sourceのhunkはGit属性のbinary指定やtext conversionに左右されないraw text差分として取得する。
 - 変更していない既存testとそのmetadata欠落diagnosticはGit modeの結果へ含めない。
 - syntax error、decode error、adapter failureなど、変更sourceの信頼できる抽出を妨げるfailureは選択範囲外として隠さない。
