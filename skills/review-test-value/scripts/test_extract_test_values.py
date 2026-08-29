@@ -1073,7 +1073,6 @@ def test_oracle_table_with_decoy():
             "    pass\n"
             "    def test_nested():\n"
             "        assert True\n"
-            "\n"
             "def test_survivor():\n"
             "    assert True\n"
         )
