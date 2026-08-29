@@ -933,6 +933,133 @@ def test_oracle_table_with_decoy():
 
     # @test-value v1
     # kind = "regression"
+    # claim = "先頭decoratorだけを削除したsurviving testをbase側rangeから選択する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "削除anchorへ投影した旧開始行が現開始行と一致せず変更testが審査から消える"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_test_after_leading_decorator_deletion(self) -> None:
+        source = (
+            "def test_legacy():\n"
+            + "    assert True\n\n"
+            + VALID_METADATA
+            + "@pytest.mark.one\n"
+            + "@pytest.mark.two\n"
+            + "def test_decorated():\n"
+            + "    assert True\n"
+        )
+        path = self.write("tests/test_decorator_deletion.py", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("@pytest.mark.one\n", ""), encoding="utf-8")
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_decorator_deletion.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "remove leading decorator")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [record["source"]["symbol"] for record in result["tests"]],
+                    ["test_decorated"],
+                )
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "nested Python testの本文変更をUNSUPPORTED diagnosticへ結合する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "未対応宣言の開始行以外の変更を空結果として成功扱いする"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_changed_nested_python_test(self) -> None:
+        source = (
+            "def helper():\n"
+            "    def test_nested():\n"
+            "        assert observed() == 1\n"
+        )
+        path = self.write("tests/test_nested_change.py", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("== 1", "== 2"), encoding="utf-8")
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_nested_change.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "change nested test")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 1, stderr)
+                self.assertEqual(result["tests"], [])
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_DECLARATION_UNSUPPORTED"],
+                )
+                self.assertEqual(
+                    set(result["diagnostics"][0]),
+                    {"code", "path", "line", "message"},
+                )
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "nested Python testの本文削除を削除anchorからUNSUPPORTED diagnosticへ結合する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "未対応宣言内の削除専用hunkを空結果として成功扱いする"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # distinction = "new側rangeが残る置換ではなく本文末尾の削除専用hunkを扱う"
+    # @end-test-value
+    def test_git_mode_selects_deleted_line_in_nested_python_test(self) -> None:
+        source = (
+            "def helper():\n"
+            "    def test_nested():\n"
+            "        assert precondition()\n"
+            "        assert removed_condition()\n"
+        )
+        path = self.write("tests/test_nested_deletion.py", source)
+        base = self.initialize_git()
+        path.write_text(
+            source.replace("        assert removed_condition()\n", ""),
+            encoding="utf-8",
+        )
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_nested_deletion.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "delete nested test line")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 1, stderr)
+                self.assertEqual(result["tests"], [])
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_DECLARATION_UNSUPPORTED"],
+                )
+
+    # @test-value v1
+    # kind = "regression"
     # claim = "unrelatedなunsupported宣言があってもtest全削除を隣接testへ投影しない"
     # oracle = { type = "adr", ref = "ADR-0021" }
     # failure_mode = "別位置のunsupported diagnosticで未変更legacy testを移行対象にする"

@@ -45,6 +45,20 @@ static bool IsTestAttribute(AttributeSyntax attribute)
 static bool IsTestMethod(MethodDeclarationSyntax method) =>
     method.AttributeLists.SelectMany(list => list.Attributes).Any(IsTestAttribute);
 
+static ExpressionSyntax? ConditionalExpression(DirectiveTriviaSyntax directive) =>
+    directive switch
+    {
+        IfDirectiveTriviaSyntax item => item.Condition,
+        ElifDirectiveTriviaSyntax item => item.Condition,
+        _ => null,
+    };
+
+static bool RequiresProjectSpecificSymbols(DirectiveTriviaSyntax directive) =>
+    ConditionalExpression(directive)?
+        .DescendantNodesAndSelf()
+        .OfType<IdentifierNameSyntax>()
+        .Any() == true;
+
 static string QualifiedSymbol(MethodDeclarationSyntax method)
 {
     var namespaces = method.Ancestors()
@@ -72,23 +86,43 @@ var diagnostics = tree.GetDiagnostics()
     .Cast<object>()
     .ToList();
 
-var conditionalDirective = root.DescendantTrivia(descendIntoTrivia: true)
-    .FirstOrDefault(trivia => trivia.IsKind(SyntaxKind.IfDirectiveTrivia));
-var hasConditionalCompilation = conditionalDirective != default;
-if (hasConditionalCompilation)
+var conditionalGroups = root.DescendantTrivia(descendIntoTrivia: true)
+    .Select(trivia => trivia.GetStructure())
+    .OfType<IfDirectiveTriviaSyntax>()
+    .Select(directive => new
+    {
+        directive,
+        related = directive.GetRelatedDirectives(),
+    })
+    .Where(group => group.related.Any(RequiresProjectSpecificSymbols))
+    .Select(group => new
+    {
+        group.directive,
+        start = group.directive.SpanStart,
+        end = group.related.Last().Span.End,
+    })
+    .ToList();
+foreach (var group in conditionalGroups)
 {
     diagnostics.Add(new
     {
         code = "TEST_DECLARATION_UNSUPPORTED",
-        line = LineNumber(tree, conditionalDirective.SpanStart),
-        message = "conditional compilation requires project-specific preprocessor symbols",
+        line = LineNumber(tree, group.start),
+        end_line = LineNumber(tree, group.end),
+        message = "conditional compilation references preprocessor symbols",
     });
 }
 
+static bool IsInsideConditionalGroup(SyntaxNode node, int start, int end) =>
+    node.SpanStart >= start && node.Span.End <= end;
+
+bool IsInsideUnsupportedConditional(SyntaxNode node) =>
+    conditionalGroups.Any(group => IsInsideConditionalGroup(node, group.start, group.end));
+
 var declarations = new List<object>();
-var methods = hasConditionalCompilation
-    ? Enumerable.Empty<MethodDeclarationSyntax>()
-    : root.DescendantNodes().OfType<MethodDeclarationSyntax>();
+var methods = root.DescendantNodes()
+    .OfType<MethodDeclarationSyntax>()
+    .Where(method => !IsInsideUnsupportedConditional(method));
 var testMethods = methods.Where(IsTestMethod)
     .Select(method =>
     {
@@ -114,6 +148,9 @@ foreach (var line in unsupportedDeclarationLines.Order())
     {
         code = "TEST_DECLARATION_UNSUPPORTED",
         line,
+        end_line = testMethods
+            .Where(item => item.line == line)
+            .Max(item => LineNumber(tree, item.method.Span.End)),
         message = "test declaration must begin after indentation only",
     });
 }
@@ -134,6 +171,10 @@ foreach (var item in testMethods)
 
 foreach (var local in root.DescendantNodes().OfType<LocalFunctionStatementSyntax>())
 {
+    if (IsInsideUnsupportedConditional(local))
+    {
+        continue;
+    }
     if (!local.AttributeLists.SelectMany(list => list.Attributes).Any(IsTestAttribute))
     {
         continue;
@@ -142,6 +183,7 @@ foreach (var local in root.DescendantNodes().OfType<LocalFunctionStatementSyntax
     {
         code = "TEST_DECLARATION_UNSUPPORTED",
         line = LineNumber(tree, local.SpanStart),
+        end_line = LineNumber(tree, local.Span.End),
         message = "test attribute is attached to a local function",
     });
 }

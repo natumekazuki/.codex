@@ -33,6 +33,7 @@ working treeのsource pathがsymlinkなどによってrepository root外へ解�
 
 - 対象言語の変更fileはGit差分から自動発見する。個別pathやline rangeは受け取らない。
 - test declarationのrange、または直接隣接する`@test-value` blockへdiff hunkのold-sideかnew-sideが交差したsurviving recordを選ぶ。
+- base側recordのdeclaration startをnew側へ投影する。開始境界を削除した場合は削除anchorの直後へ対応付け、先頭decoratorやattributeだけを削除して開始行が変わったsurviving recordも選ぶ。
 - test本文だけ、構造化コメントだけを変更した場合も選ぶ。
 - metadata markerや隣接関係を壊してnew-sideでblockを結合できなくなった場合も、base側のrecord対応からsurviving testとdiagnosticを選ぶ。
 - surviving testの本文行または隣接する`@test-value` blockを削除した場合は、new-sideの削除anchorから対応recordを選ぶ。test declaration全体の削除は選ばない。
@@ -40,6 +41,7 @@ working treeのsource pathがsymlinkなどによってrepository root外へ解�
 - 変更していないrecordと、そのrecordだけに属するmetadata diagnosticは結果から除外する。
 - pure renameと削除は選ばない。renameと同時に内容を変更した場合は変更recordを選ぶ。
 - source全体の解析を信頼できなくするsyntax、decode、adapter failureは隠さない。
+- 静的に識別した未対応test declarationは内部rangeで差分と対応付け、開始行以外の本文変更も`TEST_DECLARATION_UNSUPPORTED`として返す。内部rangeは公開diagnosticへ追加しない。
 - 対象言語に変更recordがない場合は空の`tests`と`diagnostics`を返し、exit `0`とする。
 
 明示pathを渡す従来modeは、既存file全体の審査やmigrationにだけ使う。新規・変更testの標準審査でGit modeをpath指定へ置き換えない。

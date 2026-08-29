@@ -309,16 +309,22 @@ function collectDeclarations(sourceFile) {
   const diagnostics = [];
   const unsupportedDeclarationLines = new Set();
 
+  function unsupportedDiagnostic(node, message) {
+    const statement = expressionStatement(node);
+    return {
+      code: "TEST_DECLARATION_UNSUPPORTED",
+      line: lineNumber(sourceFile, statement.getStart(sourceFile, false)),
+      end_line: lineNumber(sourceFile, statement.getEnd()),
+      message,
+    };
+  }
+
   function visit(node) {
     if (ts.isCallExpression(node)) {
       const describeInfo = describeCallInfo(node);
       if (describeInfo !== null) {
         if (describeInfo.kind === "unsupported") {
-          diagnostics.push({
-            code: "TEST_DECLARATION_UNSUPPORTED",
-            line: lineNumber(sourceFile, node.getStart(sourceFile, false)),
-            message: describeInfo.message,
-          });
+          diagnostics.push(unsupportedDiagnostic(node, describeInfo.message));
         }
         ts.forEachChild(node, visit);
         return;
@@ -326,11 +332,7 @@ function collectDeclarations(sourceFile) {
       const info = testCallInfo(node);
       if (info !== null) {
         if (info.kind === "unsupported") {
-          diagnostics.push({
-            code: "TEST_DECLARATION_UNSUPPORTED",
-            line: lineNumber(sourceFile, node.getStart(sourceFile, false)),
-            message: info.message,
-          });
+          diagnostics.push(unsupportedDiagnostic(node, info.message));
           ts.forEachChild(node, visit);
           return;
         }
@@ -342,11 +344,12 @@ function collectDeclarations(sourceFile) {
         const start = statement.getStart(sourceFile, false);
         const title = info.titleArgument ? staticTitle(info.titleArgument) : null;
         if (title === null) {
-          diagnostics.push({
-            code: "TEST_DECLARATION_UNSUPPORTED",
-            line: lineNumber(sourceFile, start),
-            message: "test declaration title must be a static string",
-          });
+          diagnostics.push(
+            unsupportedDiagnostic(
+              node,
+              "test declaration title must be a static string",
+            ),
+          );
         } else {
           const describeTitles = enclosingDescribeTitles(node);
           if (describeTitles === null) {
@@ -362,6 +365,7 @@ function collectDeclarations(sourceFile) {
               diagnostics.push({
                 code: "TEST_DECLARATION_UNSUPPORTED",
                 line: declarationLine,
+                end_line: lineNumber(sourceFile, statement.getEnd()),
                 message: "test declaration must begin after indentation only",
               });
             }

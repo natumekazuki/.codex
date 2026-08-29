@@ -19,6 +19,7 @@ ExtractSourceText = Callable[
     tuple[list[dict[str, Any]], list[dict[str, Any]]],
 ]
 DiagnosticFactory = Callable[[str, str, int, str], dict[str, Any]]
+DiagnosticProjector = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -244,6 +245,19 @@ def _map_old_line_to_new(line: int, hunks: tuple[DiffHunk, ...]) -> int:
     return line + delta
 
 
+def _map_old_declaration_start_to_new(
+    line: int, hunks: tuple[DiffHunk, ...]
+) -> int:
+    for hunk in hunks:
+        if (
+            hunk.old_count
+            and hunk.new_count == 0
+            and hunk.old_start <= line <= hunk.old_end
+        ):
+            return hunk.new_start + 1
+    return _map_old_line_to_new(line, hunks)
+
+
 def _hunk_intersects_old_span(hunk: DiffHunk, start: int, end: int) -> bool:
     if hunk.old_count == 0:
         return start <= hunk.old_start < end
@@ -276,8 +290,11 @@ def _base_change_projection(
         diagnostic["code"] == "SOURCE_SYNTAX_ERROR"
         for diagnostic in base_diagnostics
     )
-    unsupported_lines = {
-        diagnostic["line"]
+    unsupported_spans = {
+        (
+            diagnostic.get("_selection_start_line", diagnostic["line"]),
+            diagnostic.get("_selection_end_line", diagnostic["line"]),
+        )
         for diagnostic in base_diagnostics
         if diagnostic["code"] == "TEST_DECLARATION_UNSUPPORTED"
     }
@@ -308,17 +325,13 @@ def _base_change_projection(
             ):
                 continue
             projected_starts.add(
-                _map_old_line_to_new(declaration_start, item.hunks)
+                _map_old_declaration_start_to_new(declaration_start, item.hunks)
             )
         hunk_is_uncertain = source_incomplete or any(
-            (
-                hunk.old_start <= line <= hunk.old_end
-                if hunk.old_count
-                else line in {hunk.old_start, hunk.old_start + 1}
-            )
-            for line in unsupported_lines
+            _hunk_intersects_old_span(hunk, start, end)
+            for start, end in unsupported_spans
         )
-        if hunk_is_uncertain and not overlapping:
+        if hunk_is_uncertain:
             fallback_anchors.add(hunk.new_start)
             if hunk.new_count:
                 fallback_anchors.add(hunk.new_start - 1)
@@ -331,6 +344,7 @@ def select_git(
     profile: AdapterProfileLike,
     extract_source_text: ExtractSourceText,
     diagnostic: DiagnosticFactory,
+    project_diagnostic: DiagnosticProjector,
     mode: str = "working",
     head: str | None = None,
 ) -> dict:
@@ -405,13 +419,13 @@ def select_git(
                 item.whole_file
                 or _affects_span(
                     item,
-                    d["line"],
-                    d["line"],
+                    d.get("_selection_start_line", d["line"]),
+                    d.get("_selection_end_line", d["line"]),
                     fallback_anchors,
                 )
                 or any(low <= d["line"] <= high for low, high in selected_spans)
             ):
-                diagnostics.append(d)
+                diagnostics.append(project_diagnostic(d))
     tests.sort(
         key=lambda r: (
             r["source"]["path"],

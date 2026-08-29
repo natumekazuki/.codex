@@ -98,8 +98,28 @@ class AdapterError(RuntimeError):
     pass
 
 
-def diagnostic(code: str, path: str, line: int, message: str) -> dict[str, Any]:
-    return {"code": code, "path": path, "line": line, "message": message}
+def diagnostic(
+    code: str,
+    path: str,
+    line: int,
+    message: str,
+    *,
+    selection_start_line: int | None = None,
+    selection_end_line: int | None = None,
+) -> dict[str, Any]:
+    result = {"code": code, "path": path, "line": line, "message": message}
+    if selection_start_line is not None:
+        result["_selection_start_line"] = selection_start_line
+    if selection_end_line is not None:
+        result["_selection_end_line"] = selection_end_line
+    return result
+
+
+def public_diagnostic(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: item[key]
+        for key in ("code", "path", "line", "message")
+    }
 
 
 def sha256_text(value: str) -> str:
@@ -364,12 +384,15 @@ def analyze_python_source(
     for node in functions:
         supported, symbol = declaration_info(node, parents)
         if not supported:
+            start_line = declaration_start(node)
             diagnostics.append(
                 diagnostic(
                     "TEST_DECLARATION_UNSUPPORTED",
                     relative_path,
                     node.lineno,
                     "test declaration is nested in an unsupported scope",
+                    selection_start_line=start_line,
+                    selection_end_line=node.end_lineno or node.lineno,
                 )
             )
             continue
@@ -420,6 +443,8 @@ def parse_native_analysis(
                 relative_path,
                 item["line"],
                 item["message"],
+                selection_start_line=item.get("start_line"),
+                selection_end_line=item.get("end_line"),
             )
             for item in raw_diagnostics
         )
@@ -748,7 +773,7 @@ def extract_repository(
         "coverage": profile.coverage,
         "repository_root": ".",
         "tests": records,
-        "diagnostics": diagnostics,
+        "diagnostics": [public_diagnostic(item) for item in diagnostics],
     }
     return result, 1 if diagnostics else 0
 
@@ -791,6 +816,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 profile,
                 extract_source_text,
                 diagnostic,
+                public_diagnostic,
                 mode,
                 args.head,
             )

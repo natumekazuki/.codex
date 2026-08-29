@@ -46,7 +46,7 @@ Result fields:
   - MSTest: `TestMethod`、`DataTestMethod`
 - `Attribute` suffixとnamespace-qualified nameを許可する
 - Parameterization: data attributeを含む一つのsource declarationとして抽出する
-- Unsupported diagnostic: project固有のpreprocessor symbolが必要な条件付きコンパイル領域
+- Unsupported diagnostic: identifier symbolを参照する`#if` / `#elif`を含む条件付きコンパイルgroup。`#if true`などsymbolを参照しない静的条件は通常どおり解析し、symbol依存group内のactive branchをtest recordにせず、group外のtest抽出は継続する
 - Excluded: attribute aliasの意味解決、source generator、継承やruntime discoveryだけで生成されるtest、展開後data row
 
 Result fields:

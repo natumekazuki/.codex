@@ -74,7 +74,9 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.git("commit", "--quiet", "--allow-empty", "-m", "base")
         return self.git("rev-parse", "HEAD")
 
-    def extract_git(self, base: str, language: str) -> tuple[dict, int, str]:
+    def extract_git(
+        self, base: str, language: str, *extra: str
+    ) -> tuple[dict, int, str]:
         completed = subprocess.run(
             [
                 sys.executable,
@@ -85,6 +87,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
                 base,
                 "--language",
                 language,
+                *extra,
             ],
             check=False,
             capture_output=True,
@@ -706,16 +709,120 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
     def test_csharp_rejects_conditional_compilation_regions(self) -> None:
         self.write(
             "tests/ConditionalTests.cs",
+            "using Xunit;\n"
             "#if DEBUG\n"
-            "public class ConditionalTests\n"
+            "public class DebugConditionalTests\n"
             "{\n"
             "    [Fact]\n"
             "    public void DebugOnly() { }\n"
             "}\n"
-            "#endif\n",
+            "#else\n"
+            "public class ReleaseConditionalTests\n"
+            "{\n"
+            "    [Fact]\n"
+            "    public void ReleaseOnly() { }\n"
+            "}\n"
+            "#endif\n"
+            "public class AlwaysTests\n"
+            "{\n"
+            + metadata_block("//", "    ")
+            + "    [Fact]\n"
+            "    public void Always() { }\n"
+            "}\n",
         )
 
         result, exit_status = self.extract("tests/ConditionalTests.cs")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["AlwaysTests.Always"],
+        )
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_DECLARATION_UNSUPPORTED"],
+        )
+
+    # @test-value v1
+    # kind = "compatibility"
+    # claim = "project symbolを必要としない#if true内のC# testを通常宣言として抽出する"
+    # oracle = { type = "adr", ref = "ADR-0020" }
+    # failure_mode = "静的条件をproject依存と誤分類しfile全体のtestを審査から消す"
+    # scope = "csharp-source-adapter"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_csharp_extracts_static_true_conditional_region(self) -> None:
+        self.write(
+            "tests/StaticConditionalTests.cs",
+            "using Xunit;\n"
+            "#if true\n"
+            "public class StaticConditionalTests\n"
+            "{\n"
+            + metadata_block("//", "    ")
+            + "    [Fact]\n"
+            "    public void StaticTrue() { }\n"
+            "}\n"
+            "#endif\n",
+        )
+
+        result, exit_status = self.extract("tests/StaticConditionalTests.cs")
+
+        self.assertEqual(exit_status, 0)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["StaticConditionalTests.StaticTrue"],
+        )
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "symbol参照conditional groupのactive branchもsupported recordとして抽出しない"
+    # oracle = { type = "adr", ref = "ADR-0020" }
+    # failure_mode = "既定symbolでactiveになった不確実branchを通常testとしてAI審査へ渡す"
+    # scope = "csharp-source-adapter"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_csharp_rejects_active_symbol_conditional_branch(self) -> None:
+        self.write(
+            "tests/ActiveConditionalTests.cs",
+            "using Xunit;\n"
+            "#if !DEBUG\n"
+            "public class ActiveConditionalTests\n"
+            "{\n"
+            "    [Fact]\n"
+            "    public void ActiveWithoutDebug() { }\n"
+            "}\n"
+            "#endif\n",
+        )
+
+        result, exit_status = self.extract("tests/ActiveConditionalTests.cs")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_DECLARATION_UNSUPPORTED"],
+        )
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "一つの#if・#elif symbol groupを一件のUNSUPPORTED diagnosticへ集約する"
+    # oracle = { type = "adr", ref = "ADR-0020" }
+    # failure_mode = "同じ不確実領域を複数宣言として数えるか一部branchを通常抽出する"
+    # scope = "csharp-source-adapter"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_csharp_reports_one_diagnostic_per_symbol_conditional_group(self) -> None:
+        self.write(
+            "tests/ElifConditionalTests.cs",
+            "#if DEBUG\n"
+            "public class DebugTests { }\n"
+            "#elif RELEASE\n"
+            "public class ReleaseTests { }\n"
+            "#endif\n",
+        )
+
+        result, exit_status = self.extract("tests/ElifConditionalTests.cs")
 
         self.assertEqual(exit_status, 1)
         self.assertEqual(result["tests"], [])
@@ -831,6 +938,186 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             [record["source"]["symbol"] for record in cs_result["tests"]],
             ["ValueTests.Changed"],
         )
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "先頭C# attributeだけを削除したsurviving testをbase側rangeから選択する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "旧開始attributeの削除anchorが現開始attributeと一致せず変更testが消える"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_test_after_leading_csharp_attribute_deletion(self) -> None:
+        source = (
+            "using Xunit;\n"
+            "public class AttributeTests\n"
+            "{\n"
+            + metadata_block("//", "    ")
+            + '    [Trait("Kind", "Value")]\n'
+            "    [Fact]\n"
+            "    public void Survives() { }\n"
+            "}\n"
+        )
+        path = self.root / "tests/AttributeTests.cs"
+        self.write("tests/AttributeTests.cs", source)
+        base = self.initialize_git()
+        path.write_text(
+            source.replace('    [Trait("Kind", "Value")]\n', ""),
+            encoding="utf-8",
+        )
+
+        working = self.extract_git(base, "csharp")
+        self.git("add", "tests/AttributeTests.cs")
+        staged = self.extract_git(base, "csharp", "--staged")
+        self.git("commit", "--quiet", "-m", "remove leading attribute")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "csharp", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [record["source"]["symbol"] for record in result["tests"]],
+                    ["AttributeTests.Survives"],
+                )
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "TypeScript未対応modifier宣言の本文変更をUNSUPPORTED diagnosticへ結合する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "未対応callの開始行以外の変更を空結果として成功扱いする"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_changed_unsupported_typescript_test(self) -> None:
+        source = (
+            'test.concurrent("parallel", () => {\n'
+            "  expect(observed()).toBe(1);\n"
+            "});\n"
+        )
+        path = self.root / "tests/concurrent-change.test.ts"
+        self.write("tests/concurrent-change.test.ts", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("toBe(1)", "toBe(2)"), encoding="utf-8")
+
+        working = self.extract_git(base, "typescript")
+        self.git("add", "tests/concurrent-change.test.ts")
+        staged = self.extract_git(base, "typescript", "--staged")
+        self.git("commit", "--quiet", "-m", "change unsupported typescript test")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "typescript", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 1, stderr)
+                self.assertEqual(result["tests"], [])
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_DECLARATION_UNSUPPORTED"],
+                )
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "C# test attribute付きlocal functionの本文変更をUNSUPPORTED diagnosticへ結合する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "未対応local functionの開始行以外の変更を空結果として成功扱いする"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_changed_unsupported_csharp_local_function(self) -> None:
+        source = (
+            "using Xunit;\n"
+            "public class LocalFunctionTests\n"
+            "{\n"
+            "    public void Helper()\n"
+            "    {\n"
+            "        [Fact]\n"
+            "        void LocalTest()\n"
+            "        {\n"
+            "            Assert.Equal(1, Observed());\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+        path = self.root / "tests/LocalFunctionTests.cs"
+        self.write("tests/LocalFunctionTests.cs", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("Equal(1", "Equal(2"), encoding="utf-8")
+
+        working = self.extract_git(base, "csharp")
+        self.git("add", "tests/LocalFunctionTests.cs")
+        staged = self.extract_git(base, "csharp", "--staged")
+        self.git("commit", "--quiet", "-m", "change unsupported csharp test")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "csharp", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 1, stderr)
+                self.assertEqual(result["tests"], [])
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_DECLARATION_UNSUPPORTED"],
+                )
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "symbol依存C# conditional group内の本文変更をUNSUPPORTED diagnosticへ結合する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "不確実領域の開始directive以外の変更を空結果として成功扱いする"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_changed_csharp_symbol_conditional_group(self) -> None:
+        source = (
+            "#if !DEBUG\n"
+            "public class ConditionalTests\n"
+            "{\n"
+            "    [Fact]\n"
+            "    public void ActiveWithoutDebug()\n"
+            "    {\n"
+            "        Assert.Equal(1, Observed());\n"
+            "    }\n"
+            "}\n"
+            "#endif\n"
+        )
+        path = self.root / "tests/ConditionalChangeTests.cs"
+        self.write("tests/ConditionalChangeTests.cs", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("Equal(1", "Equal(2"), encoding="utf-8")
+
+        working = self.extract_git(base, "csharp")
+        self.git("add", "tests/ConditionalChangeTests.cs")
+        staged = self.extract_git(base, "csharp", "--staged")
+        self.git("commit", "--quiet", "-m", "change conditional test")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "csharp", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 1, stderr)
+                self.assertEqual(result["tests"], [])
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_DECLARATION_UNSUPPORTED"],
+                )
 
     # @test-value v1
     # kind = "contract"
