@@ -27,11 +27,15 @@ python -X utf8 <skill-dir>/scripts/extract_test_values.py `
 
 baseとheadは直接比較する。CLIはmerge-base、upstream、task開始commitを推測しない。
 
+working treeのsource pathがsymlinkなどによってrepository root外へ解決される場合は、外部内容を読まず`SOURCE_OUTSIDE_ROOT`を返す。stagedとheadはGit objectから読み、working treeのsymlinkを追跡しない。
+
 ## Selection
 
 - 対象言語の変更fileはGit差分から自動発見する。個別pathやline rangeは受け取らない。
 - test declarationのrange、または直接隣接する`@test-value` blockへnew-side diff hunkが交差したrecordを選ぶ。
 - test本文だけ、構造化コメントだけを変更した場合も選ぶ。
+- surviving testの本文行または隣接する`@test-value` blockを削除した場合は、new-sideの削除anchorから対応recordを選ぶ。test declaration全体の削除は選ばない。
+- 対応sourceはGit属性の`-diff`やtext conversionを適用せず、raw textとしてhunkを取得する。
 - 変更していないrecordと、そのrecordだけに属するmetadata diagnosticは結果から除外する。
 - pure renameと削除は選ばない。renameと同時に内容を変更した場合は変更recordを選ぶ。
 - source全体の解析を信頼できなくするsyntax、decode、adapter failureは隠さない。

@@ -778,8 +778,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             if not args.language or args.paths:
                 raise ValueError("Git mode requires --language and forbids positional paths")
             from git_diff_selection import select_git
+
+            profile = next(
+                profile
+                for profile in ADAPTER_PROFILES
+                if profile.language == args.language
+            )
             mode = "staged" if args.staged else "head" if args.head else "working"
-            result = select_git(args.root, args.changed_from, args.language, mode, args.head)
+            result = select_git(
+                args.root,
+                args.changed_from,
+                profile,
+                extract_source_text,
+                diagnostic,
+                mode,
+                args.head,
+            )
             rendered = render_result(result)
             if hasattr(sys.stdout, "buffer"):
                 sys.stdout.buffer.write(rendered.encode("utf-8"))

@@ -18,8 +18,9 @@
 - Git modeは対象言語を一つ指定し、その言語の変更fileをGit差分から自動発見する。呼び出し側は個別pathやline rangeを指定しない。
 - baseと比較対象は直接比較し、merge-base、upstream、task開始commitをCLIが推測しない。task開始時に固定したbaseを呼び出し側が渡す。
 - 比較対象はworking tree、index、明示commitを区別する。抽出sourceも比較対象と同じsnapshotから読む。
-- working tree比較はbase以降のcommit、staged、unstaged、non-ignored untracked fileを含む。
-- test declarationのsource rangeまたは直接隣接する`@test-value` blockへ差分が交差したrecordだけを抽出する。
+- working tree比較はbase以降のcommit、staged、unstaged、non-ignored untracked fileを含む。filesystemから読むsourceがrepository root外へ解決される場合は、内容を読まず`SOURCE_OUTSIDE_ROOT`にする。
+- test declarationのsource range、直接隣接する`@test-value` block、またはそれらへ接する削除anchorへ差分が交差したrecordだけを抽出する。surviving testの本文行やmetadataだけを削除した場合も対象にする。
+- 対応sourceのhunkはGit属性のbinary指定やtext conversionに左右されないraw text差分として取得する。
 - 変更していない既存testとそのmetadata欠落diagnosticはGit modeの結果へ含めない。
 - syntax error、decode error、adapter failureなど、変更sourceの信頼できる抽出を妨げるfailureは選択範囲外として隠さない。
 - pure renameと削除は価値内容の審査対象にしない。renameと同時に内容が変わった場合は変更recordを対象にする。test削除の妥当性は`design-tests`が所有する。

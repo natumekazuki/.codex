@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -67,6 +69,7 @@ class ExtractTestValuesTests(unittest.TestCase):
         base: str,
         language: str = "python",
         *extra: str,
+        env: dict[str, str] | None = None,
     ) -> tuple[dict, int, str]:
         completed = subprocess.run(
             [
@@ -84,6 +87,8 @@ class ExtractTestValuesTests(unittest.TestCase):
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
+            env=env,
         )
         result = json.loads(completed.stdout) if completed.stdout else {}
         return result, completed.returncode, completed.stderr
@@ -569,6 +574,171 @@ def test_oracle_table_with_decoy():
         self.assertEqual(exit_status, 2)
         self.assertEqual(result, {})
         self.assertIn("git command failed", stderr)
+
+    # @test-value v1
+    # kind = "security"
+    # claim = "working treeのroot外symlinkを読まずSOURCE_OUTSIDE_ROOTにする"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "repository外sourceのtest本文をAI入力へ漏らす"
+    # scope = "git-working-snapshot"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_rejects_untracked_symlink_outside_root(self) -> None:
+        base = self.initialize_git()
+        outside = self.root.parent / f"{self.root.name}-outside.py"
+        outside.write_text(
+            VALID_METADATA + "def test_external_secret():\n    assert True\n",
+            encoding="utf-8",
+        )
+        link = self.root / "tests" / "test_link.py"
+        link.parent.mkdir(parents=True)
+        try:
+            try:
+                link.symlink_to(outside)
+            except OSError as error:
+                self.skipTest(f"symlink creation is unavailable: {error}")
+
+            result, exit_status, stderr = self.extract_git(base)
+        finally:
+            link.unlink(missing_ok=True)
+            outside.unlink(missing_ok=True)
+
+        self.assertEqual(exit_status, 1, stderr)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["SOURCE_OUTSIDE_ROOT"],
+        )
+        self.assertNotIn("test_external_secret", json.dumps(result))
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "削除だけのhunkもsurviving testとmetadata欠落を選択する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "assertionやtest-value blockの削除を変更なしとして成功扱いする"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_deletion_only_changes(self) -> None:
+        body_source = (
+            VALID_METADATA
+            + "def test_body():\n"
+            + "    assert precondition()\n"
+            + "    assert observed() == 1\n"
+        )
+        metadata_source = VALID_METADATA + "def test_metadata():\n    assert True\n"
+        body = self.write("tests/test_body.py", body_source)
+        metadata = self.write("tests/test_metadata.py", metadata_source)
+        base = self.initialize_git()
+        body.write_text(
+            body_source.replace("    assert observed() == 1\n", ""),
+            encoding="utf-8",
+        )
+        metadata.write_text(
+            "def test_metadata():\n    assert True\n",
+            encoding="utf-8",
+        )
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_body.py", "tests/test_metadata.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "delete lines")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 1, stderr)
+                self.assertEqual(
+                    [record["source"]["symbol"] for record in result["tests"]],
+                    ["test_body", "test_metadata"],
+                )
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_VALUE_MISSING"],
+                )
+
+    # @test-value v1
+    # kind = "contract"
+    # claim = "native adapter failureはtracebackなしのexit 2として返す"
+    # oracle = { type = "contract", ref = "output-v1" }
+    # failure_mode = "exit 1とJSONなしのtracebackでconsumerが結果解析に失敗する"
+    # scope = "git-adapter-failure"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_maps_native_adapter_failure_to_exit_two(self) -> None:
+        metadata = VALID_METADATA.replace("# ", "// ")
+        source = metadata + 'test("adapter", () => { expect(true).toBe(true); });\n'
+        path = self.write("tests/adapter.test.ts", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("true).toBe(true", "false).toBe(false"), encoding="utf-8")
+        fake_bin = self.root / "fake-bin"
+        fake_bin.mkdir()
+        if os.name == "nt":
+            git_executable = shutil.which("git")
+            self.assertIsNotNone(git_executable)
+        else:
+            fake_node = fake_bin / "node"
+            fake_node.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
+            fake_node.chmod(0o755)
+        env = os.environ.copy()
+        if os.name == "nt":
+            system_root = Path(env.get("SystemRoot", r"C:\Windows"))
+            env["PATH"] = os.pathsep.join(
+                [str(Path(git_executable).parent), str(system_root / "System32")]
+            )
+        else:
+            env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
+
+        result, exit_status, stderr = self.extract_git(
+            base,
+            "typescript",
+            env=env,
+        )
+
+        self.assertEqual(exit_status, 2)
+        self.assertEqual(result, {})
+        self.assertIn("TypeScript adapter", stderr)
+        self.assertNotIn("Traceback", stderr)
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "Git属性でbinary指定されたsourceもraw text差分からtestを選択する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "repositoryのdiff属性により変更testが空結果になる"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_forces_text_diff_for_supported_source(self) -> None:
+        self.write(".gitattributes", "*.py -diff\n")
+        source = VALID_METADATA + "def test_binary_attribute():\n    assert value() == 1\n"
+        path = self.write("tests/test_attribute.py", source)
+        base = self.initialize_git()
+        path.write_text(source.replace("== 1", "== 2"), encoding="utf-8")
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_attribute.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "change attributed source")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [record["source"]["symbol"] for record in result["tests"]],
+                    ["test_binary_attribute"],
+                )
 
     def test_outside_root_is_rejected_by_public_cli(self) -> None:
         outside = self.root.parent / f"{self.root.name}-outside.py"
