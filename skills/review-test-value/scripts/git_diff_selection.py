@@ -90,6 +90,7 @@ def _diff_args(base: str, mode: str, head: str | None) -> list[str]:
         "--no-ext-diff",
         "--no-textconv",
         "--text",
+        "--ignore-cr-at-eol",
         "--no-color",
         "--find-renames",
         "--unified=0",
@@ -212,6 +213,17 @@ def _base_snapshot(root: Path, base: str, item: ChangedFile) -> bytes | None:
         return None
     path = item.old_path or item.path
     return bytes(_git(root, ["show", f"{base}:{path}"], text=False))
+
+
+def _same_normalized_source(left: bytes, right: bytes) -> bool:
+    try:
+        left_text = left.decode("utf-8-sig")
+        right_text = right.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return False
+    return left_text.replace("\r\n", "\n").replace("\r", "\n") == (
+        right_text.replace("\r\n", "\n").replace("\r", "\n")
+    )
 
 
 def _affects_span(
@@ -375,7 +387,10 @@ def select_git(
             continue
         if not item.whole_file and not item.hunks:
             base_snapshot = _base_snapshot(root, base, item)
-            if base_snapshot == snapshot:
+            if base_snapshot == snapshot or (
+                base_snapshot is not None
+                and _same_normalized_source(base_snapshot, snapshot)
+            ):
                 continue
             if base_snapshot is not None:
                 raise ValueError(

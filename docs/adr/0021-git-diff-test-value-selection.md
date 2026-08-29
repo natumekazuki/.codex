@@ -21,7 +21,7 @@
 - working tree比較はbase以降のcommit、staged、unstaged、non-ignored untracked fileを含む。filesystemから読むsourceがrepository root外へ解決される場合は、内容を読まず`SOURCE_OUTSIDE_ROOT`にする。
 - test declarationのsource range、直接隣接する`@test-value` block、またはそれらへ接するold-side / new-side差分が交差したsurviving recordだけを抽出する。base側recordのdeclaration startをnew側へ投影し、開始境界を削除した場合は削除anchorの直後へ対応付けるため、先頭decoratorやattributeだけを削除して開始行が変わる場合も対象にする。surviving testの本文行やmetadataだけを削除した場合と、metadataのmarkerや隣接関係を壊した場合もbase側recordから対象にする。
 - 静的に識別した未対応test declarationは内部rangeで差分と対応付け、本文変更を`TEST_DECLARATION_UNSUPPORTED`として返す。selection専用rangeは公開JSONへ追加しない。
-- 対応sourceのhunkはGit属性のbinary指定やtext conversionに左右されないraw text差分として取得する。
+- 対応sourceのhunkはGit属性のbinary指定やtext conversionに左右されないraw text差分として取得する。抽出sourceと同じLF正規化の意味論へ揃えるため、行末のCR有無だけによる変更はhunkに含めず、同時に存在する内容変更は通常どおり対象にする。
 - 変更していない既存testとそのmetadata欠落diagnosticはGit modeの結果へ含めない。
 - syntax error、decode error、adapter failureなど、変更sourceの信頼できる抽出を妨げるfailureは選択範囲外として隠さない。
 - pure renameと削除は価値内容の審査対象にしない。renameと同時に内容が変わった場合は変更recordを対象にする。test削除の妥当性は`design-tests`が所有する。

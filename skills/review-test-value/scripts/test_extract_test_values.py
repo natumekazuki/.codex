@@ -556,6 +556,89 @@ def test_oracle_table_with_decoy():
         self.assertIn("observed() == 2", result["tests"][0]["source_text"])
 
     # @test-value v1
+    # kind = "regression"
+    # claim = "改行コードだけの変更はtest価値の再審査対象にしない"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "LFからCRLFへの変換で未変更legacy testまで選択し審査を停止する"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # distinction = "本文変更を伴わないfile全体のline-ending変換だけを扱う"
+    # @end-test-value
+    def test_git_mode_ignores_line_ending_only_changes(self) -> None:
+        source = (
+            "def test_legacy():\n"
+            "    assert True\n\n"
+            + VALID_METADATA
+            + "def test_unchanged():\n"
+            "    assert observed() == 1\n"
+        )
+        path = self.write("tests/test_line_endings.py", source)
+        base = self.initialize_git()
+        self.git("config", "core.autocrlf", "false")
+        path.write_bytes(source.replace("\n", "\r\n").encode("utf-8"))
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_line_endings.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "convert line endings")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(result["tests"], [])
+                self.assertEqual(result["diagnostics"], [])
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "改行コード変換と同時に意味変更したtestは審査対象に残す"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # failure_mode = "line-ending差分の除外が同じfileのassertion変更まで隠す"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # distinction = "改行コードだけの変更ではなくassertionの意味変更を同時に含む"
+    # @end-test-value
+    def test_git_mode_keeps_content_change_with_line_ending_conversion(self) -> None:
+        source = (
+            "def test_legacy():\n"
+            "    assert True\n\n"
+            + VALID_METADATA
+            + "def test_changed():\n"
+            "    assert observed() == 1\n"
+        )
+        path = self.write("tests/test_line_endings.py", source)
+        base = self.initialize_git()
+        self.git("config", "core.autocrlf", "false")
+        changed = source.replace("observed() == 1", "observed() == 2")
+        path.write_bytes(changed.replace("\n", "\r\n").encode("utf-8"))
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_line_endings.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "change assertion and line endings")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [record["source"]["symbol"] for record in result["tests"]],
+                    ["test_changed"],
+                )
+                self.assertIn("observed() == 2", result["tests"][0]["source_text"])
+
+    # @test-value v1
     # kind = "contract"
     # claim = "metadataだけの変更も対応するtest recordを選択する"
     # oracle = { type = "adr", ref = "ADR-0021" }

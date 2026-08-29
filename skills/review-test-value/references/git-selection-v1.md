@@ -37,7 +37,7 @@ working treeのsource pathがsymlinkなどによってrepository root外へ解�
 - test本文だけ、構造化コメントだけを変更した場合も選ぶ。
 - metadata markerや隣接関係を壊してnew-sideでblockを結合できなくなった場合も、base側のrecord対応からsurviving testとdiagnosticを選ぶ。
 - surviving testの本文行または隣接する`@test-value` blockを削除した場合は、new-sideの削除anchorから対応recordを選ぶ。test declaration全体の削除は選ばない。
-- 対応sourceはGit属性の`-diff`やtext conversionを適用せず、raw textとしてhunkを取得する。
+- 対応sourceはGit属性の`-diff`やtext conversionを適用せず、raw textとしてhunkを取得する。LFとCRLFの相互変換だけではrecordを選ばず、同じfileで同時に行われた内容変更は選択対象に残す。
 - 変更していないrecordと、そのrecordだけに属するmetadata diagnosticは結果から除外する。
 - pure renameと削除は選ばない。renameと同時に内容を変更した場合は変更recordを選ぶ。
 - source全体の解析を信頼できなくするsyntax、decode、adapter failureは隠さない。
