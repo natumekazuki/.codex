@@ -22,6 +22,7 @@
 - `hooks/`: implementation restraint と subagent routing などの Codex hook
 - `config/agents.example.toml`: agent registry へ登録する場合の例
 - `config.example.toml`: 別端末へ移す共有設定の例
+- `scripts/`: 外部由来の Skill を取得・同期する保守スクリプト
 
 ## Skill 一覧
 
@@ -34,6 +35,8 @@
 | `review-test-value` | 専門 | 構造化された価値コメントとPython・TypeScript・C# test sourceを抽出し、検証価値と本文の整合を審査する |
 | `japanese-tech-writing-review` | 専門 | 日本語の技術文書を論証、読み手の負荷、用語、Markdown表記の観点で推敲する |
 | `natural-japanese` | 専門 | ビジネス文書や一般記事を自然さ、読みやすさ、AI臭の観点で作成・推敲・診断する |
+
+`natural-japanese` の取得元は [coji/natural-japanese](https://github.com/coji/natural-japanese) である。同期済み commit とライセンスは `skills/natural-japanese/NOTICE` と `skills/natural-japanese/LICENSE` に記録する。同期時はCodexで未対応の`argument-hint`を除去し、技術文書の構成・Markdown整形を`japanese-tech-writing-review`へ振り分ける既存の連携だけを適用する。上流の `main` と差分があるか確認する場合は `pwsh ./scripts/sync-natural-japanese.ps1 -Check`、同期する場合は `pwsh ./scripts/sync-natural-japanese.ps1` を実行する。同期時は `skills/natural-japanese/` 全体が上流由来の内容に置き換わるため、同ディレクトリに未コミット変更がある場合は処理を拒否する。
 
 ## 別端末への反映
 

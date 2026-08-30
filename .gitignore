@@ -6,6 +6,7 @@ history.jsonl
 /rules
 skills/.system/.codex-system-skills.marker
 /skills/.system
+/.natural-japanese.sync.lock
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
