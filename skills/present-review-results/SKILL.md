@@ -1,6 +1,6 @@
 ---
 name: present-review-results
-description: レビュー、code review、PR review、差分review、監査で得たfindingをユーザーへ提示または再整形するとき、探索範囲、判定、修正要否を変えずに、severity、classification、location、impact、evidence、remediation、validation gap、residual riskの表記と並びを統一する。レビュー方法、findingの採否、risk acceptanceを決める用途には使わない。
+description: reviewer、targeted_reviewer、slice_reviewer、fast_reviewer、または別sessionの通常のcode review、PR review、実装差分reviewで、severityとclassificationを持つfindingをユーザーへ提示または再整形するとき、探索範囲、判定、修正要否を変えずに表記と並びを統一する。audit-codex-work-quality、review-test-valueなど固有の出力契約を持つ専門Skillには適用しない。レビュー方法、findingの採否、risk acceptanceを決める用途には使わない。
 ---
 
 # Review Result Presentation
@@ -8,6 +8,7 @@ description: レビュー、code review、PR review、差分review、監査で�
 ## 境界
 
 - 完了したreviewの結果だけを整形する。reviewのscope、観点、探索、finding、severity、classification、judgmentを追加、削除、変更しない。
+- `audit-codex-work-quality`、`review-test-value`など、固有の出力契約を持つ専門Skillの結果には適用せず、そのSkillの出力契約を維持する。
 - 根拠が不足するfieldを推測で埋めず、validation gapへ分離する。
 - reviewerが提案した分類は`Proposed classification`、root sessionなどのownerが確定した分類は`Classification`と表示し、確定度を変えない。
 - repository固有またはrole固有の追加sectionは維持し、共通sectionの後へ置く。
@@ -30,8 +31,9 @@ description: レビュー、code review、PR review、差分review、監査で�
 
 ## Findings
 
-### [<Critical | High | Medium | Low>][<classification>] <title>
+### [<Critical | High | Medium | Low>] <title>
 
+- <Proposed classification | Classification>: `<classification>`
 - Location: <file and line, symbol, or other precise anchor>
 - Impact: <observable consumer or system impact>
 - Evidence: <source, executable contract, or observed behavior>
@@ -47,6 +49,7 @@ description: レビュー、code review、PR review、差分review、監査で�
 ```
 
 - findingがない場合も`Findings`を省略せず、`none`と明記する。
+- reviewer roleは`Proposed classification`、root sessionなど分類を確定するownerは`Classification`を使う。
 - 複数findingはseverity順に並べる。同じseverityではreview contractが定めるblocking状態と提示順を維持する。
 - locationは利用中の出力surfaceに適した形式で示し、参照可能な位置情報を落とさない。
 - finding本文とvalidation gap、residual risk、hardening candidateを混在させない。

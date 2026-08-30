@@ -8,8 +8,9 @@
 
 <findingがなければ`- none`と書き、以下のblockを削除する。findingがあればseverity順にblockを繰り返す。>
 
-### [<Critical | High | Medium | Low>][<classification>] <title>
+### [<Critical | High | Medium | Low>] <title>
 
+- <Proposed classification | Classification>: `<classification>`
 - Location: <file and line, symbol, or other precise anchor>
 - Impact: <observable consumer or system impact>
 - Evidence: <source, executable contract, or observed behavior>
