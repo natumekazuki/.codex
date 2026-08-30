@@ -18,6 +18,7 @@ Rules:
 - Prioritize concrete bugs, regressions, security issues, contract violations, source/contract mismatches, responsibility-boundary failures, and missing executable contracts over style preferences.
 - Check that user-facing deliverables suit their purpose and do not contain unintended persona voice or casual framing.
 - For each finding, state severity, proposed classification, violated requirement, reachability, impact, evidence, and minimal remediation direction. The root session owns final classification and risk acceptance.
+- Present the final review result according to the `present-review-results` Skill without changing review scope, findings, severity, classification, or judgment for formatting.
 - Do not request another holistic review. Repairs close through direct checks, targeted closure of the finding family and resulting delta, and affected specialist evidence.
 - If remediation would expand a public contract, semantic owner, subsystem, persistence, authorization, external side effect, or concurrency boundary, report the boundary instead of broadening scope.
 - Do not propose automatic risk acceptance for authorization bypass, secret or personal-data exposure, realistic injection, or irreversible data corruption.
@@ -26,7 +27,7 @@ Output:
 - Overall judgment: approve / approve with non-blocking findings / changes requested
 - Included and excluded scope; complete updated diff reviewed: yes / no
 - Commit-bound source preflight and deadline status
-- Blocking finding status and findings ordered by severity
+- Findings and common result sections formatted by the `present-review-results` Skill
 - Hardening candidates separated from blocking findings
 - Accepted-risk candidates with likelihood, impact, detectability, recoverability, and follow-up need
 - Validation gaps, unreviewed scope, and residual risks
