@@ -278,6 +278,7 @@ function expressionStatement(node) {
 
 function collectComments(source, sourceFile, scriptKind) {
   const comments = [];
+  const templateExpressionBraceDepths = [];
   const languageVariant =
     scriptKind === ts.ScriptKind.TSX ? ts.LanguageVariant.JSX : ts.LanguageVariant.Standard;
   const scanner = ts.createScanner(
@@ -286,13 +287,38 @@ function collectComments(source, sourceFile, scriptKind) {
     languageVariant,
     source,
   );
-  while (scanner.scan() !== ts.SyntaxKind.EndOfFileToken) {
-    if (scanner.getToken() !== ts.SyntaxKind.SingleLineCommentTrivia) {
+  let token = scanner.scan();
+  while (token !== ts.SyntaxKind.EndOfFileToken) {
+    if (token === ts.SyntaxKind.TemplateHead) {
+      templateExpressionBraceDepths.push(0);
+    } else if (
+      token === ts.SyntaxKind.OpenBraceToken &&
+      templateExpressionBraceDepths.length > 0
+    ) {
+      const index = templateExpressionBraceDepths.length - 1;
+      templateExpressionBraceDepths[index] += 1;
+    } else if (
+      token === ts.SyntaxKind.CloseBraceToken &&
+      templateExpressionBraceDepths.length > 0
+    ) {
+      const index = templateExpressionBraceDepths.length - 1;
+      if (templateExpressionBraceDepths[index] > 0) {
+        templateExpressionBraceDepths[index] -= 1;
+      } else {
+        token = scanner.reScanTemplateToken(false);
+        if (token === ts.SyntaxKind.TemplateTail) {
+          templateExpressionBraceDepths.pop();
+        }
+      }
+    }
+    if (token !== ts.SyntaxKind.SingleLineCommentTrivia) {
+      token = scanner.scan();
       continue;
     }
     const position = scanner.getTokenPos();
     const indent = lineIndent(source, sourceFile, position);
     if (indent === null) {
+      token = scanner.scan();
       continue;
     }
     let text = scanner.getTokenText().slice(2);
@@ -300,6 +326,7 @@ function collectComments(source, sourceFile, scriptKind) {
       text = text.slice(1);
     }
     comments.push({ line: lineNumber(sourceFile, position), indent, text });
+    token = scanner.scan();
   }
   return comments;
 }

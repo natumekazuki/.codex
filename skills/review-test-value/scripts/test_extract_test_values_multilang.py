@@ -131,6 +131,31 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertEqual(record["metadata"]["oracle"]["ref"], "PAYMENT-004")
 
     # @test-value v1
+    # kind = "regression"
+    # claim = "補間template literalの後にあるTypeScript testのmetadataを隣接宣言へbindingする"
+    # oracle = { type = "issue", ref = "review-test-value-template-comment-scanning" }
+    # failure_mode = "scannerがtemplate tailを再走査せず後続commentをtemplate本文として読み飛ばす"
+    # scope = "typescript-source-adapter"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_typescript_binds_metadata_after_interpolated_template(self) -> None:
+        self.write(
+            "tests/template-before-test.test.ts",
+            "const rendered = `outer ${format({ value: `inner ${item}` })}`;\n"
+            + metadata_block("//")
+            + 'test("after template", () => {});\n',
+        )
+
+        result, exit_status = self.extract("tests/template-before-test.test.ts")
+
+        self.assertEqual(exit_status, 0)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(len(result["tests"]), 1)
+        record = result["tests"][0]
+        self.assertEqual(record["source"]["symbol"], "after template")
+        self.assertEqual(record["metadata"]["oracle"]["ref"], "PAYMENT-004")
+
+    # @test-value v1
     # kind = "invariant"
     # claim = "symbolが衝突してもpathとdeclaration_start_lineのlocatorを一意にする"
     # oracle = { type = "adr", ref = "ADR-0020" }
