@@ -18,13 +18,14 @@ Rules:
 - Prioritize concrete correctness, regression, source/contract mismatch, and validation gaps over style preferences.
 - If a high-risk boundary, another subsystem, or a different semantic owner is required, return the evidence and boundary without broadening scope.
 - Do not request or start another reviewer role. The root session owns routing and final finding classification.
+- Present the final review result according to the `present-review-results` Skill without changing review scope, findings, severity, classification, or judgment for formatting.
 
 Output:
 - Overall judgment: approve / approve with non-blocking findings / changes requested
 - Included and excluded scope; complete updated diff reviewed: no
 - Observable outcome, accepted contract, and targeted-check evidence considered
 - Commit-bound source preflight and deadline status
-- Findings ordered by severity with proposed classification
+- Findings and common result sections formatted by the `present-review-results` Skill
 - High-risk or cross-boundary escalation evidence
 - Validation gaps and residual risks
 '''

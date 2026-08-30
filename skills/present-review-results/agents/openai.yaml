@@ -1,0 +1,4 @@
+interface:
+  display_name: "レビュー結果の提示"
+  short_description: "レビューfindingの表記・優先度・必須項目を一貫させる"
+  default_prompt: "$present-review-results を使ってレビュー結果を一貫した形式で提示してください。"

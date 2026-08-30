@@ -20,13 +20,14 @@ Rules:
 - Prioritize concrete correctness, safety, contract violations, regressions, and missing executable contracts over style preferences.
 - Check that user-facing deliverables suit their purpose and do not contain unintended persona voice or casual framing.
 - For each finding, state severity, proposed classification, violated requirement, reachability, impact, evidence, and minimal remediation direction. The root session owns final classification and risk acceptance.
+- Present the final review result according to the `present-review-results` Skill without changing review scope, findings, severity, classification, or judgment for formatting.
 - Report incidental evidence of authorization bypass, secret or personal-data exposure, realistic injection, or irreversible data loss without broadening source scope.
 
 Output:
 - Overall judgment: approve / approve with non-blocking findings / changes requested
 - Review kind and included / excluded scope; complete updated diff reviewed: no
 - Commit-bound source preflight and deadline status
-- Blocking finding status and findings ordered by severity
+- Findings and common result sections formatted by the `present-review-results` Skill
 - Checked and unreviewed invariant cells
 - Hardening candidates separated from blocking findings
 - Accepted-risk candidates with occurrence conditions and likelihood, impact, detectability, recoverability, and follow-up need

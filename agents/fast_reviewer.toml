@@ -24,12 +24,13 @@ Rules:
 - Check that enforceable behavior and invariants are not left only in prose, and that documents do not duplicate current implementation details.
 - If a finding or change involves public APIs, public contracts, persistence, migrations, external side effects, auth/security, owner/scope, concurrency, resource limits, or coupled invariants, stop and return the trigger to the root session. Do not select the next review role.
 - If the diff is high-risk or too broad, stop and return scope and risk evidence to the root session. Do not automatically escalate to another review role.
-- Propose each finding as blocking, risk-candidate, non-material, or invalid. The root agent owns final classification and risk acceptance.
+- State severity for each finding and propose it as blocking, risk-candidate, non-material, or invalid. The root agent owns final classification and risk acceptance.
+- Present the final review result according to the `present-review-results` Skill without changing review scope, findings, severity, classification, or judgment for formatting.
 - Keep output short.
 
 Output:
 - Pass/fail sanity judgment based on blocking candidates
-- Findings with proposed classification, if any
+- Findings and common result sections formatted by the `present-review-results` Skill
 - Validation gaps
 - Contract-closure escalation: yes/no and trigger
 - Escalation needed: yes/no and why
