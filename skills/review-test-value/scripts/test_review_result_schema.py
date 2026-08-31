@@ -114,16 +114,17 @@ def aggregation_input(
     manifest = build_routing_manifest(routing_records, workflow_context)
     sol_result = None
     if sol_verdict is not None:
+        needs_context = sol_verdict == "NEEDS_CONTEXT"
         sol_result = {
             "review_contract_version": "deep-review-v1",
             "reviews": [
                 {
                     **identity,
                     "verdict": sol_verdict,
-                    "evidence": ["deep review evidence"],
+                    "evidence": [] if needs_context else ["deep review evidence"],
                     "unverified": [],
-                    "context_requirements": [],
-                    "next_action": None,
+                    "context_requirements": ["追加context"] if needs_context else [],
+                    "next_action": "追加contextを確認する" if needs_context else None,
                 }
             ],
         }
@@ -163,6 +164,10 @@ class ReviewResultSchemaTests(unittest.TestCase):
         tampered["alignment_packet"]["records"][0]["metadata"]["kind"] = "contract"
         with self.assertRaisesRegex(ResultValidationError, "metadata_hash"):
             aggregate_results(tampered)
+        source_tampered = aggregation_input(kind="security")
+        source_tampered["alignment_packet"]["records"][0]["source_text"] += "# changed\n"
+        with self.assertRaisesRegex(ResultValidationError, "source_hash"):
+            aggregate_results(source_tampered)
 
         scalar_input = {
             "metadata_verdict": "VALID",
@@ -286,6 +291,16 @@ class ReviewResultSchemaTests(unittest.TestCase):
         result = aggregate_results(redesigned)
         self.assertEqual(result["records"][0]["status"], "REDESIGN")
         self.assertEqual(result["records"][0]["gate"], "CHANGES_REQUIRED")
+        unresolved_sol = aggregation_input(kind="security", sol_verdict="NEEDS_CONTEXT")
+        self.assertEqual(
+            aggregate_results(unresolved_sol)["records"][0],
+            {
+                "record_id": "sha256:" + "1" * 64,
+                "status": "NEEDS_CONTEXT",
+                "disposition": None,
+                "gate": "BLOCKED",
+            },
+        )
 
     # @test-value v1
     # kind = "contract"
@@ -314,9 +329,9 @@ class ReviewResultSchemaTests(unittest.TestCase):
 
     # @test-value v1
     # kind = "security"
-    # claim = "final aggregatorはmanifestとは独立した親workflow risk contextへrouting結果を固定し親tagの除去を拒否する"
+    # claim = "final aggregatorはmanifestとは独立した親workflow risk contextとaudit率へrouting結果を固定し改変を拒否する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "親workflowのauthorization tagをmanifest生成時だけ除去してrequired Solを迂回しPASSにする"
+    # failure_mode = "親workflowのauthorization tagまたはaudit率をmanifest生成時だけ変えてrequired Solを迂回しPASSにする"
     # scope = "review-final-parent-risk-binding"
     # lifecycle = "permanent"
     # @end-test-value
@@ -340,6 +355,28 @@ class ReviewResultSchemaTests(unittest.TestCase):
             [routing_record], downgraded_context
         )
 
+        with self.assertRaisesRegex(ResultValidationError, "workflow context hash"):
+            aggregate_results(value)
+        value = aggregation_input(parent_risk_tags=["authorization"], sol_verdict="APPROVE")
+        changed_audit = copy.deepcopy(value["workflow_routing_context"])
+        changed_audit["records"][0]["audit_percent"] = 100
+        record = value["alignment_packet"]["records"][0]
+        review = value["alignment_result"]["reviews"][0]
+        value["routing_manifest"] = build_routing_manifest(
+            [
+                {
+                    "record_id": record["record_id"],
+                    "metadata_hash": record["metadata_hash"],
+                    "source_hash": record["source_hash"],
+                    "contract_version": "deep-review-v1",
+                    "metadata": record["metadata"],
+                    "metadata_verdict": record["metadata_review"]["verdict"],
+                    "alignment_verdict": review["verdict"],
+                    "context_requirements": review["context_requirements"],
+                }
+            ],
+            changed_audit,
+        )
         with self.assertRaisesRegex(ResultValidationError, "workflow context hash"):
             aggregate_results(value)
 

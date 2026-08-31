@@ -86,6 +86,22 @@ class ReviewRoutingTests(unittest.TestCase):
                 context_requirements=[],
                 audit_percent=0,
             )
+        with self.assertRaisesRegex(RoutingError, "record_id"):
+            route_record(
+                record_id="sha256:" + "1" * 64,
+                metadata_hash="sha256:" + "2" * 64,
+                contract_version="deep-review-v1",
+                metadata={"kind": "contract"},
+                parent_risk_context={
+                    "record_id": "sha256:" + "8" * 64,
+                    "metadata_hash": "sha256:" + "2" * 64,
+                    "risk_tags": ["authorization"],
+                },
+                metadata_verdict="VALID",
+                alignment_verdict="ALIGNED",
+                context_requirements=[],
+                audit_percent=0,
+            )
 
     # @test-value v1
     # kind = "contract"

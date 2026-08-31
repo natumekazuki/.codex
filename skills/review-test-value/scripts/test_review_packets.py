@@ -263,6 +263,31 @@ class ReviewPacketTests(unittest.TestCase):
                 workflow_context,
                 {},
             )
+        changed_audit = copy.deepcopy(workflow_context)
+        changed_audit["records"][0]["audit_percent"] = 100
+        manifest_with_changed_audit = build_routing_manifest(
+            [
+                {
+                    "record_id": record["record_id"],
+                    "metadata_hash": record["metadata_hash"],
+                    "source_hash": record["source_hash"],
+                    "contract_version": "deep-review-v1",
+                    "metadata": record["metadata"],
+                    "metadata_verdict": record["metadata_review"]["verdict"],
+                    "alignment_verdict": "RECHECK",
+                    "context_requirements": ["ADR-0022"],
+                }
+            ],
+            changed_audit,
+        )
+        with self.assertRaisesRegex(PacketError, "workflow context hash"):
+            build_deep_packet(
+                alignment,
+                alignment_result,
+                manifest_with_changed_audit,
+                workflow_context,
+                {},
+            )
         expanded_alignment = copy.deepcopy(alignment)
         expanded_alignment["records"][0]["unhashed_extra_context"] = "production source"
         with self.assertRaisesRegex(PacketError, "unexpected keys"):
