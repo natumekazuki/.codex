@@ -17,7 +17,9 @@ high-riskでもaudit対象でもない明白な`REDESIGN`または`MISMATCH`だ�
 
 audit selectionは`record_id`とcontract versionのSHA-256を100で割った剰余が`audit_percent`未満かで決める。同じ入力は常に同じ結果になる。
 
-`review_routing.py`のinputは`records`配列を持つJSON objectとする。各recordは`record_id`、`metadata_hash`、`contract_version`、`metadata`、`parent_risk_context`、Phase 1とPhase 2のverdict、`context_requirements`、`audit_percent`を持つ。outputは`record_id`をkey、routing resultをvalueとするobjectであり、そのままdeep packet builderへ渡せる。
+`review_routing.py`のinputは`records`配列を持つJSON objectとする。各recordは`record_id`、`metadata_hash`、`source_hash`、`contract_version`、`metadata`、`parent_risk_context`、Phase 1とPhase 2のverdict、`context_requirements`、`audit_percent`を持つ。outputは`review_contract_version = "review-routing-v1"`と同順の`records`を持つrouting manifestであり、各entryへrecord identity、親risk context、audit率、routing resultを固定する。
+
+deep packet builderとfinal aggregatorは、alignment packetと固定済みPhase 1 / Phase 2 resultからrouting resultを再計算する。record ID、metadata hash、source hash、verdict、context requirement、risk context、audit選択、required判定のいずれかが一致しないmanifestを拒否する。callerが渡した`sol_required` booleanだけでdeep reviewやgateを省略しない。
 
 ## Status
 
@@ -44,3 +46,5 @@ Bootstrapはmetadata v1を読む。`characterization`は`expires_on`または`re
 - `MOVE_TO_POLICY_CHECK`または`DROP`で元testが残る: `CHANGES_REQUIRED`
 
 resolution ledgerと元test削除後の`PASS`はactivation changeで有効化する。Bootstrap validatorは対応resolutionを受け取らず、削除済みartifactを`PASS`にしない。
+
+final aggregatorのinputは、一つのalignment packet `record`、同じrecordの`alignment_review`、検証対象の`routing_manifest`、requiredな場合の`sol_result`または未実行を表す`null`、`retention_basis`、`artifact_state`だけを持つ。metadata verdict、alignment verdict、Sol required、Sol verdict、actual boundary、metadataを独立したscalarとして再入力しない。

@@ -24,6 +24,28 @@ BOUNDARIES = {
     "declaration",
     "implementation",
 }
+ROUTING_MANIFEST_VERSION = "review-routing-v1"
+ROUTING_INPUT_KEYS = {
+    "record_id",
+    "metadata_hash",
+    "source_hash",
+    "contract_version",
+    "metadata",
+    "parent_risk_context",
+    "metadata_verdict",
+    "alignment_verdict",
+    "context_requirements",
+    "audit_percent",
+}
+ROUTING_ENTRY_KEYS = {
+    "record_id",
+    "metadata_hash",
+    "source_hash",
+    "contract_version",
+    "parent_risk_context",
+    "audit_percent",
+    "result",
+}
 
 
 class RoutingError(ValueError):
@@ -57,6 +79,10 @@ def route_record(
     context_requirements: list[str],
     audit_percent: int,
 ) -> dict[str, Any]:
+    if metadata_verdict not in {"VALID", "REDESIGN", "NEEDS_CONTEXT"}:
+        raise RoutingError("metadata_verdict is invalid")
+    if alignment_verdict not in {"ALIGNED", "MISMATCH", "RECHECK"}:
+        raise RoutingError("alignment_verdict is invalid")
     if not isinstance(context_requirements, list) or any(
         not isinstance(item, str) or not item for item in context_requirements
     ):
@@ -112,6 +138,96 @@ def route_record(
         "risk_tags": risk_tags,
         "audit_selected": audit_selected,
     }
+
+
+def build_routing_manifest(records: list[dict[str, Any]]) -> dict[str, Any]:
+    if not isinstance(records, list):
+        raise RoutingError("records must be an array")
+    entries = []
+    seen_ids = set()
+    for record in records:
+        if not isinstance(record, dict) or set(record) != ROUTING_INPUT_KEYS:
+            raise RoutingError("routing input record has unexpected keys")
+        record_id = _non_empty_string(record["record_id"], "record_id")
+        if record_id in seen_ids:
+            raise RoutingError("routing records contain duplicate record_id")
+        seen_ids.add(record_id)
+        metadata_hash = _hash_string(record["metadata_hash"], "metadata_hash")
+        source_hash = _hash_string(record["source_hash"], "source_hash")
+        if record["contract_version"] != "deep-review-v1":
+            raise RoutingError("contract_version must be deep-review-v1")
+        if not isinstance(record["metadata"], dict):
+            raise RoutingError("metadata must be an object")
+        result = route_record(
+            record_id=record_id,
+            metadata_hash=metadata_hash,
+            contract_version=record["contract_version"],
+            metadata=record["metadata"],
+            parent_risk_context=record["parent_risk_context"],
+            metadata_verdict=record["metadata_verdict"],
+            alignment_verdict=record["alignment_verdict"],
+            context_requirements=record["context_requirements"],
+            audit_percent=record["audit_percent"],
+        )
+        entries.append(
+            {
+                "record_id": record_id,
+                "metadata_hash": metadata_hash,
+                "source_hash": source_hash,
+                "contract_version": record["contract_version"],
+                "parent_risk_context": record["parent_risk_context"],
+                "audit_percent": record["audit_percent"],
+                "result": result,
+            }
+        )
+    return {"review_contract_version": ROUTING_MANIFEST_VERSION, "records": entries}
+
+
+def validate_routing_manifest(
+    alignment_records: list[dict[str, Any]],
+    alignment_reviews: list[dict[str, Any]],
+    manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not isinstance(manifest, dict) or set(manifest) != {
+        "review_contract_version",
+        "records",
+    }:
+        raise RoutingError("routing manifest has unexpected keys")
+    if manifest["review_contract_version"] != ROUTING_MANIFEST_VERSION:
+        raise RoutingError("routing manifest contract version is invalid")
+    entries = manifest["records"]
+    if not isinstance(entries, list):
+        raise RoutingError("routing manifest records must be an array")
+    if len(alignment_records) != len(alignment_reviews):
+        raise RoutingError("alignment record and review counts do not match")
+    expected_ids = [record.get("record_id") for record in alignment_records]
+    review_ids = [review.get("record_id") for review in alignment_reviews]
+    entry_ids = [entry.get("record_id") if isinstance(entry, dict) else None for entry in entries]
+    if review_ids != expected_ids or entry_ids != expected_ids or len(expected_ids) != len(set(expected_ids)):
+        raise RoutingError("routing record set or order does not match frozen reviews")
+    for record, review, entry in zip(alignment_records, alignment_reviews, entries):
+        if not isinstance(entry, dict) or set(entry) != ROUTING_ENTRY_KEYS:
+            raise RoutingError("routing manifest entry has unexpected keys")
+        if entry["metadata_hash"] != record.get("metadata_hash"):
+            raise RoutingError("routing metadata_hash does not match alignment packet")
+        if entry["source_hash"] != record.get("source_hash"):
+            raise RoutingError("routing source_hash does not match alignment packet")
+        if entry["contract_version"] != "deep-review-v1":
+            raise RoutingError("routing contract_version is invalid")
+        expected_result = route_record(
+            record_id=record["record_id"],
+            metadata_hash=record["metadata_hash"],
+            contract_version=entry["contract_version"],
+            metadata=record["metadata"],
+            parent_risk_context=entry["parent_risk_context"],
+            metadata_verdict=record["metadata_review"]["verdict"],
+            alignment_verdict=review["verdict"],
+            context_requirements=review["context_requirements"],
+            audit_percent=entry["audit_percent"],
+        )
+        if entry["result"] != expected_result:
+            raise RoutingError("routing result does not match frozen review inputs")
+    return entries
 
 
 def aggregate_status(
@@ -220,6 +336,23 @@ def _risk_tag_set(value: Any, name: str) -> set[str]:
     return values
 
 
+def _non_empty_string(value: Any, name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise RoutingError(f"{name} must be a non-empty string")
+    return value
+
+
+def _hash_string(value: Any, name: str) -> str:
+    text = _non_empty_string(value, name)
+    if len(text) != 71 or not text.startswith("sha256:"):
+        raise RoutingError(f"{name} must be a sha256 hash")
+    try:
+        int(text[7:], 16)
+    except ValueError as exc:
+        raise RoutingError(f"{name} must be a sha256 hash") from exc
+    return text
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
@@ -231,16 +364,7 @@ def main() -> int:
         records = value["records"]
         if not isinstance(records, list):
             raise RoutingError("records must be an array")
-        result = {}
-        for record in records:
-            if not isinstance(record, dict):
-                raise RoutingError("routing record must be an object")
-            record_id = record.get("record_id")
-            if not isinstance(record_id, str) or not record_id:
-                raise RoutingError("record_id must be a non-empty string")
-            if record_id in result:
-                raise RoutingError("routing records contain duplicate record_id")
-            result[record_id] = route_record(**record)
+        result = build_routing_manifest(records)
     except (OSError, json.JSONDecodeError, TypeError, RoutingError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")))

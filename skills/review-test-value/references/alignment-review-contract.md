@@ -13,7 +13,7 @@ packetは`review_contract_version = "alignment-review-v1"`と`records`を持つ�
 - extractorが返した`source`、`source_text`、`source_hash`
 - extractor resultの`adapter`と`coverage`
 
-Phase 1 resultのrecord集合、verdict、hashを変更しない。recordの追加、欠落、重複、metadata hashまたはsource hash不一致はAI審査前に拒否する。
+Phase 1 resultのrecord集合、verdict、hashを変更しない。recordの追加、欠落、重複、metadata hashまたはsource hash不一致、extractor schemaにないfieldはAI審査前に拒否する。
 
 ## Review
 

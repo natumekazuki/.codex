@@ -14,7 +14,7 @@ packetは`review_contract_version = "deep-review-v1"`と`records`を持つ。各
 - 必要なsourceと証拠だけを含む`context`
 - `included_scope`と`excluded_scope`
 
-Solはpacket外を探索しない。context itemは`kind`、`ref`、`content`、`content_hash`を持ち、hash不一致をAI審査前に拒否する。
+Solはpacket外を探索しない。alignment recordはallowlist fieldから再構築し、未知fieldを転送しない。context itemは`kind`、`ref`、`content`、`content_hash`を持ち、hash不一致をAI審査前に拒否する。routing manifestはrecord ID、metadata hash、source hash、固定済みPhase 1 / Phase 2 verdict、親risk context、audit率から決定論的に再計算し、不一致を拒否する。
 
 ## Output
 

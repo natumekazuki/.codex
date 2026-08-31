@@ -4,11 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
-from review_routing import aggregate_status, decide_disposition, decide_gate
+from review_routing import (
+    aggregate_status,
+    decide_disposition,
+    decide_gate,
+    validate_routing_manifest,
+)
 
 
 class ResultValidationError(ValueError):
@@ -116,37 +122,81 @@ def validate_phase_result(
     return result
 
 
-def aggregate_record(record: dict[str, Any]) -> dict[str, Any]:
+def aggregate_record(value: dict[str, Any]) -> dict[str, Any]:
     required = {
-        "metadata_verdict",
-        "alignment_verdict",
-        "sol_required",
-        "sol_verdict",
-        "actual_boundary",
-        "metadata",
+        "record",
+        "alignment_review",
+        "routing_manifest",
+        "sol_result",
         "retention_basis",
         "artifact_state",
     }
-    if set(record) != required:
+    if set(value) != required:
         raise ResultValidationError("aggregation input has unexpected keys")
     try:
-        status = aggregate_status(
-            record["metadata_verdict"],
-            record["alignment_verdict"],
-            sol_required=record["sol_required"],
-            sol_verdict=record["sol_verdict"],
-        )
+        record = value["record"]
+        if not isinstance(record, dict):
+            raise ResultValidationError("aggregation record must be an object")
         metadata = record["metadata"]
+        source_text = record["source_text"]
+        if not isinstance(metadata, dict) or not isinstance(source_text, str):
+            raise ResultValidationError("aggregation record metadata and source_text are invalid")
+        metadata_digest = "sha256:" + hashlib.sha256(
+            json.dumps(
+                metadata,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        source_digest = "sha256:" + hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+        if record.get("metadata_hash") != metadata_digest:
+            raise ResultValidationError("aggregation metadata_hash does not match metadata")
+        if record.get("source_hash") != source_digest:
+            raise ResultValidationError("aggregation source_hash does not match source_text")
+        metadata_review = record["metadata_review"]
+        validate_phase_result(
+            "metadata",
+            {
+                "review_contract_version": "metadata-review-v1",
+                "reviews": [metadata_review],
+            },
+            [record],
+        )
+        alignment_review = value["alignment_review"]
+        validate_phase_result(
+            "alignment",
+            {
+                "review_contract_version": "alignment-review-v1",
+                "reviews": [alignment_review],
+            },
+            [record],
+        )
+        routing_entries = validate_routing_manifest(
+            [record], [alignment_review], value["routing_manifest"]
+        )
+        route = routing_entries[0]["result"]
+        sol_result = value["sol_result"]
+        sol_verdict = None
+        if sol_result is not None:
+            validated_sol = validate_phase_result("deep", sol_result, [record])
+            sol_verdict = validated_sol["reviews"][0]["verdict"]
+        status = aggregate_status(
+            metadata_review["verdict"],
+            alignment_review["verdict"],
+            sol_required=route["required"],
+            sol_verdict=sol_verdict,
+        )
         disposition = decide_disposition(
-            actual_boundary=record["actual_boundary"],
+            actual_boundary=alignment_review["actual_boundary"],
             lifecycle=metadata["lifecycle"],
-            retention_basis=record["retention_basis"],
+            retention_basis=value["retention_basis"],
             expires_on=metadata.get("expires_on"),
             review_when=metadata.get("review_when"),
         )
         if disposition is None:
             status = "NEEDS_CONTEXT"
-        gate = decide_gate(status, disposition, record["artifact_state"])
+        gate = decide_gate(status, disposition, value["artifact_state"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ResultValidationError(str(exc)) from exc
     return {"status": status, "disposition": disposition, "gate": gate}

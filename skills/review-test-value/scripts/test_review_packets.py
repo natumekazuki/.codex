@@ -16,6 +16,7 @@ from build_review_packets import (  # noqa: E402
     canonical_json,
     sha256_text,
 )
+from review_routing import build_routing_manifest  # noqa: E402
 
 
 def extractor_result():
@@ -150,9 +151,9 @@ class ReviewPacketTests(unittest.TestCase):
 
     # @test-value v1
     # kind = "security"
-    # claim = "deep packetはalignment packetと同じrouting record集合およびcontent hashが一致するbounded contextだけから構築できる"
+    # claim = "deep packetはallowlist済みalignment record、固定reviewと一致するrouting manifest、hashが一致するbounded contextだけから構築できる"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "別recordのroutingを混入するかcontext contentの改変後も以前のhashを正しい証拠としてSolへ渡す"
+    # failure_mode = "未知fieldをSolへ転送するかrequired routingを解除するかcontext contentの改変後も以前のhashを正しい証拠としてSolへ渡す"
     # scope = "deep-review-packet"
     # lifecycle = "permanent"
     # @end-test-value
@@ -181,14 +182,22 @@ class ReviewPacketTests(unittest.TestCase):
                 }
             ],
         }
-        routing = {
-            record["record_id"]: {
-                "required": True,
-                "reasons": ["alignment-recheck"],
-                "risk_tags": [],
-                "audit_selected": False,
-            }
-        }
+        routing = build_routing_manifest(
+            [
+                {
+                    "record_id": record["record_id"],
+                    "metadata_hash": record["metadata_hash"],
+                    "source_hash": record["source_hash"],
+                    "contract_version": "deep-review-v1",
+                    "metadata": record["metadata"],
+                    "parent_risk_context": None,
+                    "metadata_verdict": record["metadata_review"]["verdict"],
+                    "alignment_verdict": "RECHECK",
+                    "context_requirements": ["ADR-0022"],
+                    "audit_percent": 0,
+                }
+            ]
+        )
         bad_context = {
             record["record_id"]: [
                 {
@@ -203,9 +212,20 @@ class ReviewPacketTests(unittest.TestCase):
         with self.assertRaisesRegex(PacketError, "context hash"):
             build_deep_packet(alignment, alignment_result, routing, bad_context)
         extra_routing = copy.deepcopy(routing)
-        extra_routing["sha256:" + "9" * 64] = copy.deepcopy(next(iter(routing.values())))
-        with self.assertRaisesRegex(PacketError, "routing record set"):
+        extra_entry = copy.deepcopy(extra_routing["records"][0])
+        extra_entry["record_id"] = "sha256:" + "9" * 64
+        extra_routing["records"].append(extra_entry)
+        with self.assertRaisesRegex(PacketError, "record set or order"):
             build_deep_packet(alignment, alignment_result, extra_routing, {})
+        downgraded = copy.deepcopy(routing)
+        downgraded["records"][0]["result"]["required"] = False
+        downgraded["records"][0]["result"]["reasons"] = []
+        with self.assertRaisesRegex(PacketError, "routing result"):
+            build_deep_packet(alignment, alignment_result, downgraded, {})
+        expanded_alignment = copy.deepcopy(alignment)
+        expanded_alignment["records"][0]["unhashed_extra_context"] = "production source"
+        with self.assertRaisesRegex(PacketError, "unexpected keys"):
+            build_deep_packet(expanded_alignment, alignment_result, routing, {})
 
 
 if __name__ == "__main__":

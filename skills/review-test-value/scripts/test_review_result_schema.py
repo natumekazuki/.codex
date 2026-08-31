@@ -1,4 +1,3 @@
-import copy
 import sys
 import unittest
 from pathlib import Path
@@ -8,6 +7,8 @@ SCRIPTS = Path(__file__).resolve().parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+from build_review_packets import canonical_json, sha256_text  # noqa: E402
+from review_routing import build_routing_manifest  # noqa: E402
 from validate_review_result import (  # noqa: E402
     ResultValidationError,
     aggregate_record,
@@ -45,7 +46,115 @@ def alignment_result(verdict="ALIGNED"):
     }
 
 
+def aggregation_input(
+    *,
+    metadata_verdict="VALID",
+    alignment_verdict="ALIGNED",
+    kind="contract",
+    lifecycle="permanent",
+    sol_verdict=None,
+    retention_basis="PRESENT",
+    artifact_state="PERMANENT_TEST",
+):
+    metadata = {
+        "kind": kind,
+        "claim": "final resultは固定済みreview identityから決まる",
+        "oracle": {"type": "adr", "ref": "ADR-0022"},
+        "failure_mode": "required Solを省略してPASSにする",
+        "scope": "review-result-aggregation",
+        "lifecycle": lifecycle,
+    }
+    source_text = "def test_final_result(self):\n    self.assertEqual(result['gate'], 'PASS')\n"
+    identity = {
+        "record_id": "sha256:" + "1" * 64,
+        "metadata_hash": sha256_text(canonical_json(metadata)),
+        "source_hash": sha256_text(source_text),
+    }
+    metadata_review = {
+        "record_id": identity["record_id"],
+        "verdict": metadata_verdict,
+        "evidence": ["metadata verdict evidence"],
+        "unverified": [],
+        "next_action": None,
+    }
+    record = {
+        **identity,
+        "metadata": metadata,
+        "metadata_review": metadata_review,
+        "source_text": source_text,
+    }
+    alignment_review = alignment_result(alignment_verdict)["reviews"][0]
+    alignment_review.update(
+        metadata_hash=identity["metadata_hash"],
+        source_hash=identity["source_hash"],
+    )
+    manifest = build_routing_manifest(
+        [
+            {
+                **identity,
+                "contract_version": "deep-review-v1",
+                "metadata": metadata,
+                "parent_risk_context": None,
+                "metadata_verdict": metadata_verdict,
+                "alignment_verdict": alignment_verdict,
+                "context_requirements": alignment_review["context_requirements"],
+                "audit_percent": 0,
+            }
+        ]
+    )
+    sol_result = None
+    if sol_verdict is not None:
+        sol_result = {
+            "review_contract_version": "deep-review-v1",
+            "reviews": [
+                {
+                    **identity,
+                    "verdict": sol_verdict,
+                    "evidence": ["deep review evidence"],
+                    "unverified": [],
+                    "context_requirements": [],
+                    "next_action": None,
+                }
+            ],
+        }
+    return {
+        "record": record,
+        "alignment_review": alignment_review,
+        "routing_manifest": manifest,
+        "sol_result": sol_result,
+        "retention_basis": retention_basis,
+        "artifact_state": artifact_state,
+    }
+
+
 class ReviewResultSchemaTests(unittest.TestCase):
+    # @test-value v1
+    # kind = "security"
+    # claim = "final aggregatorはmetadataとsourceのhashおよび検証済みrouting manifestからSol requiredを導出しcallerのbooleanを受理しない"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # failure_mode = "security metadataをhash不一致のcontractへ変えるかsol_required=falseを直接入力してrequired Solを省略しPASSにする"
+    # scope = "review-final-identity-binding"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_aggregate_rejects_identity_tamper_and_caller_routing_boolean(self):
+        tampered = aggregation_input(kind="security")
+        tampered["record"]["metadata"]["kind"] = "contract"
+        with self.assertRaisesRegex(ResultValidationError, "metadata_hash"):
+            aggregate_record(tampered)
+
+        scalar_input = {
+            "metadata_verdict": "VALID",
+            "alignment_verdict": "ALIGNED",
+            "sol_required": False,
+            "sol_verdict": None,
+            "actual_boundary": "component-behavior",
+            "metadata": {"kind": "security", "lifecycle": "permanent"},
+            "retention_basis": "PRESENT",
+            "artifact_state": "PERMANENT_TEST",
+        }
+        with self.assertRaisesRegex(ResultValidationError, "unexpected keys"):
+            aggregate_record(scalar_input)
+
     # @test-value v1
     # kind = "contract"
     # claim = "NEEDS_CONTEXT resultはmetadata phaseで未確認事項と次のactionを、deep phaseで必要contextを具体的に示す"
@@ -137,22 +246,16 @@ class ReviewResultSchemaTests(unittest.TestCase):
     # lifecycle = "permanent"
     # @end-test-value
     def test_aggregate_record_fails_closed_and_preserves_redesign(self):
-        base = {
-            "metadata_verdict": "VALID",
-            "alignment_verdict": "ALIGNED",
-            "sol_required": True,
-            "sol_verdict": None,
-            "actual_boundary": "component-behavior",
-            "metadata": {"lifecycle": "permanent"},
-            "retention_basis": "PRESENT",
-            "artifact_state": "PERMANENT_TEST",
-        }
+        base = aggregation_input(kind="security")
         self.assertEqual(
             aggregate_record(base),
             {"status": "NEEDS_CONTEXT", "disposition": "KEEP_PERMANENT", "gate": "BLOCKED"},
         )
-        redesigned = copy.deepcopy(base)
-        redesigned.update(metadata_verdict="REDESIGN", sol_verdict="APPROVE")
+        redesigned = aggregation_input(
+            metadata_verdict="REDESIGN",
+            kind="security",
+            sol_verdict="APPROVE",
+        )
         self.assertEqual(aggregate_record(redesigned)["status"], "REDESIGN")
         self.assertEqual(aggregate_record(redesigned)["gate"], "CHANGES_REQUIRED")
 
@@ -165,16 +268,11 @@ class ReviewResultSchemaTests(unittest.TestCase):
     # lifecycle = "permanent"
     # @end-test-value
     def test_aggregate_record_blocks_unresolved_disposition(self):
-        record = {
-            "metadata_verdict": "VALID",
-            "alignment_verdict": "ALIGNED",
-            "sol_required": False,
-            "sol_verdict": None,
-            "actual_boundary": "component-behavior",
-            "metadata": {"lifecycle": "ephemeral"},
-            "retention_basis": "UNRESOLVED",
-            "artifact_state": "TEMPORARY_TEST",
-        }
+        record = aggregation_input(
+            lifecycle="ephemeral",
+            retention_basis="UNRESOLVED",
+            artifact_state="TEMPORARY_TEST",
+        )
 
         self.assertEqual(
             aggregate_record(record),

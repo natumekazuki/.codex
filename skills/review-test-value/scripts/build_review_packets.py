@@ -9,12 +9,43 @@ import json
 from pathlib import Path
 from typing import Any
 
-from review_routing import RISK_TAGS
+from review_routing import RoutingError, validate_routing_manifest
 from validate_review_result import ResultValidationError, validate_phase_result
 
 
 class PacketError(ValueError):
     """Raised when extractor or review input cannot form a trusted packet."""
+
+
+EXTRACTOR_RESULT_KEYS = {
+    "schema_version",
+    "adapter",
+    "coverage",
+    "repository_root",
+    "tests",
+    "diagnostics",
+}
+EXTRACTOR_RECORD_KEYS = {"source", "metadata", "source_text", "source_hash", "metadata_hash"}
+SOURCE_KEYS = {
+    "path",
+    "symbol",
+    "metadata_start_line",
+    "metadata_end_line",
+    "declaration_start_line",
+    "declaration_end_line",
+}
+ALIGNMENT_RECORD_KEYS = {
+    "record_id",
+    "metadata_format_version",
+    "metadata",
+    "metadata_hash",
+    "metadata_review",
+    "source",
+    "source_text",
+    "source_hash",
+    "adapter",
+    "coverage",
+}
 
 
 def canonical_json(value: Any) -> str:
@@ -102,19 +133,28 @@ def build_alignment_packet(
 def build_deep_packet(
     alignment_packet: dict[str, Any],
     alignment_result: dict[str, Any],
-    routing: dict[str, Any],
+    routing_manifest: dict[str, Any],
     context_by_record: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
+    if set(alignment_packet) != {"review_contract_version", "records"}:
+        raise PacketError("alignment packet has unexpected keys")
     if alignment_packet.get("review_contract_version") != "alignment-review-v1":
         raise PacketError("alignment packet contract version is invalid")
     records = alignment_packet.get("records")
     if not isinstance(records, list):
         raise PacketError("alignment packet records must be an array")
-    record_ids = [_string(item.get("record_id"), "record.record_id") for item in records]
+    if not isinstance(context_by_record, dict):
+        raise PacketError("context_by_record must be an object")
+    record_ids = []
+    for record in records:
+        if not isinstance(record, dict) or set(record) != ALIGNMENT_RECORD_KEYS:
+            raise PacketError("alignment packet record has unexpected keys")
+        source = _object(record.get("source"), "record.source")
+        if set(source) != SOURCE_KEYS:
+            raise PacketError("alignment packet source has unexpected keys")
+        record_ids.append(_string(record.get("record_id"), "record.record_id"))
     if len(record_ids) != len(set(record_ids)):
         raise PacketError("alignment packet contains duplicate record_id")
-    if set(routing) != set(record_ids):
-        raise PacketError("routing record set does not match the alignment packet")
     if not set(context_by_record).issubset(set(record_ids)):
         raise PacketError("context contains a record outside the alignment packet")
     for record in records:
@@ -127,40 +167,47 @@ def build_deep_packet(
         if sha256_text(source_text) != source_hash:
             raise PacketError("alignment packet source_hash does not match source_text")
     try:
+        validate_phase_result(
+            "metadata",
+            {
+                "review_contract_version": "metadata-review-v1",
+                "reviews": [record["metadata_review"] for record in records],
+            },
+            records,
+        )
         alignment_reviews = validate_phase_result(
             "alignment", alignment_result, records
         )["reviews"]
     except ResultValidationError as exc:
         raise PacketError(str(exc)) from exc
     alignment_by_id = {item["record_id"]: item for item in alignment_reviews}
+    try:
+        routing_entries = validate_routing_manifest(
+            records, alignment_reviews, routing_manifest
+        )
+    except RoutingError as exc:
+        raise PacketError(str(exc)) from exc
+    routing_by_id = {item["record_id"]: item for item in routing_entries}
     deep_records = []
     for record in records:
         record_id = record["record_id"]
-        route = routing.get(record_id)
-        if route is None:
-            raise PacketError(f"routing is missing record {record_id}")
-        if not isinstance(route, dict) or set(route) != {
-            "required",
-            "reasons",
-            "risk_tags",
-            "audit_selected",
-        }:
-            raise PacketError(f"routing entry is invalid for record {record_id}")
-        if not isinstance(route["required"], bool) or not isinstance(route["audit_selected"], bool):
-            raise PacketError(f"routing booleans are invalid for record {record_id}")
-        _string_list(route["reasons"], f"routing reasons for {record_id}")
-        risk_tags = _string_list(route["risk_tags"], f"routing risk_tags for {record_id}")
-        if set(risk_tags) - RISK_TAGS:
-            raise PacketError(f"routing risk_tags are invalid for record {record_id}")
-        if route["required"] != bool(route["reasons"]):
-            raise PacketError(f"routing required flag is inconsistent for record {record_id}")
+        route = routing_by_id[record_id]["result"]
         if not route["required"]:
             continue
         contexts = context_by_record.get(record_id, [])
         validated_context = [_validate_context(item) for item in contexts]
         deep_records.append(
             {
-                **record,
+                "record_id": record["record_id"],
+                "metadata_format_version": record["metadata_format_version"],
+                "metadata": record["metadata"],
+                "metadata_hash": record["metadata_hash"],
+                "metadata_review": record["metadata_review"],
+                "source": record["source"],
+                "source_text": record["source_text"],
+                "source_hash": record["source_hash"],
+                "adapter": record["adapter"],
+                "coverage": record["coverage"],
                 "alignment_review": alignment_by_id[record_id],
                 "routing_reasons": route["reasons"],
                 "risk_tags": route["risk_tags"],
@@ -174,6 +221,8 @@ def build_deep_packet(
 
 
 def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
+    if set(extractor_result) != EXTRACTOR_RESULT_KEYS:
+        raise PacketError("extractor result has unexpected keys")
     if extractor_result.get("schema_version") != 1:
         raise PacketError("extractor schema_version must be 1")
     diagnostics = extractor_result.get("diagnostics")
@@ -183,11 +232,13 @@ def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(records, list):
         raise PacketError("extractor tests must be an array")
     for record in records:
-        if not isinstance(record, dict):
-            raise PacketError("extractor test record must be an object")
+        if not isinstance(record, dict) or set(record) != EXTRACTOR_RECORD_KEYS:
+            raise PacketError("extractor test record has unexpected keys")
     locators = []
     for record in records:
         source = _object(record.get("source"), "record.source")
+        if set(source) != SOURCE_KEYS:
+            raise PacketError("record.source has unexpected keys")
         locators.append(
             (
                 _string(source.get("path"), "record.source.path"),
@@ -218,12 +269,6 @@ def _require_unique(items: list[dict[str, Any]], key: str) -> None:
     values = [item[key] for item in items]
     if len(values) != len(set(values)):
         raise PacketError(f"duplicate {key}")
-
-
-def _string_list(value: Any, name: str) -> list[str]:
-    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
-        raise PacketError(f"{name} must be an array of non-empty strings")
-    return value
 
 
 def _object(value: Any, name: str) -> dict[str, Any]:

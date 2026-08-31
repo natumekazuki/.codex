@@ -75,11 +75,11 @@ python -X utf8 <skill-dir>/scripts/review_routing.py --input <routing-input.json
 python -X utf8 <skill-dir>/scripts/build_review_packets.py deep `
   --alignment-packet <alignment-packet.json> `
   --alignment-result <alignment-result.json> `
-  --routing <routing-result-by-record.json> `
+  --routing <routing-manifest.json> `
   --context <context-by-record.json>
 ```
 12. required agentを起動できない場合は親agentが代行せず、そのrecordを`status = NEEDS_CONTEXT`、`disposition = null`、`gate = BLOCKED`として停止する。別modelへsilent fallbackしない。
-13. phase result、routing、actual boundary、lifecycle、保持根拠、artifact stateを`validate_review_result.py aggregate`へ渡し、`status`、`disposition`、`gate`を決める。Bootstrapではmetadata v1を読み、v1 `ephemeral`の削除条件、resolution ledger、元test削除後の`PASS`を有効化しない。
+13. alignment packetの一record、同じrecordのPhase 2 result、検証対象routing manifest、requiredな場合のSol result、保持根拠、artifact stateを`validate_review_result.py aggregate`へ渡し、`status`、`disposition`、`gate`を決める。`sol_required`やphase verdictを独立したscalarとして再入力しない。Bootstrapではmetadata v1を読み、v1 `ephemeral`の削除条件、resolution ledger、元test削除後の`PASS`を有効化しない。
 14. JSON field、diagnostic、exit statusの確認が必要なら[references/output-v1.md](references/output-v1.md)を読む。
 
 ## Extraction Rules
