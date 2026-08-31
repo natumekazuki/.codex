@@ -11,15 +11,15 @@
 - metadataまたは親workflowのrisk tagが空でない
 - deterministic audit対象
 
-risk tagは`security`、`authentication`、`authorization`、`billing`、`irreversible-data-loss`、`privacy`だけを認める。metadataと親workflowのtagは和集合にし、metadataから親tagを解除できない。親workflowのrisk contextは`record_id`と`metadata_hash`へ固定する。未知のtag、型不一致、record IDまたはhash不一致はrouting前に拒否する。
+risk tagは`security`、`authentication`、`authorization`、`billing`、`irreversible-data-loss`、`privacy`だけを認める。metadataと親workflowのtagは和集合にし、metadataから親tagを解除できない。親workflowのrisk contextはrouting manifestとは独立した`review-workflow-context-v1` artifactとして`record_id`と`metadata_hash`へ固定する。未知のtag、型不一致、record IDまたはhash不一致はrouting前に拒否する。
 
 high-riskでもaudit対象でもない明白な`REDESIGN`または`MISMATCH`だけを理由にSolへ送らない。required agentがunavailableなら親agentは代行せず、`NEEDS_CONTEXT`、`BLOCKED`とする。
 
 audit selectionは`record_id`とcontract versionのSHA-256を100で割った剰余が`audit_percent`未満かで決める。同じ入力は常に同じ結果になる。
 
-`review_routing.py`のinputは`records`配列を持つJSON objectとする。各recordは`record_id`、`metadata_hash`、`source_hash`、`contract_version`、`metadata`、`parent_risk_context`、Phase 1とPhase 2のverdict、`context_requirements`、`audit_percent`を持つ。outputは`review_contract_version = "review-routing-v1"`と同順の`records`を持つrouting manifestであり、各entryへrecord identity、親risk context、audit率、routing resultを固定する。
+`review_routing.py`のinputは`records`と`workflow_context`を持つJSON objectとする。各routing recordは`record_id`、`metadata_hash`、`source_hash`、`contract_version`、`metadata`、Phase 1とPhase 2のverdict、`context_requirements`を持つ。`workflow_context`は`review_contract_version = "review-workflow-context-v1"`と同順の`records`を持ち、各entryは`record_id`、`metadata_hash`、`parent_risk_tags`、`audit_percent`だけを持つ。outputのrouting manifestは`review_contract_version = "review-routing-v1"`と同順の`records`を持ち、各entryへrecord identity、workflow contextのhash、routing resultを固定する。
 
-deep packet builderとfinal aggregatorは、alignment packetと固定済みPhase 1 / Phase 2 resultからrouting resultを再計算する。record ID、metadata hash、source hash、verdict、context requirement、risk context、audit選択、required判定のいずれかが一致しないmanifestを拒否する。callerが渡した`sol_required` booleanだけでdeep reviewやgateを省略しない。
+deep packet builderとfinal aggregatorは、alignment packet、固定済みPhase 1 / Phase 2 result、manifestとは独立したworkflow contextからrouting resultを再計算する。record ID、metadata hash、source hash、verdict、context requirement、workflow context hash、risk context、audit選択、required判定のいずれかが一致しないmanifestを拒否する。callerが渡した`sol_required` booleanだけでdeep reviewやgateを省略しない。
 
 ## Status
 
@@ -47,4 +47,6 @@ Bootstrapはmetadata v1を読む。`characterization`は`expires_on`または`re
 
 resolution ledgerと元test削除後の`PASS`はactivation changeで有効化する。Bootstrap validatorは対応resolutionを受け取らず、削除済みartifactを`PASS`にしない。
 
-final aggregatorのinputは、一つのalignment packet `record`、同じrecordの`alignment_review`、検証対象の`routing_manifest`、requiredな場合の`sol_result`または未実行を表す`null`、`retention_basis`、`artifact_state`だけを持つ。metadata verdict、alignment verdict、Sol required、Sol verdict、actual boundary、metadataを独立したscalarとして再入力しない。
+final aggregatorのinputは完全な`alignment_packet`、同じrecord集合と順序の`alignment_result`、独立した`workflow_routing_context`、検証対象の`routing_manifest`、required record集合の`sol_result`または未実行を表す`null`、同じrecord集合と順序の`retention_records`だけを持つ。正規artifactをrecordごとに分割しない。metadata verdict、alignment verdict、Sol required、Sol verdict、actual boundary、metadataを独立したscalarとして再入力しない。
+
+required recordに対応するSol resultがない場合、またはSol verdictが`NEEDS_CONTEXT`の場合は、dispositionを計算せず`NEEDS_CONTEXT / null / BLOCKED`へ短絡する。

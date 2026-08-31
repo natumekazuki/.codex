@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from review_routing import (
+    aggregate_gate,
     aggregate_status,
     decide_disposition,
     decide_gate,
+    unavailable_result,
     validate_routing_manifest,
 )
 
@@ -122,84 +124,151 @@ def validate_phase_result(
     return result
 
 
-def aggregate_record(value: dict[str, Any]) -> dict[str, Any]:
+def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
     required = {
-        "record",
-        "alignment_review",
+        "alignment_packet",
+        "alignment_result",
+        "workflow_routing_context",
         "routing_manifest",
         "sol_result",
-        "retention_basis",
-        "artifact_state",
+        "retention_records",
     }
     if set(value) != required:
         raise ResultValidationError("aggregation input has unexpected keys")
     try:
-        record = value["record"]
-        if not isinstance(record, dict):
-            raise ResultValidationError("aggregation record must be an object")
-        metadata = record["metadata"]
-        source_text = record["source_text"]
-        if not isinstance(metadata, dict) or not isinstance(source_text, str):
-            raise ResultValidationError("aggregation record metadata and source_text are invalid")
-        metadata_digest = "sha256:" + hashlib.sha256(
-            json.dumps(
-                metadata,
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
-        source_digest = "sha256:" + hashlib.sha256(source_text.encode("utf-8")).hexdigest()
-        if record.get("metadata_hash") != metadata_digest:
-            raise ResultValidationError("aggregation metadata_hash does not match metadata")
-        if record.get("source_hash") != source_digest:
-            raise ResultValidationError("aggregation source_hash does not match source_text")
-        metadata_review = record["metadata_review"]
+        packet = value["alignment_packet"]
+        if not isinstance(packet, dict) or set(packet) != {"review_contract_version", "records"}:
+            raise ResultValidationError("alignment packet has unexpected keys")
+        if packet["review_contract_version"] != "alignment-review-v1":
+            raise ResultValidationError("alignment packet contract version is invalid")
+        records = packet["records"]
+        if not isinstance(records, list):
+            raise ResultValidationError("alignment packet records must be an array")
+        for record in records:
+            _validate_aggregation_record(record)
         validate_phase_result(
             "metadata",
             {
                 "review_contract_version": "metadata-review-v1",
-                "reviews": [metadata_review],
+                "reviews": [record["metadata_review"] for record in records],
             },
-            [record],
+            records,
         )
-        alignment_review = value["alignment_review"]
-        validate_phase_result(
-            "alignment",
-            {
-                "review_contract_version": "alignment-review-v1",
-                "reviews": [alignment_review],
-            },
-            [record],
-        )
+        alignment_reviews = validate_phase_result(
+            "alignment", value["alignment_result"], records
+        )["reviews"]
         routing_entries = validate_routing_manifest(
-            [record], [alignment_review], value["routing_manifest"]
+            records,
+            alignment_reviews,
+            value["routing_manifest"],
+            value["workflow_routing_context"],
         )
-        route = routing_entries[0]["result"]
+        required_records = [
+            record
+            for record, entry in zip(records, routing_entries)
+            if entry["result"]["required"]
+        ]
         sol_result = value["sol_result"]
-        sol_verdict = None
+        sol_by_id: dict[str, dict[str, Any]] = {}
         if sol_result is not None:
-            validated_sol = validate_phase_result("deep", sol_result, [record])
-            sol_verdict = validated_sol["reviews"][0]["verdict"]
-        status = aggregate_status(
-            metadata_review["verdict"],
-            alignment_review["verdict"],
-            sol_required=route["required"],
-            sol_verdict=sol_verdict,
-        )
-        disposition = decide_disposition(
-            actual_boundary=alignment_review["actual_boundary"],
-            lifecycle=metadata["lifecycle"],
-            retention_basis=value["retention_basis"],
-            expires_on=metadata.get("expires_on"),
-            review_when=metadata.get("review_when"),
-        )
-        if disposition is None:
-            status = "NEEDS_CONTEXT"
-        gate = decide_gate(status, disposition, value["artifact_state"])
+            sol_reviews = validate_phase_result("deep", sol_result, required_records)["reviews"]
+            sol_by_id = {review["record_id"]: review for review in sol_reviews}
+        retention_by_id = _validate_retention_records(value["retention_records"], records)
+        alignment_by_id = {review["record_id"]: review for review in alignment_reviews}
+        route_by_id = {entry["record_id"]: entry["result"] for entry in routing_entries}
+        final_records = []
+        for record in records:
+            record_id = record["record_id"]
+            route = route_by_id[record_id]
+            sol_review = sol_by_id.get(record_id)
+            if route["required"] and (
+                sol_review is None or sol_review["verdict"] == "NEEDS_CONTEXT"
+            ):
+                outcome = unavailable_result()
+            else:
+                metadata = record["metadata"]
+                alignment_review = alignment_by_id[record_id]
+                status = aggregate_status(
+                    record["metadata_review"]["verdict"],
+                    alignment_review["verdict"],
+                    sol_required=route["required"],
+                    sol_verdict=sol_review["verdict"] if sol_review is not None else None,
+                )
+                retention = retention_by_id[record_id]
+                disposition = decide_disposition(
+                    actual_boundary=alignment_review["actual_boundary"],
+                    lifecycle=metadata["lifecycle"],
+                    retention_basis=retention["retention_basis"],
+                    expires_on=metadata.get("expires_on"),
+                    review_when=metadata.get("review_when"),
+                )
+                if disposition is None:
+                    outcome = unavailable_result()
+                else:
+                    outcome = {
+                        "status": status,
+                        "disposition": disposition,
+                        "gate": decide_gate(status, disposition, retention["artifact_state"]),
+                    }
+            final_records.append({"record_id": record_id, **outcome})
     except (KeyError, TypeError, ValueError) as exc:
         raise ResultValidationError(str(exc)) from exc
-    return {"status": status, "disposition": disposition, "gate": gate}
+    return {
+        "review_contract_version": "review-final-v1",
+        "records": final_records,
+        "gate": aggregate_gate([record["gate"] for record in final_records]),
+    }
+
+
+def _validate_aggregation_record(record: Any) -> None:
+    if not isinstance(record, dict):
+        raise ResultValidationError("aggregation record must be an object")
+    metadata = record.get("metadata")
+    source_text = record.get("source_text")
+    if not isinstance(metadata, dict) or not isinstance(source_text, str):
+        raise ResultValidationError("aggregation record metadata and source_text are invalid")
+    metadata_digest = "sha256:" + hashlib.sha256(
+        json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    source_digest = "sha256:" + hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+    if record.get("metadata_hash") != metadata_digest:
+        raise ResultValidationError("aggregation metadata_hash does not match metadata")
+    if record.get("source_hash") != source_digest:
+        raise ResultValidationError("aggregation source_hash does not match source_text")
+
+
+def _validate_retention_records(
+    value: Any, records: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ResultValidationError("retention_records must be an array")
+    expected_ids = [record["record_id"] for record in records]
+    actual_ids = []
+    by_id = {}
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {
+            "record_id",
+            "retention_basis",
+            "artifact_state",
+        }:
+            raise ResultValidationError("retention record has unexpected keys")
+        record_id = _string(item["record_id"], "retention.record_id")
+        actual_ids.append(record_id)
+        if item["retention_basis"] not in {"PRESENT", "ABSENT", "UNRESOLVED"}:
+            raise ResultValidationError("retention_basis is invalid")
+        if item["artifact_state"] not in {
+            "PERMANENT_TEST",
+            "TEMPORARY_TEST",
+            "TEST_PRESENT",
+            "TEST_ABSENT",
+        }:
+            raise ResultValidationError("artifact_state is invalid")
+        by_id[record_id] = item
+    if actual_ids != expected_ids:
+        raise ResultValidationError("retention record set or order does not match the packet")
+    return by_id
 
 
 def _validate_alignment(review: dict[str, Any]) -> None:
@@ -250,7 +319,7 @@ def main() -> int:
     try:
         value = _read_json(args.input)
         if args.phase == "aggregate":
-            output = aggregate_record(value)
+            output = aggregate_results(value)
         else:
             if args.packet is None:
                 raise ResultValidationError("--packet is required for phase validation")

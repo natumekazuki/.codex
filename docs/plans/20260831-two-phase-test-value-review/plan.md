@@ -154,6 +154,14 @@
 - [ ] required agent unavailable時に親agentが代行しないことを確認する。
 - [ ] activation smokeが失敗した場合はmetadata v2と新gateの有効化へ進まない。
 
+### Bootstrap review follow-up
+
+- [x] 親workflowのrisk tagとaudit率をrouting manifestとは独立したworkflow contextへ固定し、deep packet builderとfinal aggregatorの両方で照合する。
+- [x] final aggregatorをrecord集合単位へ変更し、複数recordのalignment、routing、Sol artifactを分割せず集約する。
+- [x] required Solが未実行または`NEEDS_CONTEXT`の場合はdisposition計算前に`NEEDS_CONTEXT / null / BLOCKED`へ短絡する。
+- [x] 3件の反例を回帰testへ追加し、Git modeの抽出をexit `0`で完了する。
+- [ ] 修正commitを固定し、元finding familyに限定したcommit-bound reviewを完了する。
+
 ### Metadata v2 and gate activation
 
 - [ ] `@test-value v2`と`fault`、`observable`、optional `impact`、`observation_boundary`を追加する。

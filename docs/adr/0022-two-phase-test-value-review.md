@@ -84,6 +84,7 @@ statusはPhase結果とSol結果を次の優先順で決める。上の行に一
 
 - Phase 1 `NEEDS_CONTEXT`またはPhase 2 `RECHECK`は必ずSolをrequiredにする。Solが追加contextで不確定事項を解消して`APPROVE`した場合だけ`ACCEPT`へ進める。
 - high-riskまたはaudit対象はPhase 1、Phase 2のverdictにかかわらずSolをrequiredにする。Solはfrozen Phase 1 verdictとPhase 2 verdictを変更できない。Solが完了verdictを返した場合、Phase 1 `REDESIGN`またはPhase 2 `MISMATCH`のfinal statusは`REDESIGN`のままとする。Solがunavailable、schema不正、または`NEEDS_CONTEXT`なら上位のfail-closed規則を適用する。
+- 親workflowのrisk tagとaudit率はrouting manifestとは独立したworkflow contextへ固定する。deep packet builderとfinal aggregatorは同じ固定入力からrouting resultを再計算し、manifest内の値だけを根拠に親riskを解除しない。
 - Phase 1 `REDESIGN`またはPhase 2 `MISMATCH`でhigh-riskでもaudit対象でもないrecordは、明白な欠陥としてSolへ送らない。
 - requiredでないSol verdict、requiredなのにSolを実行していないresult、またはPhase 1 `NEEDS_CONTEXT` / Phase 2 `RECHECK`でSolがrequiredでないresultはinvalid combinationとして拒否する。
 

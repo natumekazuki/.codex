@@ -134,6 +134,7 @@ def build_deep_packet(
     alignment_packet: dict[str, Any],
     alignment_result: dict[str, Any],
     routing_manifest: dict[str, Any],
+    workflow_routing_context: dict[str, Any],
     context_by_record: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
     if set(alignment_packet) != {"review_contract_version", "records"}:
@@ -183,7 +184,7 @@ def build_deep_packet(
     alignment_by_id = {item["record_id"]: item for item in alignment_reviews}
     try:
         routing_entries = validate_routing_manifest(
-            records, alignment_reviews, routing_manifest
+            records, alignment_reviews, routing_manifest, workflow_routing_context
         )
     except RoutingError as exc:
         raise PacketError(str(exc)) from exc
@@ -319,6 +320,7 @@ def main() -> int:
     deep.add_argument("--alignment-packet", type=Path, required=True)
     deep.add_argument("--alignment-result", type=Path, required=True)
     deep.add_argument("--routing", type=Path, required=True)
+    deep.add_argument("--routing-context", type=Path, required=True)
     deep.add_argument("--context", type=Path, required=True)
     args = parser.parse_args()
     try:
@@ -333,6 +335,7 @@ def main() -> int:
                 _read_json(args.alignment_packet),
                 _read_json(args.alignment_result),
                 _read_json(args.routing),
+                _read_json(args.routing_context),
                 _read_json(args.context),
             )
     except (OSError, json.JSONDecodeError, PacketError) as exc:

@@ -25,26 +25,30 @@ BOUNDARIES = {
     "implementation",
 }
 ROUTING_MANIFEST_VERSION = "review-routing-v1"
+WORKFLOW_CONTEXT_VERSION = "review-workflow-context-v1"
 ROUTING_INPUT_KEYS = {
     "record_id",
     "metadata_hash",
     "source_hash",
     "contract_version",
     "metadata",
-    "parent_risk_context",
     "metadata_verdict",
     "alignment_verdict",
     "context_requirements",
-    "audit_percent",
 }
 ROUTING_ENTRY_KEYS = {
     "record_id",
     "metadata_hash",
     "source_hash",
     "contract_version",
-    "parent_risk_context",
-    "audit_percent",
+    "workflow_context_hash",
     "result",
+}
+WORKFLOW_CONTEXT_ENTRY_KEYS = {
+    "record_id",
+    "metadata_hash",
+    "parent_risk_tags",
+    "audit_percent",
 }
 
 
@@ -140,12 +144,49 @@ def route_record(
     }
 
 
-def build_routing_manifest(records: list[dict[str, Any]]) -> dict[str, Any]:
+def canonical_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def workflow_context_hash(entry: dict[str, Any]) -> str:
+    return "sha256:" + hashlib.sha256(canonical_json(entry).encode("utf-8")).hexdigest()
+
+
+def validate_workflow_context(
+    records: list[dict[str, Any]], context: dict[str, Any]
+) -> list[dict[str, Any]]:
+    if not isinstance(context, dict) or set(context) != {"review_contract_version", "records"}:
+        raise RoutingError("workflow routing context has unexpected keys")
+    if context["review_contract_version"] != WORKFLOW_CONTEXT_VERSION:
+        raise RoutingError("workflow routing context version is invalid")
+    entries = context["records"]
+    if not isinstance(entries, list):
+        raise RoutingError("workflow routing context records must be an array")
+    expected_ids = [record.get("record_id") for record in records]
+    entry_ids = [entry.get("record_id") if isinstance(entry, dict) else None for entry in entries]
+    if entry_ids != expected_ids or len(expected_ids) != len(set(expected_ids)):
+        raise RoutingError("workflow routing context record set or order does not match records")
+    for record, entry in zip(records, entries):
+        if not isinstance(entry, dict) or set(entry) != WORKFLOW_CONTEXT_ENTRY_KEYS:
+            raise RoutingError("workflow routing context entry has unexpected keys")
+        _non_empty_string(entry["record_id"], "workflow record_id")
+        _hash_string(entry["metadata_hash"], "workflow metadata_hash")
+        if entry["metadata_hash"] != record.get("metadata_hash"):
+            raise RoutingError("workflow metadata_hash does not match record")
+        _risk_tag_set(entry["parent_risk_tags"], "parent risk_tags")
+        deterministic_audit(entry["record_id"], "deep-review-v1", entry["audit_percent"])
+    return entries
+
+
+def build_routing_manifest(
+    records: list[dict[str, Any]], workflow_context: dict[str, Any]
+) -> dict[str, Any]:
     if not isinstance(records, list):
         raise RoutingError("records must be an array")
+    contexts = validate_workflow_context(records, workflow_context)
     entries = []
     seen_ids = set()
-    for record in records:
+    for record, workflow_entry in zip(records, contexts):
         if not isinstance(record, dict) or set(record) != ROUTING_INPUT_KEYS:
             raise RoutingError("routing input record has unexpected keys")
         record_id = _non_empty_string(record["record_id"], "record_id")
@@ -163,11 +204,15 @@ def build_routing_manifest(records: list[dict[str, Any]]) -> dict[str, Any]:
             metadata_hash=metadata_hash,
             contract_version=record["contract_version"],
             metadata=record["metadata"],
-            parent_risk_context=record["parent_risk_context"],
+            parent_risk_context={
+                "record_id": workflow_entry["record_id"],
+                "metadata_hash": workflow_entry["metadata_hash"],
+                "risk_tags": workflow_entry["parent_risk_tags"],
+            },
             metadata_verdict=record["metadata_verdict"],
             alignment_verdict=record["alignment_verdict"],
             context_requirements=record["context_requirements"],
-            audit_percent=record["audit_percent"],
+            audit_percent=workflow_entry["audit_percent"],
         )
         entries.append(
             {
@@ -175,8 +220,7 @@ def build_routing_manifest(records: list[dict[str, Any]]) -> dict[str, Any]:
                 "metadata_hash": metadata_hash,
                 "source_hash": source_hash,
                 "contract_version": record["contract_version"],
-                "parent_risk_context": record["parent_risk_context"],
-                "audit_percent": record["audit_percent"],
+                "workflow_context_hash": workflow_context_hash(workflow_entry),
                 "result": result,
             }
         )
@@ -187,6 +231,7 @@ def validate_routing_manifest(
     alignment_records: list[dict[str, Any]],
     alignment_reviews: list[dict[str, Any]],
     manifest: dict[str, Any],
+    workflow_context: dict[str, Any],
 ) -> list[dict[str, Any]]:
     if not isinstance(manifest, dict) or set(manifest) != {
         "review_contract_version",
@@ -200,12 +245,15 @@ def validate_routing_manifest(
         raise RoutingError("routing manifest records must be an array")
     if len(alignment_records) != len(alignment_reviews):
         raise RoutingError("alignment record and review counts do not match")
+    contexts = validate_workflow_context(alignment_records, workflow_context)
     expected_ids = [record.get("record_id") for record in alignment_records]
     review_ids = [review.get("record_id") for review in alignment_reviews]
     entry_ids = [entry.get("record_id") if isinstance(entry, dict) else None for entry in entries]
     if review_ids != expected_ids or entry_ids != expected_ids or len(expected_ids) != len(set(expected_ids)):
         raise RoutingError("routing record set or order does not match frozen reviews")
-    for record, review, entry in zip(alignment_records, alignment_reviews, entries):
+    for record, review, entry, workflow_entry in zip(
+        alignment_records, alignment_reviews, entries, contexts
+    ):
         if not isinstance(entry, dict) or set(entry) != ROUTING_ENTRY_KEYS:
             raise RoutingError("routing manifest entry has unexpected keys")
         if entry["metadata_hash"] != record.get("metadata_hash"):
@@ -214,16 +262,22 @@ def validate_routing_manifest(
             raise RoutingError("routing source_hash does not match alignment packet")
         if entry["contract_version"] != "deep-review-v1":
             raise RoutingError("routing contract_version is invalid")
+        if entry["workflow_context_hash"] != workflow_context_hash(workflow_entry):
+            raise RoutingError("routing workflow context hash does not match fixed input")
         expected_result = route_record(
             record_id=record["record_id"],
             metadata_hash=record["metadata_hash"],
             contract_version=entry["contract_version"],
             metadata=record["metadata"],
-            parent_risk_context=entry["parent_risk_context"],
+            parent_risk_context={
+                "record_id": workflow_entry["record_id"],
+                "metadata_hash": workflow_entry["metadata_hash"],
+                "risk_tags": workflow_entry["parent_risk_tags"],
+            },
             metadata_verdict=record["metadata_review"]["verdict"],
             alignment_verdict=review["verdict"],
             context_requirements=review["context_requirements"],
-            audit_percent=entry["audit_percent"],
+            audit_percent=workflow_entry["audit_percent"],
         )
         if entry["result"] != expected_result:
             raise RoutingError("routing result does not match frozen review inputs")
@@ -359,12 +413,12 @@ def main() -> int:
     args = parser.parse_args()
     try:
         value = json.loads(args.input.read_text(encoding="utf-8"))
-        if not isinstance(value, dict) or set(value) != {"records"}:
+        if not isinstance(value, dict) or set(value) != {"records", "workflow_context"}:
             raise RoutingError("input must be a JSON object")
         records = value["records"]
         if not isinstance(records, list):
             raise RoutingError("records must be an array")
-        result = build_routing_manifest(records)
+        result = build_routing_manifest(records, value["workflow_context"])
     except (OSError, json.JSONDecodeError, TypeError, RoutingError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")))

@@ -1,4 +1,5 @@
 import sys
+import copy
 import unittest
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from build_review_packets import canonical_json, sha256_text  # noqa: E402
 from review_routing import build_routing_manifest  # noqa: E402
 from validate_review_result import (  # noqa: E402
     ResultValidationError,
-    aggregate_record,
+    aggregate_results,
     validate_phase_result,
 )
 
@@ -55,6 +56,7 @@ def aggregation_input(
     sol_verdict=None,
     retention_basis="PRESENT",
     artifact_state="PERMANENT_TEST",
+    parent_risk_tags=None,
 ):
     metadata = {
         "kind": kind,
@@ -88,20 +90,28 @@ def aggregation_input(
         metadata_hash=identity["metadata_hash"],
         source_hash=identity["source_hash"],
     )
-    manifest = build_routing_manifest(
-        [
+    routing_records = [
+        {
+            **identity,
+            "contract_version": "deep-review-v1",
+            "metadata": metadata,
+            "metadata_verdict": metadata_verdict,
+            "alignment_verdict": alignment_verdict,
+            "context_requirements": alignment_review["context_requirements"],
+        }
+    ]
+    workflow_context = {
+        "review_contract_version": "review-workflow-context-v1",
+        "records": [
             {
-                **identity,
-                "contract_version": "deep-review-v1",
-                "metadata": metadata,
-                "parent_risk_context": None,
-                "metadata_verdict": metadata_verdict,
-                "alignment_verdict": alignment_verdict,
-                "context_requirements": alignment_review["context_requirements"],
+                "record_id": identity["record_id"],
+                "metadata_hash": identity["metadata_hash"],
+                "parent_risk_tags": parent_risk_tags or [],
                 "audit_percent": 0,
             }
-        ]
-    )
+        ],
+    }
+    manifest = build_routing_manifest(routing_records, workflow_context)
     sol_result = None
     if sol_verdict is not None:
         sol_result = {
@@ -118,12 +128,24 @@ def aggregation_input(
             ],
         }
     return {
-        "record": record,
-        "alignment_review": alignment_review,
+        "alignment_packet": {
+            "review_contract_version": "alignment-review-v1",
+            "records": [record],
+        },
+        "alignment_result": {
+            "review_contract_version": "alignment-review-v1",
+            "reviews": [alignment_review],
+        },
+        "workflow_routing_context": workflow_context,
         "routing_manifest": manifest,
         "sol_result": sol_result,
-        "retention_basis": retention_basis,
-        "artifact_state": artifact_state,
+        "retention_records": [
+            {
+                "record_id": identity["record_id"],
+                "retention_basis": retention_basis,
+                "artifact_state": artifact_state,
+            }
+        ],
     }
 
 
@@ -138,9 +160,9 @@ class ReviewResultSchemaTests(unittest.TestCase):
     # @end-test-value
     def test_aggregate_rejects_identity_tamper_and_caller_routing_boolean(self):
         tampered = aggregation_input(kind="security")
-        tampered["record"]["metadata"]["kind"] = "contract"
+        tampered["alignment_packet"]["records"][0]["metadata"]["kind"] = "contract"
         with self.assertRaisesRegex(ResultValidationError, "metadata_hash"):
-            aggregate_record(tampered)
+            aggregate_results(tampered)
 
         scalar_input = {
             "metadata_verdict": "VALID",
@@ -153,7 +175,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
             "artifact_state": "PERMANENT_TEST",
         }
         with self.assertRaisesRegex(ResultValidationError, "unexpected keys"):
-            aggregate_record(scalar_input)
+            aggregate_results(scalar_input)
 
     # @test-value v1
     # kind = "contract"
@@ -245,19 +267,25 @@ class ReviewResultSchemaTests(unittest.TestCase):
     # scope = "review-status-aggregation"
     # lifecycle = "permanent"
     # @end-test-value
-    def test_aggregate_record_fails_closed_and_preserves_redesign(self):
+    def test_aggregate_results_fails_closed_and_preserves_redesign(self):
         base = aggregation_input(kind="security")
         self.assertEqual(
-            aggregate_record(base),
-            {"status": "NEEDS_CONTEXT", "disposition": "KEEP_PERMANENT", "gate": "BLOCKED"},
+            aggregate_results(base)["records"][0],
+            {
+                "record_id": "sha256:" + "1" * 64,
+                "status": "NEEDS_CONTEXT",
+                "disposition": None,
+                "gate": "BLOCKED",
+            },
         )
         redesigned = aggregation_input(
             metadata_verdict="REDESIGN",
             kind="security",
             sol_verdict="APPROVE",
         )
-        self.assertEqual(aggregate_record(redesigned)["status"], "REDESIGN")
-        self.assertEqual(aggregate_record(redesigned)["gate"], "CHANGES_REQUIRED")
+        result = aggregate_results(redesigned)
+        self.assertEqual(result["records"][0]["status"], "REDESIGN")
+        self.assertEqual(result["records"][0]["gate"], "CHANGES_REQUIRED")
 
     # @test-value v1
     # kind = "contract"
@@ -267,7 +295,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
     # scope = "review-disposition-gate"
     # lifecycle = "permanent"
     # @end-test-value
-    def test_aggregate_record_blocks_unresolved_disposition(self):
+    def test_aggregate_results_blocks_unresolved_disposition(self):
         record = aggregation_input(
             lifecycle="ephemeral",
             retention_basis="UNRESOLVED",
@@ -275,9 +303,104 @@ class ReviewResultSchemaTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            aggregate_record(record),
-            {"status": "NEEDS_CONTEXT", "disposition": None, "gate": "BLOCKED"},
+            aggregate_results(record)["records"][0],
+            {
+                "record_id": "sha256:" + "1" * 64,
+                "status": "NEEDS_CONTEXT",
+                "disposition": None,
+                "gate": "BLOCKED",
+            },
         )
+
+    # @test-value v1
+    # kind = "security"
+    # claim = "final aggregatorはmanifestとは独立した親workflow risk contextへrouting結果を固定し親tagの除去を拒否する"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # failure_mode = "親workflowのauthorization tagをmanifest生成時だけ除去してrequired Solを迂回しPASSにする"
+    # scope = "review-final-parent-risk-binding"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_aggregate_results_rejects_manifest_built_without_fixed_parent_risk(self):
+        value = aggregation_input(parent_risk_tags=["authorization"], sol_verdict="APPROVE")
+        downgraded_context = copy.deepcopy(value["workflow_routing_context"])
+        downgraded_context["records"][0]["parent_risk_tags"] = []
+        record = value["alignment_packet"]["records"][0]
+        review = value["alignment_result"]["reviews"][0]
+        routing_record = {
+            "record_id": record["record_id"],
+            "metadata_hash": record["metadata_hash"],
+            "source_hash": record["source_hash"],
+            "contract_version": "deep-review-v1",
+            "metadata": record["metadata"],
+            "metadata_verdict": record["metadata_review"]["verdict"],
+            "alignment_verdict": review["verdict"],
+            "context_requirements": review["context_requirements"],
+        }
+        value["routing_manifest"] = build_routing_manifest(
+            [routing_record], downgraded_context
+        )
+
+        with self.assertRaisesRegex(ResultValidationError, "workflow context hash"):
+            aggregate_results(value)
+
+    # @test-value v1
+    # kind = "contract"
+    # claim = "final aggregatorは複数recordの正規alignment、routing、Sol artifactを分割せず同順で一括集約する"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # failure_mode = "複数testの正規artifactを拒否してrecordごとの手作業JSON分割を必要にする"
+    # scope = "review-final-record-set-aggregation"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_aggregate_results_accepts_complete_multi_record_artifacts(self):
+        first = aggregation_input(kind="security", sol_verdict="APPROVE")
+        second = aggregation_input(kind="security", sol_verdict="APPROVE")
+        second_record = copy.deepcopy(second["alignment_packet"]["records"][0])
+        second_record["record_id"] = "sha256:" + "4" * 64
+        second_record["metadata_review"]["record_id"] = second_record["record_id"]
+        second_review = copy.deepcopy(second["alignment_result"]["reviews"][0])
+        second_review["record_id"] = second_record["record_id"]
+        first["alignment_packet"]["records"].append(second_record)
+        first["alignment_result"]["reviews"].append(second_review)
+        second_context = copy.deepcopy(second["workflow_routing_context"]["records"][0])
+        second_context["record_id"] = second_record["record_id"]
+        first["workflow_routing_context"]["records"].append(second_context)
+        routing_records = []
+        for record, review in zip(
+            first["alignment_packet"]["records"], first["alignment_result"]["reviews"]
+        ):
+            routing_records.append(
+                {
+                    "record_id": record["record_id"],
+                    "metadata_hash": record["metadata_hash"],
+                    "source_hash": record["source_hash"],
+                    "contract_version": "deep-review-v1",
+                    "metadata": record["metadata"],
+                    "metadata_verdict": record["metadata_review"]["verdict"],
+                    "alignment_verdict": review["verdict"],
+                    "context_requirements": review["context_requirements"],
+                }
+            )
+        first["routing_manifest"] = build_routing_manifest(
+            routing_records, first["workflow_routing_context"]
+        )
+        second_sol_review = copy.deepcopy(second["sol_result"]["reviews"][0])
+        second_sol_review["record_id"] = second_record["record_id"]
+        first["sol_result"]["reviews"].append(second_sol_review)
+        first["retention_records"].append(
+            {
+                "record_id": second_record["record_id"],
+                "retention_basis": "PRESENT",
+                "artifact_state": "PERMANENT_TEST",
+            }
+        )
+
+        result = aggregate_results(first)
+
+        self.assertEqual(
+            [record["record_id"] for record in result["records"]],
+            ["sha256:" + "1" * 64, "sha256:" + "4" * 64],
+        )
+        self.assertEqual(result["gate"], "PASS")
 
 
 if __name__ == "__main__":

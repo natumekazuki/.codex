@@ -182,6 +182,17 @@ class ReviewPacketTests(unittest.TestCase):
                 }
             ],
         }
+        workflow_context = {
+            "review_contract_version": "review-workflow-context-v1",
+            "records": [
+                {
+                    "record_id": record["record_id"],
+                    "metadata_hash": record["metadata_hash"],
+                    "parent_risk_tags": ["authorization"],
+                    "audit_percent": 0,
+                }
+            ],
+        }
         routing = build_routing_manifest(
             [
                 {
@@ -190,13 +201,12 @@ class ReviewPacketTests(unittest.TestCase):
                     "source_hash": record["source_hash"],
                     "contract_version": "deep-review-v1",
                     "metadata": record["metadata"],
-                    "parent_risk_context": None,
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": "RECHECK",
                     "context_requirements": ["ADR-0022"],
-                    "audit_percent": 0,
                 }
-            ]
+            ],
+            workflow_context,
         )
         bad_context = {
             record["record_id"]: [
@@ -210,22 +220,55 @@ class ReviewPacketTests(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(PacketError, "context hash"):
-            build_deep_packet(alignment, alignment_result, routing, bad_context)
+            build_deep_packet(
+                alignment, alignment_result, routing, workflow_context, bad_context
+            )
         extra_routing = copy.deepcopy(routing)
         extra_entry = copy.deepcopy(extra_routing["records"][0])
         extra_entry["record_id"] = "sha256:" + "9" * 64
         extra_routing["records"].append(extra_entry)
         with self.assertRaisesRegex(PacketError, "record set or order"):
-            build_deep_packet(alignment, alignment_result, extra_routing, {})
+            build_deep_packet(
+                alignment, alignment_result, extra_routing, workflow_context, {}
+            )
         downgraded = copy.deepcopy(routing)
         downgraded["records"][0]["result"]["required"] = False
         downgraded["records"][0]["result"]["reasons"] = []
         with self.assertRaisesRegex(PacketError, "routing result"):
-            build_deep_packet(alignment, alignment_result, downgraded, {})
+            build_deep_packet(
+                alignment, alignment_result, downgraded, workflow_context, {}
+            )
+        removed_parent_risk = copy.deepcopy(workflow_context)
+        removed_parent_risk["records"][0]["parent_risk_tags"] = []
+        manifest_without_parent_risk = build_routing_manifest(
+            [
+                {
+                    "record_id": record["record_id"],
+                    "metadata_hash": record["metadata_hash"],
+                    "source_hash": record["source_hash"],
+                    "contract_version": "deep-review-v1",
+                    "metadata": record["metadata"],
+                    "metadata_verdict": record["metadata_review"]["verdict"],
+                    "alignment_verdict": "RECHECK",
+                    "context_requirements": ["ADR-0022"],
+                }
+            ],
+            removed_parent_risk,
+        )
+        with self.assertRaisesRegex(PacketError, "workflow context hash"):
+            build_deep_packet(
+                alignment,
+                alignment_result,
+                manifest_without_parent_risk,
+                workflow_context,
+                {},
+            )
         expanded_alignment = copy.deepcopy(alignment)
         expanded_alignment["records"][0]["unhashed_extra_context"] = "production source"
         with self.assertRaisesRegex(PacketError, "unexpected keys"):
-            build_deep_packet(expanded_alignment, alignment_result, routing, {})
+            build_deep_packet(
+                expanded_alignment, alignment_result, routing, workflow_context, {}
+            )
 
 
 if __name__ == "__main__":

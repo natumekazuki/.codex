@@ -67,7 +67,7 @@ python -X utf8 <skill-dir>/scripts/validate_review_result.py alignment `
   --packet <alignment-packet.json>
 ```
 
-11. [references/routing-policy.md](references/routing-policy.md)に従ってrecordごとのrouting inputを作り、次のscriptでSol routingを決める。Phase 1 `NEEDS_CONTEXT`、Phase 2 `RECHECK`、bounded contextが必要、高リスク、監査対象のrecordだけを[references/deep-review-contract.md](references/deep-review-contract.md)のpacketへ入れ、`test_value_sol`へ渡す。packet外を探索させない。
+11. [references/routing-policy.md](references/routing-policy.md)に従い、親workflowが固定したrisk tagとaudit率を`workflow_context`へ分離してrecordごとのrouting inputを作る。次のscriptでSol routingを決める。Phase 1 `NEEDS_CONTEXT`、Phase 2 `RECHECK`、bounded contextが必要、高リスク、監査対象のrecordだけを[references/deep-review-contract.md](references/deep-review-contract.md)のpacketへ入れ、`test_value_sol`へ渡す。packet外を探索させない。
 
 ```powershell
 python -X utf8 <skill-dir>/scripts/review_routing.py --input <routing-input.json>
@@ -76,10 +76,11 @@ python -X utf8 <skill-dir>/scripts/build_review_packets.py deep `
   --alignment-packet <alignment-packet.json> `
   --alignment-result <alignment-result.json> `
   --routing <routing-manifest.json> `
+  --routing-context <workflow-routing-context.json> `
   --context <context-by-record.json>
 ```
 12. required agentを起動できない場合は親agentが代行せず、そのrecordを`status = NEEDS_CONTEXT`、`disposition = null`、`gate = BLOCKED`として停止する。別modelへsilent fallbackしない。
-13. alignment packetの一record、同じrecordのPhase 2 result、検証対象routing manifest、requiredな場合のSol result、保持根拠、artifact stateを`validate_review_result.py aggregate`へ渡し、`status`、`disposition`、`gate`を決める。`sol_required`やphase verdictを独立したscalarとして再入力しない。Bootstrapではmetadata v1を読み、v1 `ephemeral`の削除条件、resolution ledger、元test削除後の`PASS`を有効化しない。
+13. 完全なalignment packet、Phase 2 result、親workflowのrouting context、routing manifest、required record集合のSol resultまたは未実行を表す`null`、全recordの保持根拠とartifact stateを`validate_review_result.py aggregate`へ渡す。aggregatorはrecord集合を分割せず同順で`status`、`disposition`、record gate、aggregate gateを決める。`sol_required`やphase verdictを独立したscalarとして再入力しない。Bootstrapではmetadata v1を読み、v1 `ephemeral`の削除条件、resolution ledger、元test削除後の`PASS`を有効化しない。
 14. JSON field、diagnostic、exit statusの確認が必要なら[references/output-v1.md](references/output-v1.md)を読む。
 
 ## Extraction Rules
