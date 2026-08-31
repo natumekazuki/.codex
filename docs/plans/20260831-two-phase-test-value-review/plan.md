@@ -142,7 +142,7 @@
 - [x] `config/agents.example.toml`とREADMEへroleを追加する。
 - [x] 現行の`review-test-value`契約で変更testを審査する。
 - [x] bootstrap commitを固定し、direct checkとcommit-bound reviewを完了する。
-- [ ] `AGENTS.md`の完了条件はまだ変更しない。
+- [x] `AGENTS.md`の完了条件はまだ変更しない。
 
 ### Runtime activation
 
