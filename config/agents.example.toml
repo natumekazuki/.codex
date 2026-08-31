@@ -46,3 +46,9 @@ config_file = "agents/slice_reviewer.toml"
 
 [agents.fast_reviewer]
 config_file = "agents/fast_reviewer.toml"
+
+[agents.test_value_luna]
+config_file = "agents/test_value_luna.toml"
+
+[agents.test_value_sol]
+config_file = "agents/test_value_sol.toml"

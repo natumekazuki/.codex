@@ -194,7 +194,7 @@ bootstrap changeで次のartifactを追加し、実装とdirect checkが揃っ�
 
 - Review contracts: `skills/review-test-value/references/metadata-review-contract.md`、`skills/review-test-value/references/alignment-review-contract.md`、`skills/review-test-value/references/deep-review-contract.md`
 - Routing: `skills/review-test-value/references/routing-policy.md`
-- Source: `skills/review-test-value/scripts/build_review_packets.py`、`skills/review-test-value/scripts/validate_review_result.py`
+- Source: `skills/review-test-value/scripts/build_review_packets.py`、`skills/review-test-value/scripts/review_routing.py`、`skills/review-test-value/scripts/validate_review_result.py`
 - Agents: `agents/test_value_luna.toml`、`agents/test_value_sol.toml`
 - Tests: `skills/review-test-value/scripts/test_review_packets.py`、`skills/review-test-value/scripts/test_review_result_schema.py`、`skills/review-test-value/scripts/test_review_routing.py`
 

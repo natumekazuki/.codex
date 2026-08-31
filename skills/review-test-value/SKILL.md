@@ -5,7 +5,7 @@ description: Python、TypeScript、C#のtest sourceへ隣接する構造化さ�
 
 # Review Test Value
 
-構造化コメントとtest sourceの対応付けをscriptへ任せ、AIは抽出済みrecordだけを審査する。欠落した値や曖昧な結合を会話内で補完しない。
+構造化コメントとtest sourceの対応付けをscriptへ任せ、metadata単体の価値、test sourceとの整合、必要なbounded deep review、保持先を分けて審査する。欠落した値や曖昧な結合を会話内で補完しない。
 
 抽出CLIには`tomllib`を含むPython 3.11以降を使う。TypeScriptにはNode.jsと固定済みnpm依存、C#には.NET 8 SDKと固定済みNuGet依存を追加で使う。
 
@@ -40,8 +40,47 @@ python -X utf8 <skill-dir>/scripts/extract_test_values.py `
 
 6. exit `1`ではstdoutの`diagnostics`を読み、sourceまたはコメントを修正してから再実行する。抽出器を迂回してAI審査へ進まない。
 7. exit `2`ではstderrを読み、root、path、依存、I/Oを直す。信頼できる部分結果があるとみなさない。
-8. exit `0`の`tests`だけを[references/review-contract.md](references/review-contract.md)に従って審査する。
-9. JSON field、diagnostic、exit statusの確認が必要なら[references/output-v1.md](references/output-v1.md)を読む。
+8. exit `0`のresultからmetadata packetを作る。packetは[references/metadata-review-contract.md](references/metadata-review-contract.md)に従い、source locator、source text、source hashを含めない。
+
+```powershell
+python -X utf8 <skill-dir>/scripts/build_review_packets.py metadata `
+  --extractor <extractor-result.json>
+```
+
+9. `test_value_luna`をmetadata phaseとして起動し、packetだけを渡す。結果を次で検証し、schema不正なら審査結果として採用しない。
+
+```powershell
+python -X utf8 <skill-dir>/scripts/validate_review_result.py metadata `
+  --input <metadata-result.json> `
+  --packet <metadata-packet.json>
+```
+
+10. 固定済みmetadata resultと同じextractor resultからalignment packetを作る。同じ`test_value_luna` childへfollow-upできる場合は二turn目として渡し、できない場合だけ別childを起動する。二phaseを一promptへ統合しない。Phase 1が`REDESIGN`のrecordも省略しない。契約は[references/alignment-review-contract.md](references/alignment-review-contract.md)を使う。
+
+```powershell
+python -X utf8 <skill-dir>/scripts/build_review_packets.py alignment `
+  --extractor <extractor-result.json> `
+  --metadata-result <metadata-result.json>
+
+python -X utf8 <skill-dir>/scripts/validate_review_result.py alignment `
+  --input <alignment-result.json> `
+  --packet <alignment-packet.json>
+```
+
+11. [references/routing-policy.md](references/routing-policy.md)に従ってrecordごとのrouting inputを作り、次のscriptでSol routingを決める。Phase 1 `NEEDS_CONTEXT`、Phase 2 `RECHECK`、bounded contextが必要、高リスク、監査対象のrecordだけを[references/deep-review-contract.md](references/deep-review-contract.md)のpacketへ入れ、`test_value_sol`へ渡す。packet外を探索させない。
+
+```powershell
+python -X utf8 <skill-dir>/scripts/review_routing.py --input <routing-input.json>
+
+python -X utf8 <skill-dir>/scripts/build_review_packets.py deep `
+  --alignment-packet <alignment-packet.json> `
+  --alignment-result <alignment-result.json> `
+  --routing <routing-result-by-record.json> `
+  --context <context-by-record.json>
+```
+12. required agentを起動できない場合は親agentが代行せず、そのrecordを`status = NEEDS_CONTEXT`、`disposition = null`、`gate = BLOCKED`として停止する。別modelへsilent fallbackしない。
+13. phase result、routing、actual boundary、lifecycle、保持根拠、artifact stateを`validate_review_result.py aggregate`へ渡し、`status`、`disposition`、`gate`を決める。Bootstrapではmetadata v1を読み、v1 `ephemeral`の削除条件、resolution ledger、元test削除後の`PASS`を有効化しない。
+14. JSON field、diagnostic、exit statusの確認が必要なら[references/output-v1.md](references/output-v1.md)を読む。
 
 ## Extraction Rules
 
@@ -56,13 +95,13 @@ python -X utf8 <skill-dir>/scripts/extract_test_values.py `
 
 ## Review Result
 
-test recordごとに次を返す。
+test recordごとに`status`、`disposition`、`gate`を分けて返す。
 
-- `ACCEPT`: 抽出record内では価値コメントが反証可能で、本文のobservableが同じfailure modeを検出する。
-- `REDESIGN`: claim、oracle、failure mode、scope、distinctness、または本文との対応に具体的な欠陥がある。
-- `NEEDS_CONTEXT`: record外の根拠がなければrecord内の設計判定も確定できず、明示的な追加sourceが必要である。
+- `status`: `ACCEPT`、`REDESIGN`、`NEEDS_CONTEXT`
+- `disposition`: `KEEP_PERMANENT`、`KEEP_TEMPORARY`、`MOVE_TO_POLICY_CHECK`、`DROP`、または未確定の`null`
+- `gate`: `PASS`、`CHANGES_REQUIRED`、`BLOCKED`
 
-判定には`evidence`、`unverified`、必要なら`next_action`を添える。oracle本文が入力されていない場合は`oracle.ref`を必ず`unverified`へ残し、参照先の存在、claimの裏付け、非循環性を確認済みと表現しない。文章の巧拙だけを`REDESIGN`理由にしない。
+phase判定には`evidence`、`unverified`、必要なら`next_action`を添える。oracle本文が入力されていない場合は`oracle.ref`を必ず`unverified`へ残し、参照先の存在、claimの裏付け、非循環性を確認済みと表現しない。文章の巧拙だけを`REDESIGN`理由にしない。
 
 ## Validation
 
@@ -71,7 +110,13 @@ Skillまたはscriptを変更したら次を実行する。
 ```powershell
 python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values_multilang.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_values.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/git_diff_selection.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py
 python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-value
 ```

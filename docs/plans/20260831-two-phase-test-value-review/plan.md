@@ -132,15 +132,15 @@
 
 ### Bootstrap change
 
-- [ ] `test_value_luna`と`test_value_sol`のagent TOMLを追加する。
-- [ ] metadata、alignment、deep review contractを追加する。
-- [ ] v1 recordからPhase 1 / Phase 2 packetを作るbuilderを追加する。
-- [ ] frozen result、agent output、status / disposition / gateを検証するvalidatorを追加する。
-- [ ] risk context、Sol escalation、disposition、gateのtruth tableを追加する。
-- [ ] agent unavailableを`NEEDS_CONTEXT / BLOCKED`へ閉じる。
-- [ ] v1で再現例と二phase regression caseを追加する。
-- [ ] `config/agents.example.toml`とREADMEへroleを追加する。
-- [ ] 現行の`review-test-value`契約で変更testを審査する。
+- [x] `test_value_luna`と`test_value_sol`のagent TOMLを追加する。
+- [x] metadata、alignment、deep review contractを追加する。
+- [x] v1 recordからPhase 1 / Phase 2 packetを作るbuilderを追加する。
+- [x] frozen result、agent output、status / disposition / gateを検証するvalidatorを追加する。
+- [x] risk context、Sol escalation、disposition、gateのtruth tableを追加する。
+- [x] agent unavailableを`NEEDS_CONTEXT / BLOCKED`へ閉じる。
+- [x] v1で再現例と二phase regression caseを追加する。
+- [x] `config/agents.example.toml`とREADMEへroleを追加する。
+- [x] 現行の`review-test-value`契約で変更testを審査する。
 - [ ] bootstrap commitを固定し、direct checkとcommit-bound reviewを完了する。
 - [ ] `AGENTS.md`の完了条件はまだ変更しない。
 
@@ -203,6 +203,7 @@ python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py
 python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-value
 ```
@@ -218,6 +219,7 @@ python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.
 python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_values.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/git_diff_selection.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py
 python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-value
 ```
