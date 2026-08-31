@@ -66,7 +66,7 @@
 - Siblings in scope: metadata verdict、alignment verdict、deep verdict、actual boundary、lifecycle、artifact state、agent unavailable。
 - Failure mode / consumer impact: `ACCEPT`したdeclaration testをそのまま永続testとして完了扱いにする、または`REDESIGN`を理由に保持先が不明なままになる。
 - State transitions / failure timing: Phase 1、Phase 2、必要なSol reviewの完了後にstatusとdispositionを決め、artifact stateとresolutionを確認してgateを決める。
-- Direct verification: status、actual boundary、lifecycle、artifact stateの全material tupleをtruth tableで検証し、不可能な組合せをschemaで拒否する。
+- Direct verification: ADR-0022のstatus table、disposition table、record / aggregate gate tableをfixtureへ一対一で投影し、優先順位とinvalid combinationを検証する。
 - Independent review trigger: RTV-203と同じactivation reviewで確認する。
 - Gate: ready。
 
@@ -227,7 +227,7 @@ Runtime activationでは次をmanual smokeする。
 - `test_value_luna`のPhase 1がmetadata-only schemaを返す。
 - frozen Phase 1 resultを同じchildへ渡したPhase 2がalignment schemaを返す。
 - follow-up非対応時の二child fallbackでもPhase 1へtest sourceを渡さない。
-- high-riskまたは`RECHECK`だけが`test_value_sol`へ昇格する。
+- `NEEDS_CONTEXT`、`RECHECK`、high-risk、audit対象、またはbounded contextが必要なrecordだけが`test_value_sol`へ昇格する。
 - balanced、spark-first、standard-onlyの各modeでagent TOMLのmodelが維持される。
 - required agent unavailable時に親agentが代行せず`BLOCKED`になる。
 
@@ -243,7 +243,7 @@ Runtime activationでは次をmanual smokeする。
 
 - Luna Phase 1がrepository sourceを読む可能性がある。packet builder、agent tool禁止、output schemaの三層で拒否する。
 - 同じLuna threadがPhase 2でPhase 1を補正する可能性がある。親側でresultを固定し、Phase 2 schemaへPhase 1 verdictの再出力を持たせない。
-- Solがself-containedでないmetadataを追加contextから救済する可能性がある。Phase 1 `REDESIGN`をSolへ送らず、Sol contractでmetadataの補完を禁止する。
+- Solがself-containedでないmetadataを追加contextから救済する可能性がある。high-riskまたはaudit対象のPhase 1 `REDESIGN`はSolへ送るが、frozen verdictを変更させずfinal `REDESIGN / CHANGES_REQUIRED`を維持する。それ以外の明白なPhase 1 `REDESIGN`はSolへ送らない。
 - declaration checkの移行先が存在しない場合がある。`MOVE_TO_POLICY_CHECK`を`PASS`にせず、移行先とdirect checkをresolution ledgerで要求する。
 - custom agentが現在のsessionで利用できない。bootstrap changeとactivationを分け、live config反映後の新sessionでsmokeを完了する。
 - metadataだけではhigh-riskを完全に分類できない。親workflowのrisk contextを和集合にし、metadataからdowngradeできないようにする。

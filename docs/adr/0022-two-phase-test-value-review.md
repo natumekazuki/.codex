@@ -51,7 +51,7 @@
 ### status、disposition、gateを独立して決める
 
 - `status`はmetadataとtest sourceの審査結果を表す。
-  - `ACCEPT`: metadataが自己完結し、test sourceと整合し、必要なdeep reviewが通過した。
+  - `ACCEPT`: metadataが自己完結しているか、明示された追加contextでPhase 1の不確定事項が解消され、test sourceと整合し、必要なdeep reviewが通過した。
   - `REDESIGN`: metadata、test source、または両者の対応に具体的な欠陥がある。
   - `NEEDS_CONTEXT`: 必要なsource、agent、revision、または依存がなく判定を閉じられない。
 - `disposition`は現在のtest artifactの保持先を表す。
@@ -67,16 +67,56 @@
 - `status = REDESIGN`は常に`CHANGES_REQUIRED`、`status = NEEDS_CONTEXT`は常に`BLOCKED`とする。
 - `status = ACCEPT`でも、test artifactとdispositionが一致しない場合は`CHANGES_REQUIRED`とする。
 
-dispositionはactual boundary、lifecycle、保持根拠から次の順に決める。
+statusはPhase結果とSol結果を次の優先順で決める。上の行に一致した場合は下の行を評価しない。
+
+| 優先 | Phase 1 | Phase 2 | Sol | status |
+| ---: | --- | --- | --- | --- |
+| 1 | 未完了またはschema不正 | any | any | `NEEDS_CONTEXT` |
+| 2 | any | 未完了またはschema不正 | any | `NEEDS_CONTEXT` |
+| 3 | any | any | requiredだがunavailable、schema不正、または`NEEDS_CONTEXT` | `NEEDS_CONTEXT` |
+| 4 | `REDESIGN` | any | not requiredまたは任意の完了verdict | `REDESIGN` |
+| 5 | any | `MISMATCH` | not requiredまたは任意の完了verdict | `REDESIGN` |
+| 6 | `VALID`または`NEEDS_CONTEXT` | `ALIGNED`または`RECHECK` | `REDESIGN` | `REDESIGN` |
+| 7 | `VALID` | `ALIGNED` | not required、またはrequiredかつ`APPROVE` | `ACCEPT` |
+| 8 | `VALID` | `RECHECK` | requiredかつ`APPROVE` | `ACCEPT` |
+| 9 | `NEEDS_CONTEXT` | `ALIGNED`または`RECHECK` | requiredかつ`APPROVE` | `ACCEPT` |
+| 10 | その他 | その他 | その他 | invalid combinationとして`NEEDS_CONTEXT` |
+
+- Phase 1 `NEEDS_CONTEXT`またはPhase 2 `RECHECK`は必ずSolをrequiredにする。Solが追加contextで不確定事項を解消して`APPROVE`した場合だけ`ACCEPT`へ進める。
+- high-riskまたはaudit対象はPhase 1、Phase 2のverdictにかかわらずSolをrequiredにする。Solはfrozen Phase 1 verdictとPhase 2 verdictを変更できない。Solが完了verdictを返した場合、Phase 1 `REDESIGN`またはPhase 2 `MISMATCH`のfinal statusは`REDESIGN`のままとする。Solがunavailable、schema不正、または`NEEDS_CONTEXT`なら上位のfail-closed規則を適用する。
+- Phase 1 `REDESIGN`またはPhase 2 `MISMATCH`でhigh-riskでもaudit対象でもないrecordは、明白な欠陥としてSolへ送らない。
+- requiredでないSol verdict、requiredなのにSolを実行していないresult、またはPhase 1 `NEEDS_CONTEXT` / Phase 2 `RECHECK`でSolがrequiredでないresultはinvalid combinationとして拒否する。
+
+dispositionを決める前に、declaration自体がconsumerへ配布される正式artifactならactual boundaryを`public-boundary`へ再分類する。その後、actual boundary、lifecycle、保持根拠から次の表で決める。
 
 | actual boundary | 条件 | disposition |
 | --- | --- | --- |
-| `declaration` | declaration自体がconsumerへ配布される正式artifactではない | `MOVE_TO_POLICY_CHECK` |
-| `implementation` | 期限または削除条件を持つcharacterization / ephemeral | `KEEP_TEMPORARY` |
-| `implementation` | 上記以外 | `DROP` |
-| `consumer`、`public-boundary`、`component-behavior` | `lifecycle = "permanent"`で保持根拠がある | `KEEP_PERMANENT` |
-| 同上 | characterization / ephemeralの条件を満たす | `KEEP_TEMPORARY` |
-| 未確定 | packetだけでは判定できない | `null` |
+| `declaration` | any | `MOVE_TO_POLICY_CHECK` |
+| `implementation` | characterizationの期限・見直し条件、またはephemeralの削除条件を満たす | `KEEP_TEMPORARY` |
+| `implementation` | `permanent`、またはtemporary条件が不正・不足 | `DROP` |
+| `consumer`、`public-boundary`、`component-behavior` | `permanent`かつ保持根拠あり | `KEEP_PERMANENT` |
+| 同上 | `permanent`かつ保持根拠なし | `DROP` |
+| 同上 | characterizationの期限・見直し条件、またはephemeralの削除条件を満たす | `KEEP_TEMPORARY` |
+| 同上 | temporary条件が不正・不足 | `DROP` |
+| 未確定 | additional contextで確定できる可能性がある | `null` |
+
+- 保持根拠はaccepted contract、security / safety property、compatibility、incident regression、reference modelのいずれかとする。packetだけでは保持根拠を確定できない場合は`disposition = null`、`status = NEEDS_CONTEXT`、`gate = BLOCKED`とする。
+- schema上不正なlifecycle条件はPhase 1前にextractor errorとして停止する。AI outputに不正なlifecycle tupleが現れた場合はinvalid combinationとして`BLOCKED`にする。
+
+record gateとSkill実行全体のaggregate gateは次の優先順で決める。
+
+| 優先 | status | disposition / artifact / resolution | gate |
+| ---: | --- | --- | --- |
+| 1 | `NEEDS_CONTEXT` | any | `BLOCKED` |
+| 2 | `REDESIGN` | any | `CHANGES_REQUIRED` |
+| 3 | `ACCEPT` | `disposition = null`または不可能なartifact state | `BLOCKED` |
+| 4 | `ACCEPT` | `KEEP_PERMANENT`かつpermanent testとして存在 | `PASS` |
+| 5 | `ACCEPT` | `KEEP_TEMPORARY`かつ必要な期限・条件を持つtestとして存在 | `PASS` |
+| 6 | `ACCEPT` | `MOVE_TO_POLICY_CHECK`または`DROP`で元testが残存、またはresolution未完了 | `CHANGES_REQUIRED` |
+| 7 | `ACCEPT` | `MOVE_TO_POLICY_CHECK`または`DROP`で元testが消え、対応resolutionが`RESOLVED` | resolution entryがrecord gateを置き換えて`PASS` |
+
+- aggregate gateは、`BLOCKED`が一件でもあれば`BLOCKED`、それ以外で`CHANGES_REQUIRED`または未解決resolutionが一件でもあれば`CHANGES_REQUIRED`、それ以外は`PASS`とする。
+- recordもresolution entryも存在しない空のGit selectionは、以前にrequired resolutionがなかった場合だけ`PASS`にできる。以前のreviewでrequired resolutionが作られたSkill実行では、そのledgerを失った空selectionを`PASS`にしない。
 
 ### MOVEとDROPをSkill実行全体のgateで閉じる
 
@@ -142,10 +182,25 @@ dispositionはactual boundary、lifecycle、保持根拠から次の順に決め
 
 ## Executable Anchors
 
+現時点の正本は次のartifactである。
+
 - Skill workflow: `skills/review-test-value/SKILL.md`
-- Metadata formats: `skills/review-test-value/references/comment-format-v1.md`、`skills/review-test-value/references/comment-format-v2.md`
+- Metadata format: `skills/review-test-value/references/comment-format-v1.md`
+- Review contract and output: `skills/review-test-value/references/review-contract.md`、`skills/review-test-value/references/output-v1.md`
+- Source: `skills/review-test-value/scripts/extract_test_values.py`
+- Tests: `skills/review-test-value/scripts/test_extract_test_values.py`、`skills/review-test-value/scripts/test_extract_test_values_multilang.py`
+
+bootstrap changeで次のartifactを追加し、実装とdirect checkが揃った時点で正本にする。
+
 - Review contracts: `skills/review-test-value/references/metadata-review-contract.md`、`skills/review-test-value/references/alignment-review-contract.md`、`skills/review-test-value/references/deep-review-contract.md`
-- Routing and output: `skills/review-test-value/references/routing-policy.md`、`skills/review-test-value/references/output-v2.md`
-- Source: `skills/review-test-value/scripts/extract_test_values.py`、`skills/review-test-value/scripts/build_review_packets.py`、`skills/review-test-value/scripts/validate_review_result.py`
+- Routing: `skills/review-test-value/references/routing-policy.md`
+- Source: `skills/review-test-value/scripts/build_review_packets.py`、`skills/review-test-value/scripts/validate_review_result.py`
 - Agents: `agents/test_value_luna.toml`、`agents/test_value_sol.toml`
-- Tests / schemas / static checks: `skills/review-test-value/scripts/test_extract_test_values.py`、`skills/review-test-value/scripts/test_extract_test_values_multilang.py`、`skills/review-test-value/scripts/test_review_packets.py`、`skills/review-test-value/scripts/test_review_result_schema.py`、`skills/review-test-value/scripts/test_review_routing.py`
+- Tests: `skills/review-test-value/scripts/test_review_packets.py`、`skills/review-test-value/scripts/test_review_result_schema.py`、`skills/review-test-value/scripts/test_review_routing.py`
+
+activation changeで次のartifactを追加または更新し、実装とdirect checkが揃った時点で正本にする。
+
+- Metadata format: `skills/review-test-value/references/comment-format-v2.md`
+- Output: `skills/review-test-value/references/output-v2.md`
+- Source: `skills/review-test-value/scripts/extract_test_values.py`
+- Tests: `skills/review-test-value/scripts/test_extract_test_values.py`、`skills/review-test-value/scripts/test_extract_test_values_multilang.py`
