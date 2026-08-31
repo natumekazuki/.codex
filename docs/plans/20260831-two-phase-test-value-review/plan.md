@@ -160,7 +160,7 @@
 - [x] final aggregatorをrecord集合単位へ変更し、複数recordのalignment、routing、Sol artifactを分割せず集約する。
 - [x] required Solが未実行または`NEEDS_CONTEXT`の場合はdisposition計算前に`NEEDS_CONTEXT / null / BLOCKED`へ短絡する。
 - [x] 3件の反例を回帰testへ追加し、Git modeの抽出をexit `0`で完了する。
-- [ ] 修正commitを固定し、元finding familyに限定したcommit-bound reviewを完了する。
+- [x] 修正commitを固定し、元finding familyに限定したcommit-bound reviewを完了する。
 
 ### Metadata v2 and gate activation
 
