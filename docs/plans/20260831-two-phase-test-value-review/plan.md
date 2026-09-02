@@ -170,7 +170,7 @@
 - [x] canonical deep packet全体のhashへSol resultを結合し、別のPhase 1 resultまたはbounded contextで得た結果の再利用を拒否する。
 - [x] source locatorとmetadata hashから`record_id`を再計算し、canonical alignment recordとsource schemaを後段でも検証する。
 - [x] runtime activationとmetadata-only isolation smokeが完了するまで、`SKILL.md`とREADMEの実行経路を現行workflowへ戻す。
-- [ ] 修正commitを固定し、RTV-201、RTV-202、RTV-207のfinding familyに限定したcommit-bound reviewを完了する。
+- [x] 修正commitを固定し、RTV-201、RTV-202、RTV-207のfinding familyに限定したcommit-bound reviewを完了する。
 
 ### Metadata v2 and gate activation
 

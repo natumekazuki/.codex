@@ -256,6 +256,9 @@ def validate_deep_packet(
     records = packet["records"]
     if not isinstance(records, list):
         raise ResultValidationError("deep packet records must be an array")
+    for record in records:
+        if not isinstance(record, dict) or set(record) != DEEP_RECORD_KEYS:
+            raise ResultValidationError("deep packet record has unexpected keys")
     required = [
         (record, review, entry["result"])
         for record, review, entry in zip(
@@ -268,8 +271,6 @@ def validate_deep_packet(
     ]:
         raise ResultValidationError("deep packet record set or order does not match routing")
     for deep_record, (alignment_record, alignment_review, route) in zip(records, required):
-        if not isinstance(deep_record, dict) or set(deep_record) != DEEP_RECORD_KEYS:
-            raise ResultValidationError("deep packet record has unexpected keys")
         for key in ALIGNMENT_RECORD_KEYS:
             if deep_record[key] != alignment_record[key]:
                 raise ResultValidationError(f"deep packet {key} does not match alignment")

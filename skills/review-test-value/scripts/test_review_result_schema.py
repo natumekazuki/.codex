@@ -341,6 +341,17 @@ class ReviewResultSchemaTests(unittest.TestCase):
     # lifecycle = "permanent"
     # @end-test-value
     def test_aggregate_rejects_sol_result_from_another_phase1_result(self):
+        unexpected_record = aggregation_input()
+        unexpected_record["deep_packet"]["records"].append(None)
+        unexpected_record["deep_packet"]["input_hash"] = result_hash(
+            {
+                key: unexpected_record["deep_packet"][key]
+                for key in ("review_contract_version", "metadata_result_hash", "records")
+            }
+        )
+        with self.assertRaisesRegex(ResultValidationError, "unexpected keys"):
+            aggregate_results(unexpected_record)
+
         tampered_packet = aggregation_input(
             metadata_verdict="NEEDS_CONTEXT", kind="security", sol_verdict="APPROVE"
         )
