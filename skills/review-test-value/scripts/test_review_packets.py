@@ -325,6 +325,29 @@ class ReviewPacketTests(unittest.TestCase):
                 workflow_context,
                 {},
             )
+        deep_packet = build_deep_packet(
+            alignment,
+            fixed_metadata_result,
+            alignment_result,
+            routing,
+            workflow_context,
+            {},
+        )
+        self.assertEqual(
+            deep_packet["input_hash"],
+            sha256_text(
+                canonical_json(
+                    {
+                        key: deep_packet[key]
+                        for key in (
+                            "review_contract_version",
+                            "metadata_result_hash",
+                            "records",
+                        )
+                    }
+                )
+            ),
+        )
 
     # @test-value v1
     # kind = "security"

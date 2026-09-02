@@ -95,14 +95,16 @@ def aggregation_input(
         "record_id": identity["record_id"],
         "metadata_hash": identity["metadata_hash"],
         "verdict": metadata_verdict,
-        "evidence": [
+        "evidence": [] if metadata_verdict == "NEEDS_CONTEXT" else [
             {
                 "fields": ["claim", "failure_mode", "scope"],
                 "finding": "COHERENT_BOUNDARY",
             }
         ],
-        "unverified": [],
-        "next_action": None,
+        "unverified": ["oracle.ref"] if metadata_verdict == "NEEDS_CONTEXT" else [],
+        "next_action": (
+            "oracle.refを確認する" if metadata_verdict == "NEEDS_CONTEXT" else None
+        ),
     }
     metadata_result = {
         "review_contract_version": "metadata-review-v1",
@@ -146,11 +148,41 @@ def aggregation_input(
         ],
     }
     manifest = build_routing_manifest(routing_records, workflow_context)
+    alignment_packet = {
+        "review_contract_version": "alignment-review-v1",
+        "metadata_result_hash": result_hash(metadata_result),
+        "records": [record],
+    }
+    route = manifest["records"][0]["result"]
+    deep_records = []
+    if route["required"]:
+        deep_records.append(
+            {
+                **copy.deepcopy(record),
+                "alignment_review": copy.deepcopy(alignment_review),
+                "routing_reasons": route["reasons"],
+                "risk_tags": route["risk_tags"],
+                "audit_selected": route["audit_selected"],
+                "context": [],
+                "included_scope": [],
+                "excluded_scope": ["packet外のrepository source"],
+            }
+        )
+    deep_packet_content = {
+        "review_contract_version": "deep-review-v1",
+        "metadata_result_hash": alignment_packet["metadata_result_hash"],
+        "records": deep_records,
+    }
+    deep_packet = {
+        **deep_packet_content,
+        "input_hash": result_hash(deep_packet_content),
+    }
     sol_result = None
     if sol_verdict is not None:
         needs_context = sol_verdict == "NEEDS_CONTEXT"
         sol_result = {
             "review_contract_version": "deep-review-v1",
+            "input_hash": deep_packet["input_hash"],
             "reviews": [
                 {
                     **identity,
@@ -163,12 +195,9 @@ def aggregation_input(
             ],
         }
     return {
-        "alignment_packet": {
-            "review_contract_version": "alignment-review-v1",
-            "metadata_result_hash": result_hash(metadata_result),
-            "records": [record],
-        },
+        "alignment_packet": alignment_packet,
         "metadata_result": metadata_result,
+        "deep_packet": deep_packet,
         "alignment_result": {
             "review_contract_version": "alignment-review-v1",
             "reviews": [alignment_review],
@@ -304,6 +333,39 @@ class ReviewResultSchemaTests(unittest.TestCase):
             aggregate_results(value)
 
     # @test-value v1
+    # kind = "security"
+    # claim = "Sol resultはPhase 1、alignment、routing、bounded contextを含むcanonical deep packet全体へ結合される"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # failure_mode = "別のPhase 1 resultで得たSol APPROVEを現在のNEEDS_CONTEXT recordへ再利用してPASSにする"
+    # scope = "review-final-deep-input-binding"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_aggregate_rejects_sol_result_from_another_phase1_result(self):
+        tampered_packet = aggregation_input(
+            metadata_verdict="NEEDS_CONTEXT", kind="security", sol_verdict="APPROVE"
+        )
+        tampered_packet["deep_packet"]["records"][0]["metadata_review"][
+            "verdict"
+        ] = "VALID"
+        with self.assertRaisesRegex(ResultValidationError, "input_hash"):
+            aggregate_results(tampered_packet)
+
+        previous = aggregation_input(
+            metadata_verdict="VALID", kind="security", sol_verdict="APPROVE"
+        )
+        current = aggregation_input(
+            metadata_verdict="NEEDS_CONTEXT", kind="security", sol_verdict="APPROVE"
+        )
+        self.assertNotEqual(
+            previous["deep_packet"]["metadata_result_hash"],
+            current["deep_packet"]["metadata_result_hash"],
+        )
+        current["sol_result"] = previous["sol_result"]
+
+        with self.assertRaisesRegex(ResultValidationError, "input_hash"):
+            aggregate_results(current)
+
+    # @test-value v1
     # kind = "contract"
     # claim = "NEEDS_CONTEXT resultはmetadata phaseで未確認事項と次のactionを、deep phaseで必要contextを具体的に示す"
     # oracle = { type = "adr", ref = "ADR-0022" }
@@ -327,6 +389,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
         }
         deep = {
             "review_contract_version": "deep-review-v1",
+            "input_hash": "sha256:" + "4" * 64,
             "reviews": [
                 {
                     **record,
@@ -342,7 +405,9 @@ class ReviewResultSchemaTests(unittest.TestCase):
         with self.assertRaises(ResultValidationError):
             validate_phase_result("metadata", metadata, [record])
         with self.assertRaises(ResultValidationError):
-            validate_phase_result("deep", deep, [record])
+            validate_phase_result(
+                "deep", deep, [record], "sha256:" + "4" * 64
+            )
 
     # @test-value v1
     # kind = "contract"
@@ -525,7 +590,13 @@ class ReviewResultSchemaTests(unittest.TestCase):
         first["alignment_packet"]["metadata_result_hash"] = result_hash(
             first["metadata_result"]
         )
+        first["deep_packet"]["metadata_result_hash"] = first["alignment_packet"][
+            "metadata_result_hash"
+        ]
         first["alignment_result"]["reviews"].append(second_review)
+        first["deep_packet"]["records"].append(
+            copy.deepcopy(second["deep_packet"]["records"][0])
+        )
         second_context = copy.deepcopy(second["workflow_routing_context"]["records"][0])
         first["workflow_routing_context"]["records"].append(second_context)
         routing_records = []
@@ -549,6 +620,13 @@ class ReviewResultSchemaTests(unittest.TestCase):
         )
         second_sol_review = copy.deepcopy(second["sol_result"]["reviews"][0])
         first["sol_result"]["reviews"].append(second_sol_review)
+        first["deep_packet"]["input_hash"] = result_hash(
+            {
+                key: first["deep_packet"][key]
+                for key in ("review_contract_version", "metadata_result_hash", "records")
+            }
+        )
+        first["sol_result"]["input_hash"] = first["deep_packet"]["input_hash"]
         first["retention_records"].append(
             {
                 "record_id": second_record["record_id"],

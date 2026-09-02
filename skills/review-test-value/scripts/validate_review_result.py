@@ -44,6 +44,15 @@ ALIGNMENT_RECORD_KEYS = {
     "adapter",
     "coverage",
 }
+DEEP_RECORD_KEYS = ALIGNMENT_RECORD_KEYS | {
+    "alignment_review",
+    "routing_reasons",
+    "risk_tags",
+    "audit_selected",
+    "context",
+    "included_scope",
+    "excluded_scope",
+}
 METADATA_EVIDENCE_KEYS = {"fields", "finding"}
 METADATA_EVIDENCE_FINDINGS = {
     "SELF_CONTAINED_CLAIM",
@@ -103,16 +112,27 @@ PHASE_SPECS = {
 
 
 def validate_phase_result(
-    phase: str, result: dict[str, Any], expected_records: list[dict[str, Any]]
+    phase: str,
+    result: dict[str, Any],
+    expected_records: list[dict[str, Any]],
+    expected_input_hash: str | None = None,
 ) -> dict[str, Any]:
     try:
         spec = PHASE_SPECS[phase]
     except KeyError as exc:
         raise ResultValidationError(f"unknown phase: {phase}") from exc
-    if set(result) != {"review_contract_version", "reviews"}:
+    top_level_keys = {"review_contract_version", "reviews"}
+    if phase == "deep":
+        top_level_keys.add("input_hash")
+    if set(result) != top_level_keys:
         raise ResultValidationError("result has unexpected top-level keys")
     if result["review_contract_version"] != spec["version"]:
         raise ResultValidationError("result contract version is invalid")
+    if phase == "deep":
+        if expected_input_hash is None:
+            raise ResultValidationError("deep result requires an expected input hash")
+        if result["input_hash"] != expected_input_hash:
+            raise ResultValidationError("deep result input_hash does not match the packet")
     reviews = result["reviews"]
     if not isinstance(reviews, list):
         raise ResultValidationError("reviews must be an array")
@@ -209,10 +229,88 @@ def validate_alignment_packet(
     return records
 
 
+def validate_deep_packet(
+    packet: dict[str, Any],
+    alignment_packet: dict[str, Any],
+    alignment_reviews: list[dict[str, Any]],
+    routing_entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not isinstance(packet, dict) or set(packet) != {
+        "review_contract_version",
+        "metadata_result_hash",
+        "input_hash",
+        "records",
+    }:
+        raise ResultValidationError("deep packet has unexpected keys")
+    if packet["review_contract_version"] != "deep-review-v1":
+        raise ResultValidationError("deep packet contract version is invalid")
+    if packet["metadata_result_hash"] != alignment_packet["metadata_result_hash"]:
+        raise ResultValidationError("deep packet metadata_result_hash does not match alignment")
+    packet_content = {
+        "review_contract_version": packet["review_contract_version"],
+        "metadata_result_hash": packet["metadata_result_hash"],
+        "records": packet["records"],
+    }
+    if packet["input_hash"] != result_hash(packet_content):
+        raise ResultValidationError("deep packet input_hash does not match packet content")
+    records = packet["records"]
+    if not isinstance(records, list):
+        raise ResultValidationError("deep packet records must be an array")
+    required = [
+        (record, review, entry["result"])
+        for record, review, entry in zip(
+            alignment_packet["records"], alignment_reviews, routing_entries
+        )
+        if entry["result"]["required"]
+    ]
+    if [record.get("record_id") for record in records if isinstance(record, dict)] != [
+        record["record_id"] for record, _, _ in required
+    ]:
+        raise ResultValidationError("deep packet record set or order does not match routing")
+    for deep_record, (alignment_record, alignment_review, route) in zip(records, required):
+        if not isinstance(deep_record, dict) or set(deep_record) != DEEP_RECORD_KEYS:
+            raise ResultValidationError("deep packet record has unexpected keys")
+        for key in ALIGNMENT_RECORD_KEYS:
+            if deep_record[key] != alignment_record[key]:
+                raise ResultValidationError(f"deep packet {key} does not match alignment")
+        if deep_record["alignment_review"] != alignment_review:
+            raise ResultValidationError("deep packet alignment_review does not match fixed result")
+        if deep_record["routing_reasons"] != route["reasons"]:
+            raise ResultValidationError("deep packet routing_reasons do not match routing")
+        if deep_record["risk_tags"] != route["risk_tags"]:
+            raise ResultValidationError("deep packet risk_tags do not match routing")
+        if deep_record["audit_selected"] != route["audit_selected"]:
+            raise ResultValidationError("deep packet audit_selected does not match routing")
+        contexts = deep_record["context"]
+        if not isinstance(contexts, list):
+            raise ResultValidationError("deep packet context must be an array")
+        refs = []
+        for context in contexts:
+            if not isinstance(context, dict) or set(context) != {
+                "kind",
+                "ref",
+                "content",
+                "content_hash",
+            }:
+                raise ResultValidationError("deep packet context has unexpected keys")
+            ref = _string(context["ref"], "deep context.ref")
+            _string(context["kind"], "deep context.kind")
+            content = _string(context["content"], "deep context.content")
+            if context["content_hash"] != _sha256_text(content):
+                raise ResultValidationError("deep packet context hash does not match content")
+            refs.append(ref)
+        if deep_record["included_scope"] != refs:
+            raise ResultValidationError("deep packet included_scope does not match context")
+        if deep_record["excluded_scope"] != ["packet外のrepository source"]:
+            raise ResultValidationError("deep packet excluded_scope is invalid")
+    return records
+
+
 def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
     required = {
         "alignment_packet",
         "metadata_result",
+        "deep_packet",
         "alignment_result",
         "workflow_routing_context",
         "routing_manifest",
@@ -233,15 +331,18 @@ def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
             value["routing_manifest"],
             value["workflow_routing_context"],
         )
-        required_records = [
-            record
-            for record, entry in zip(records, routing_entries)
-            if entry["result"]["required"]
-        ]
+        required_records = validate_deep_packet(
+            value["deep_packet"], packet, alignment_reviews, routing_entries
+        )
         sol_result = value["sol_result"]
         sol_by_id: dict[str, dict[str, Any]] = {}
         if sol_result is not None:
-            sol_reviews = validate_phase_result("deep", sol_result, required_records)["reviews"]
+            sol_reviews = validate_phase_result(
+                "deep",
+                sol_result,
+                required_records,
+                value["deep_packet"]["input_hash"],
+            )["reviews"]
             sol_by_id = {review["record_id"]: review for review in sol_reviews}
         retention_by_id = _validate_retention_records(value["retention_records"], records)
         alignment_by_id = {review["record_id"]: review for review in alignment_reviews}
@@ -454,7 +555,12 @@ def main() -> int:
             if args.packet is None:
                 raise ResultValidationError("--packet is required for phase validation")
             packet = _read_json(args.packet)
-            output = validate_phase_result(args.phase, value, packet.get("records", []))
+            output = validate_phase_result(
+                args.phase,
+                value,
+                packet.get("records", []),
+                packet.get("input_hash") if args.phase == "deep" else None,
+            )
     except (OSError, json.JSONDecodeError, ResultValidationError) as exc:
         parser.error(str(exc))
     print(json.dumps(output, ensure_ascii=False, sort_keys=True, separators=(",", ":")))

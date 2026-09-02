@@ -189,7 +189,12 @@ def build_deep_packet(
                 "excluded_scope": ["packet外のrepository source"],
             }
         )
-    return {"review_contract_version": "deep-review-v1", "records": deep_records}
+    packet = {
+        "review_contract_version": "deep-review-v1",
+        "metadata_result_hash": alignment_packet["metadata_result_hash"],
+        "records": deep_records,
+    }
+    return {**packet, "input_hash": result_hash(packet)}
 
 
 def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:

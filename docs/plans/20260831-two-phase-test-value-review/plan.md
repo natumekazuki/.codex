@@ -167,6 +167,7 @@
 - [x] v1 metadataを完全なschemaで検証し、未知fieldをPhase 1 packet生成前に拒否する。
 - [x] Phase 1 evidenceをmetadata fieldと定義済みfindingだけを参照する構造へ変更し、source由来の自由文を拒否する。
 - [x] 固定済みPhase 1 result全体のhashをalignment packetへ保持し、deep packetとfinal aggregationで元artifactへ照合する。
+- [x] canonical deep packet全体のhashへSol resultを結合し、別のPhase 1 resultまたはbounded contextで得た結果の再利用を拒否する。
 - [x] source locatorとmetadata hashから`record_id`を再計算し、canonical alignment recordとsource schemaを後段でも検証する。
 - [x] runtime activationとmetadata-only isolation smokeが完了するまで、`SKILL.md`とREADMEの実行経路を現行workflowへ戻す。
 - [ ] 修正commitを固定し、RTV-201、RTV-202、RTV-207のfinding familyに限定したcommit-bound reviewを完了する。

@@ -47,6 +47,6 @@ Bootstrapはmetadata v1を読む。`characterization`は`expires_on`または`re
 
 resolution ledgerと元test削除後の`PASS`はactivation changeで有効化する。Bootstrap validatorは対応resolutionを受け取らず、削除済みartifactを`PASS`にしない。
 
-final aggregatorのinputは完全な`alignment_packet`、同じrecord集合と順序の`alignment_result`、独立した`workflow_routing_context`、検証対象の`routing_manifest`、required record集合の`sol_result`または未実行を表す`null`、同じrecord集合と順序の`retention_records`だけを持つ。正規artifactをrecordごとに分割しない。metadata verdict、alignment verdict、Sol required、Sol verdict、actual boundary、metadataを独立したscalarとして再入力しない。
+final aggregatorのinputは完全な`alignment_packet`、同じrecord集合と順序の固定済み`metadata_result`と`alignment_result`、検証対象のcanonical `deep_packet`、独立した`workflow_routing_context`、検証対象の`routing_manifest`、required record集合とdeep packet hashへ結合した`sol_result`または未実行を表す`null`、同じrecord集合と順序の`retention_records`だけを持つ。正規artifactをrecordごとに分割しない。metadata verdict、alignment verdict、Sol required、Sol verdict、actual boundary、metadataを独立したscalarとして再入力しない。
 
 required recordに対応するSol resultがない場合、またはSol verdictが`NEEDS_CONTEXT`の場合は、dispositionを計算せず`NEEDS_CONTEXT / null / BLOCKED`へ短絡する。
