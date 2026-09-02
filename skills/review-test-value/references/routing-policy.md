@@ -19,7 +19,7 @@ audit selectionは`record_id`とcontract versionのSHA-256を100で割った剰�
 
 `review_routing.py`のinputは`records`と`workflow_context`を持つJSON objectとする。各routing recordは`record_id`、`metadata_hash`、`source_hash`、`contract_version`、`metadata`、Phase 1とPhase 2のverdict、`context_requirements`を持つ。`workflow_context`は`review_contract_version = "review-workflow-context-v1"`と同順の`records`を持ち、各entryは`record_id`、`metadata_hash`、`parent_risk_tags`、`audit_percent`だけを持つ。outputのrouting manifestは`review_contract_version = "review-routing-v1"`と同順の`records`を持ち、各entryへrecord identity、workflow contextのhash、routing resultを固定する。
 
-deep packet builderとfinal aggregatorは、alignment packet、固定済みPhase 1 / Phase 2 result、manifestとは独立したworkflow contextからrouting resultを再計算する。record ID、metadata hash、source hash、verdict、context requirement、workflow context hash、risk context、audit選択、required判定のいずれかが一致しないmanifestを拒否する。callerが渡した`sol_required` booleanだけでdeep reviewやgateを省略しない。
+deep packet builderとfinal aggregatorは、alignment packet、固定済みPhase 1 result artifact、Phase 2 result、manifestとは独立したworkflow contextからrouting resultを再計算する。alignment packetの`metadata_result_hash`と埋め込みreviewを元artifactへ照合する。record ID、metadata hash、source hash、verdict、context requirement、workflow context hash、risk context、audit選択、required判定のいずれかが一致しないmanifestを拒否する。callerが渡した`sol_required` booleanだけでdeep reviewやgateを省略しない。
 
 ## Status
 

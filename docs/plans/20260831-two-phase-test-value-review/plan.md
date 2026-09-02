@@ -162,6 +162,15 @@
 - [x] 3件の反例を回帰testへ追加し、Git modeの抽出をexit `0`で完了する。
 - [x] 修正commitを固定し、元finding familyに限定したcommit-bound reviewを完了する。
 
+### Bootstrap isolation follow-up
+
+- [x] v1 metadataを完全なschemaで検証し、未知fieldをPhase 1 packet生成前に拒否する。
+- [x] Phase 1 evidenceをmetadata fieldと定義済みfindingだけを参照する構造へ変更し、source由来の自由文を拒否する。
+- [x] 固定済みPhase 1 result全体のhashをalignment packetへ保持し、deep packetとfinal aggregationで元artifactへ照合する。
+- [x] source locatorとmetadata hashから`record_id`を再計算し、canonical alignment recordとsource schemaを後段でも検証する。
+- [x] runtime activationとmetadata-only isolation smokeが完了するまで、`SKILL.md`とREADMEの実行経路を現行workflowへ戻す。
+- [ ] 修正commitを固定し、RTV-201、RTV-202、RTV-207のfinding familyに限定したcommit-bound reviewを完了する。
+
 ### Metadata v2 and gate activation
 
 - [ ] `@test-value v2`と`fault`、`observable`、optional `impact`、`observation_boundary`を追加する。
@@ -251,7 +260,7 @@ Runtime activationでは次をmanual smokeする。
 
 ## Risks
 
-- Luna Phase 1がrepository sourceを読む可能性がある。packet builder、agent tool禁止、output schemaの三層で拒否する。
+- Luna Phase 1のrepository参照は、agent instructionや`read-only` sandboxでは防止できない。履歴非継承とrepository read denyをruntimeで強制し、新session smokeで確認できるまで二段階workflowを有効化しない。
 - 同じLuna threadがPhase 2でPhase 1を補正する可能性がある。親側でresultを固定し、Phase 2 schemaへPhase 1 verdictの再出力を持たせない。
 - Solがself-containedでないmetadataを追加contextから救済する可能性がある。high-riskまたはaudit対象のPhase 1 `REDESIGN`はSolへ送るが、frozen verdictを変更させずfinal `REDESIGN / CHANGES_REQUIRED`を維持する。それ以外の明白なPhase 1 `REDESIGN`はSolへ送らない。
 - declaration checkの移行先が存在しない場合がある。`MOVE_TO_POLICY_CHECK`を`PASS`にせず、移行先とdirect checkをresolution ledgerで要求する。

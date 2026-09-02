@@ -33,7 +33,7 @@
 | `withmate-memory` | runtime管理 | WithMateが自動配置し、injected Character context、MCP優先のCharacter Memory / affect / semantic Memoryの運用契約を提供する |
 | `relaygraph` | 専門 | RelayGraph の関係グラフ調査、検証、ルール作成を行う |
 | `present-review-results` | 軽量 | review findingのseverity、classification、必須項目、提示順を統一する |
-| `review-test-value` | 専門 | 構造化された価値コメントとPython・TypeScript・C# test sourceを抽出し、metadata単体、本文整合、必要なdeep review、保持先を段階別に審査する |
+| `review-test-value` | 専門 | 構造化された価値コメントとPython・TypeScript・C# test sourceを抽出し、コメントの検証価値と本文の整合を審査する |
 | `japanese-tech-writing-review` | 専門 | 日本語の技術文書を論証、読み手の負荷、用語、Markdown表記の観点で推敲する |
 | `natural-japanese` | 専門 | ビジネス文書や一般記事を自然さ、読みやすさ、AI臭の観点で作成・推敲・診断する |
 
@@ -69,7 +69,7 @@
 
 - role の選択基準と risk gate は `AGENTS.md` を正本とする
 - 各 role の model、reasoning effort、sandbox、静的契約は `agents/*.toml` を正本とする
-- `review-test-value`は`test_value_luna`でmetadata単体と本文整合を分離して審査し、不確定、高リスク、監査対象だけを`test_value_sol`へ渡す。両roleは`config/agents.example.toml`の登録例をlocal configへ反映した新しいsessionから利用する
+- `review-test-value`の二段階審査artifactとcustom agent例はbootstrap中である。runtime activationと新session smokeが完了するまでは、現行の単一審査workflowを利用する
 - Spark の利用状態は `hooks/set-spark-routing.ps1` で切り替え、操作方法は `hooks/subagent-routing-modes.md` を参照する
 - model変更の比較方法は `docs/runbooks/compare-subagent-roles.md` を参照し、単一runのtoken差だけで既定roleを置き換えない
 

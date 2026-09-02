@@ -33,8 +33,14 @@ test本文があれば判断できる、という理由で不足を補完しな�
   "reviews": [
     {
       "record_id": "sha256:...",
+      "metadata_hash": "sha256:...",
       "verdict": "VALID",
-      "evidence": ["claimは失敗条件を区別している"],
+      "evidence": [
+        {
+          "fields": ["claim", "failure_mode", "scope"],
+          "finding": "COHERENT_BOUNDARY"
+        }
+      ],
       "unverified": ["oracle.refの本文"],
       "next_action": null
     }
@@ -42,4 +48,8 @@ test本文があれば判断できる、という理由で不足を補完しな�
 }
 ```
 
-`verdict`は`VALID`、`REDESIGN`、`NEEDS_CONTEXT`のいずれかとする。`NEEDS_CONTEXT`は`unverified`と`next_action`へ必要な追加sourceを具体的に示す。全recordを一度ずつ返し、追加・欠落・重複を認めない。
+`verdict`は`VALID`、`REDESIGN`、`NEEDS_CONTEXT`のいずれかとする。`metadata_hash`は入力recordと一致させる。`evidence`はmetadata field pathと定義済みfindingだけを持つ構造化objectの配列とし、自由文やsource fieldを根拠として受理しない。`NEEDS_CONTEXT`は`unverified`と`next_action`へ必要な追加sourceを具体的に示す。全recordを一度ずつ返し、追加・欠落・重複を認めない。
+
+`finding`は`SELF_CONTAINED_CLAIM`、`CONCRETE_FAILURE_MODE`、`COHERENT_BOUNDARY`、`LIFECYCLE_ALIGNED`、`ORACLE_DECLARED`のいずれかとする。`fields`は入力metadataに存在するtop-level field、`oracle.type`、`oracle.ref`だけを参照できる。`VALID`と`REDESIGN`は一件以上の`evidence`を必要とする。
+
+Phase 1を実行するruntimeは、履歴を継承しない新規childとrepositoryを読めない強制権限境界を提供しなければならない。agent instructionや`read-only` sandboxだけではmetadata-only境界を満たさない。runtime smokeでこの境界を確認できるまで二段階workflowを有効化しない。

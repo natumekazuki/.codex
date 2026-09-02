@@ -13,6 +13,7 @@ from review_routing import build_routing_manifest  # noqa: E402
 from validate_review_result import (  # noqa: E402
     ResultValidationError,
     aggregate_results,
+    result_hash,
     validate_phase_result,
 )
 
@@ -57,6 +58,7 @@ def aggregation_input(
     retention_basis="PRESENT",
     artifact_state="PERMANENT_TEST",
     parent_risk_tags=None,
+    source_path="tests/test_final_result.py",
 ):
     metadata = {
         "kind": kind,
@@ -67,26 +69,58 @@ def aggregation_input(
         "lifecycle": lifecycle,
     }
     source_text = "def test_final_result(self):\n    self.assertEqual(result['gate'], 'PASS')\n"
+    source = {
+        "path": source_path,
+        "symbol": "FinalResultTests.test_final_result",
+        "metadata_start_line": 1,
+        "metadata_end_line": 8,
+        "declaration_start_line": 9,
+        "declaration_end_line": 10,
+    }
+    metadata_hash = sha256_text(canonical_json(metadata))
+    record_id = sha256_text(
+        canonical_json(
+            {
+                "locator": {"path": source_path, "declaration_start_line": 9},
+                "metadata_hash": metadata_hash,
+            }
+        )
+    )
     identity = {
-        "record_id": "sha256:" + "1" * 64,
-        "metadata_hash": sha256_text(canonical_json(metadata)),
+        "record_id": record_id,
+        "metadata_hash": metadata_hash,
         "source_hash": sha256_text(source_text),
     }
     metadata_review = {
         "record_id": identity["record_id"],
+        "metadata_hash": identity["metadata_hash"],
         "verdict": metadata_verdict,
-        "evidence": ["metadata verdict evidence"],
+        "evidence": [
+            {
+                "fields": ["claim", "failure_mode", "scope"],
+                "finding": "COHERENT_BOUNDARY",
+            }
+        ],
         "unverified": [],
         "next_action": None,
     }
+    metadata_result = {
+        "review_contract_version": "metadata-review-v1",
+        "reviews": [metadata_review],
+    }
     record = {
         **identity,
+        "metadata_format_version": 1,
         "metadata": metadata,
-        "metadata_review": metadata_review,
+        "metadata_review": copy.deepcopy(metadata_review),
+        "source": source,
         "source_text": source_text,
+        "adapter": "python-source-v1",
+        "coverage": "python-source-declarations-v1",
     }
     alignment_review = alignment_result(alignment_verdict)["reviews"][0]
     alignment_review.update(
+        record_id=identity["record_id"],
         metadata_hash=identity["metadata_hash"],
         source_hash=identity["source_hash"],
     )
@@ -131,8 +165,10 @@ def aggregation_input(
     return {
         "alignment_packet": {
             "review_contract_version": "alignment-review-v1",
+            "metadata_result_hash": result_hash(metadata_result),
             "records": [record],
         },
+        "metadata_result": metadata_result,
         "alignment_result": {
             "review_contract_version": "alignment-review-v1",
             "reviews": [alignment_review],
@@ -153,6 +189,33 @@ def aggregation_input(
 class ReviewResultSchemaTests(unittest.TestCase):
     # @test-value v1
     # kind = "security"
+    # claim = "metadata phase evidenceはpacket内metadata fieldと定義済みfindingだけを参照する構造を持つ"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # failure_mode = "source本文を読んだという自由文をPhase 1のVALID根拠として受理する"
+    # scope = "metadata-review-evidence-schema"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_metadata_result_rejects_free_text_source_evidence(self):
+        value = aggregation_input()
+        result = copy.deepcopy(value["metadata_result"])
+        result["reviews"][0]["evidence"] = [
+            "source_textのassertEqualを確認したのでVALID"
+        ]
+        record = value["alignment_packet"]["records"][0]
+        expected = [
+            {
+                "record_id": record["record_id"],
+                "metadata_format_version": 1,
+                "metadata": record["metadata"],
+                "metadata_hash": record["metadata_hash"],
+            }
+        ]
+
+        with self.assertRaisesRegex(ResultValidationError, "metadata evidence"):
+            validate_phase_result("metadata", result, expected)
+
+    # @test-value v1
+    # kind = "security"
     # claim = "final aggregatorはmetadataとsourceのhashおよび検証済みrouting manifestからSol requiredを導出しcallerのbooleanを受理しない"
     # oracle = { type = "adr", ref = "ADR-0022" }
     # failure_mode = "security metadataをhash不一致のcontractへ変えるかsol_required=falseを直接入力してrequired Solを省略しPASSにする"
@@ -168,6 +231,32 @@ class ReviewResultSchemaTests(unittest.TestCase):
         source_tampered["alignment_packet"]["records"][0]["source_text"] += "# changed\n"
         with self.assertRaisesRegex(ResultValidationError, "source_hash"):
             aggregate_results(source_tampered)
+        extra_field = aggregation_input(kind="security")
+        extra_field["alignment_packet"]["records"][0]["unhashed_context"] = "source"
+        with self.assertRaisesRegex(ResultValidationError, "unexpected keys"):
+            aggregate_results(extra_field)
+
+        reused_phase1 = aggregation_input(kind="security")
+        reused_record = reused_phase1["alignment_packet"]["records"][0]
+        reused_record["metadata"]["claim"] = "changed claim"
+        reused_record["metadata_hash"] = sha256_text(
+            canonical_json(reused_record["metadata"])
+        )
+        reused_record["record_id"] = sha256_text(
+            canonical_json(
+                {
+                    "locator": {
+                        "path": reused_record["source"]["path"],
+                        "declaration_start_line": reused_record["source"][
+                            "declaration_start_line"
+                        ],
+                    },
+                    "metadata_hash": reused_record["metadata_hash"],
+                }
+            )
+        )
+        with self.assertRaisesRegex(ResultValidationError, "unexpected record"):
+            aggregate_results(reused_phase1)
 
         scalar_input = {
             "metadata_verdict": "VALID",
@@ -181,6 +270,38 @@ class ReviewResultSchemaTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(ResultValidationError, "unexpected keys"):
             aggregate_results(scalar_input)
+
+    # @test-value v1
+    # kind = "security"
+    # claim = "final aggregatorはalignment packetの埋め込みPhase 1 reviewを固定済みPhase 1 result全体へ照合する"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # failure_mode = "REDESIGNをVALIDへ変更してrouting manifestを再生成し最終gateをPASSにする"
+    # scope = "review-final-phase1-result-binding"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_aggregate_rejects_rewritten_phase1_review(self):
+        value = aggregation_input(metadata_verdict="REDESIGN")
+        record = value["alignment_packet"]["records"][0]
+        record["metadata_review"]["verdict"] = "VALID"
+        review = value["alignment_result"]["reviews"][0]
+        value["routing_manifest"] = build_routing_manifest(
+            [
+                {
+                    "record_id": record["record_id"],
+                    "metadata_hash": record["metadata_hash"],
+                    "source_hash": record["source_hash"],
+                    "contract_version": "deep-review-v1",
+                    "metadata": record["metadata"],
+                    "metadata_verdict": "VALID",
+                    "alignment_verdict": review["verdict"],
+                    "context_requirements": review["context_requirements"],
+                }
+            ],
+            value["workflow_routing_context"],
+        )
+
+        with self.assertRaisesRegex(ResultValidationError, "embedded metadata review"):
+            aggregate_results(value)
 
     # @test-value v1
     # kind = "contract"
@@ -277,7 +398,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
         self.assertEqual(
             aggregate_results(base)["records"][0],
             {
-                "record_id": "sha256:" + "1" * 64,
+                "record_id": base["alignment_packet"]["records"][0]["record_id"],
                 "status": "NEEDS_CONTEXT",
                 "disposition": None,
                 "gate": "BLOCKED",
@@ -295,7 +416,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
         self.assertEqual(
             aggregate_results(unresolved_sol)["records"][0],
             {
-                "record_id": "sha256:" + "1" * 64,
+                "record_id": unresolved_sol["alignment_packet"]["records"][0]["record_id"],
                 "status": "NEEDS_CONTEXT",
                 "disposition": None,
                 "gate": "BLOCKED",
@@ -320,7 +441,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
         self.assertEqual(
             aggregate_results(record)["records"][0],
             {
-                "record_id": "sha256:" + "1" * 64,
+                "record_id": record["alignment_packet"]["records"][0]["record_id"],
                 "status": "NEEDS_CONTEXT",
                 "disposition": None,
                 "gate": "BLOCKED",
@@ -390,16 +511,22 @@ class ReviewResultSchemaTests(unittest.TestCase):
     # @end-test-value
     def test_aggregate_results_accepts_complete_multi_record_artifacts(self):
         first = aggregation_input(kind="security", sol_verdict="APPROVE")
-        second = aggregation_input(kind="security", sol_verdict="APPROVE")
+        second = aggregation_input(
+            kind="security",
+            sol_verdict="APPROVE",
+            source_path="tests/test_second_final_result.py",
+        )
         second_record = copy.deepcopy(second["alignment_packet"]["records"][0])
-        second_record["record_id"] = "sha256:" + "4" * 64
-        second_record["metadata_review"]["record_id"] = second_record["record_id"]
         second_review = copy.deepcopy(second["alignment_result"]["reviews"][0])
-        second_review["record_id"] = second_record["record_id"]
         first["alignment_packet"]["records"].append(second_record)
+        first["metadata_result"]["reviews"].append(
+            copy.deepcopy(second["metadata_result"]["reviews"][0])
+        )
+        first["alignment_packet"]["metadata_result_hash"] = result_hash(
+            first["metadata_result"]
+        )
         first["alignment_result"]["reviews"].append(second_review)
         second_context = copy.deepcopy(second["workflow_routing_context"]["records"][0])
-        second_context["record_id"] = second_record["record_id"]
         first["workflow_routing_context"]["records"].append(second_context)
         routing_records = []
         for record, review in zip(
@@ -421,7 +548,6 @@ class ReviewResultSchemaTests(unittest.TestCase):
             routing_records, first["workflow_routing_context"]
         )
         second_sol_review = copy.deepcopy(second["sol_result"]["reviews"][0])
-        second_sol_review["record_id"] = second_record["record_id"]
         first["sol_result"]["reviews"].append(second_sol_review)
         first["retention_records"].append(
             {
@@ -435,7 +561,10 @@ class ReviewResultSchemaTests(unittest.TestCase):
 
         self.assertEqual(
             [record["record_id"] for record in result["records"]],
-            ["sha256:" + "1" * 64, "sha256:" + "4" * 64],
+            [
+                first["alignment_packet"]["records"][0]["record_id"],
+                second_record["record_id"],
+            ],
         )
         self.assertEqual(result["gate"], "PASS")
 

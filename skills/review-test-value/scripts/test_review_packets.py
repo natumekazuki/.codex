@@ -60,8 +60,14 @@ def metadata_result(packet, verdict="VALID"):
         "reviews": [
             {
                 "record_id": record["record_id"],
+                "metadata_hash": record["metadata_hash"],
                 "verdict": verdict,
-                "evidence": ["metadataだけでclaimとfailure modeを区別できる"],
+                "evidence": [
+                    {
+                        "fields": ["claim", "failure_mode", "scope"],
+                        "finding": "COHERENT_BOUNDARY",
+                    }
+                ],
                 "unverified": ["ADR-0022本文"],
                 "next_action": None,
             }
@@ -101,6 +107,23 @@ class ReviewPacketTests(unittest.TestCase):
         )
         self.assertRegex(packet["records"][0]["record_id"], r"^sha256:[0-9a-f]{64}$")
         self.assertNotIn("tests/test_packet.py", canonical_json(packet))
+
+    # @test-value v1
+    # kind = "security"
+    # claim = "metadata packetはv1 schema外fieldをhashが一致していてもAI審査前に拒否する"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # failure_mode = "source_textなどの未知fieldをmetadataへ埋め込みPhase 1へsource evidenceを渡す"
+    # scope = "metadata-review-schema-boundary"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_metadata_packet_rejects_unknown_metadata_fields(self):
+        extracted = extractor_result()
+        metadata = extracted["tests"][0]["metadata"]
+        metadata["source_text"] = "assertTrue(packet)"
+        extracted["tests"][0]["metadata_hash"] = sha256_text(canonical_json(metadata))
+
+        with self.assertRaisesRegex(PacketError, "unknown fields: source_text"):
+            build_metadata_packet(extracted)
 
     # @test-value v1
     # kind = "invariant"
@@ -160,7 +183,8 @@ class ReviewPacketTests(unittest.TestCase):
     def test_deep_packet_rejects_modified_context(self):
         extracted = extractor_result()
         phase1 = build_metadata_packet(extracted)
-        alignment = build_alignment_packet(extracted, metadata_result(phase1))
+        fixed_metadata_result = metadata_result(phase1)
+        alignment = build_alignment_packet(extracted, fixed_metadata_result)
         record = alignment["records"][0]
         alignment_result = {
             "review_contract_version": "alignment-review-v1",
@@ -221,7 +245,7 @@ class ReviewPacketTests(unittest.TestCase):
 
         with self.assertRaisesRegex(PacketError, "context hash"):
             build_deep_packet(
-                alignment, alignment_result, routing, workflow_context, bad_context
+                alignment, fixed_metadata_result, alignment_result, routing, workflow_context, bad_context
             )
         extra_routing = copy.deepcopy(routing)
         extra_entry = copy.deepcopy(extra_routing["records"][0])
@@ -229,14 +253,14 @@ class ReviewPacketTests(unittest.TestCase):
         extra_routing["records"].append(extra_entry)
         with self.assertRaisesRegex(PacketError, "record set or order"):
             build_deep_packet(
-                alignment, alignment_result, extra_routing, workflow_context, {}
+                alignment, fixed_metadata_result, alignment_result, extra_routing, workflow_context, {}
             )
         downgraded = copy.deepcopy(routing)
         downgraded["records"][0]["result"]["required"] = False
         downgraded["records"][0]["result"]["reasons"] = []
         with self.assertRaisesRegex(PacketError, "routing result"):
             build_deep_packet(
-                alignment, alignment_result, downgraded, workflow_context, {}
+                alignment, fixed_metadata_result, alignment_result, downgraded, workflow_context, {}
             )
         removed_parent_risk = copy.deepcopy(workflow_context)
         removed_parent_risk["records"][0]["parent_risk_tags"] = []
@@ -258,6 +282,7 @@ class ReviewPacketTests(unittest.TestCase):
         with self.assertRaisesRegex(PacketError, "workflow context hash"):
             build_deep_packet(
                 alignment,
+                fixed_metadata_result,
                 alignment_result,
                 manifest_without_parent_risk,
                 workflow_context,
@@ -283,6 +308,7 @@ class ReviewPacketTests(unittest.TestCase):
         with self.assertRaisesRegex(PacketError, "workflow context hash"):
             build_deep_packet(
                 alignment,
+                fixed_metadata_result,
                 alignment_result,
                 manifest_with_changed_audit,
                 workflow_context,
@@ -292,8 +318,32 @@ class ReviewPacketTests(unittest.TestCase):
         expanded_alignment["records"][0]["unhashed_extra_context"] = "production source"
         with self.assertRaisesRegex(PacketError, "unexpected keys"):
             build_deep_packet(
-                expanded_alignment, alignment_result, routing, workflow_context, {}
+                expanded_alignment,
+                fixed_metadata_result,
+                alignment_result,
+                routing,
+                workflow_context,
+                {},
             )
+
+    # @test-value v1
+    # kind = "security"
+    # claim = "deep packetはalignment packetへ固定されたPhase 1 result全体のhashと埋め込みreviewを元artifactへ照合する"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # failure_mode = "Phase 1のREDESIGNをVALIDへ差し替えてroutingを再生成しrequired reviewを迂回する"
+    # scope = "deep-review-phase1-result-binding"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_deep_packet_rejects_rewritten_phase1_result(self):
+        extracted = extractor_result()
+        phase1 = build_metadata_packet(extracted)
+        frozen = metadata_result(phase1, verdict="REDESIGN")
+        alignment = build_alignment_packet(extracted, frozen)
+        rewritten = metadata_result(phase1, verdict="VALID")
+        alignment["records"][0]["metadata_review"] = rewritten["reviews"][0]
+
+        with self.assertRaisesRegex(PacketError, "metadata result hash|embedded metadata review"):
+            build_deep_packet(alignment, frozen, {}, {}, {}, {})
 
 
 if __name__ == "__main__":

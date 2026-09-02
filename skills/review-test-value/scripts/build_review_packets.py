@@ -9,8 +9,16 @@ import json
 from pathlib import Path
 from typing import Any
 
+from extract_test_values import validate_metadata
 from review_routing import RoutingError, validate_routing_manifest
-from validate_review_result import ResultValidationError, validate_phase_result
+from validate_review_result import (
+    ALIGNMENT_RECORD_KEYS,
+    SOURCE_KEYS,
+    ResultValidationError,
+    result_hash,
+    validate_alignment_packet,
+    validate_phase_result,
+)
 
 
 class PacketError(ValueError):
@@ -26,28 +34,6 @@ EXTRACTOR_RESULT_KEYS = {
     "diagnostics",
 }
 EXTRACTOR_RECORD_KEYS = {"source", "metadata", "source_text", "source_hash", "metadata_hash"}
-SOURCE_KEYS = {
-    "path",
-    "symbol",
-    "metadata_start_line",
-    "metadata_end_line",
-    "declaration_start_line",
-    "declaration_end_line",
-}
-ALIGNMENT_RECORD_KEYS = {
-    "record_id",
-    "metadata_format_version",
-    "metadata",
-    "metadata_hash",
-    "metadata_review",
-    "source",
-    "source_text",
-    "source_hash",
-    "adapter",
-    "coverage",
-}
-
-
 def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -74,6 +60,9 @@ def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
     packet_records = []
     for record in records:
         metadata = _object(record.get("metadata"), "record.metadata")
+        metadata_errors = validate_metadata(metadata)
+        if metadata_errors:
+            raise PacketError("record.metadata is invalid: " + "; ".join(metadata_errors))
         metadata_hash = _hash(record.get("metadata_hash"), "record.metadata_hash")
         if sha256_text(canonical_json(metadata)) != metadata_hash:
             raise PacketError("record.metadata_hash does not match canonical metadata")
@@ -124,58 +113,40 @@ def build_alignment_packet(
                 "coverage": _string(extractor_result.get("coverage"), "extractor.coverage"),
             }
         )
-    return {
+    packet = {
         "review_contract_version": "alignment-review-v1",
+        "metadata_result_hash": result_hash(metadata_result),
         "records": packet_records,
     }
+    try:
+        validate_alignment_packet(packet, metadata_result)
+    except ResultValidationError as exc:
+        raise PacketError(str(exc)) from exc
+    return packet
 
 
 def build_deep_packet(
     alignment_packet: dict[str, Any],
+    metadata_result: dict[str, Any],
     alignment_result: dict[str, Any],
     routing_manifest: dict[str, Any],
     workflow_routing_context: dict[str, Any],
     context_by_record: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
-    if set(alignment_packet) != {"review_contract_version", "records"}:
-        raise PacketError("alignment packet has unexpected keys")
-    if alignment_packet.get("review_contract_version") != "alignment-review-v1":
-        raise PacketError("alignment packet contract version is invalid")
-    records = alignment_packet.get("records")
-    if not isinstance(records, list):
-        raise PacketError("alignment packet records must be an array")
+    try:
+        records = validate_alignment_packet(alignment_packet, metadata_result)
+    except ResultValidationError as exc:
+        raise PacketError(str(exc)) from exc
     if not isinstance(context_by_record, dict):
         raise PacketError("context_by_record must be an object")
     record_ids = []
     for record in records:
-        if not isinstance(record, dict) or set(record) != ALIGNMENT_RECORD_KEYS:
-            raise PacketError("alignment packet record has unexpected keys")
-        source = _object(record.get("source"), "record.source")
-        if set(source) != SOURCE_KEYS:
-            raise PacketError("alignment packet source has unexpected keys")
         record_ids.append(_string(record.get("record_id"), "record.record_id"))
     if len(record_ids) != len(set(record_ids)):
         raise PacketError("alignment packet contains duplicate record_id")
     if not set(context_by_record).issubset(set(record_ids)):
         raise PacketError("context contains a record outside the alignment packet")
-    for record in records:
-        metadata = _object(record.get("metadata"), "record.metadata")
-        metadata_hash = _hash(record.get("metadata_hash"), "record.metadata_hash")
-        source_text = _string(record.get("source_text"), "record.source_text")
-        source_hash = _hash(record.get("source_hash"), "record.source_hash")
-        if sha256_text(canonical_json(metadata)) != metadata_hash:
-            raise PacketError("alignment packet metadata_hash does not match metadata")
-        if sha256_text(source_text) != source_hash:
-            raise PacketError("alignment packet source_hash does not match source_text")
     try:
-        validate_phase_result(
-            "metadata",
-            {
-                "review_contract_version": "metadata-review-v1",
-                "reviews": [record["metadata_review"] for record in records],
-            },
-            records,
-        )
         alignment_reviews = validate_phase_result(
             "alignment", alignment_result, records
         )["reviews"]
@@ -318,6 +289,7 @@ def main() -> int:
     alignment.add_argument("--metadata-result", type=Path, required=True)
     deep = subparsers.add_parser("deep")
     deep.add_argument("--alignment-packet", type=Path, required=True)
+    deep.add_argument("--metadata-result", type=Path, required=True)
     deep.add_argument("--alignment-result", type=Path, required=True)
     deep.add_argument("--routing", type=Path, required=True)
     deep.add_argument("--routing-context", type=Path, required=True)
@@ -333,6 +305,7 @@ def main() -> int:
         else:
             packet = build_deep_packet(
                 _read_json(args.alignment_packet),
+                _read_json(args.metadata_result),
                 _read_json(args.alignment_result),
                 _read_json(args.routing),
                 _read_json(args.routing_context),

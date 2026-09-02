@@ -6,14 +6,14 @@ Phase 2は、固定済みのPhase 1結果を変更せず、metadataとtest sourc
 
 ## Input
 
-packetは`review_contract_version = "alignment-review-v1"`と`records`を持つ。各recordは次を持つ。
+packetは`review_contract_version = "alignment-review-v1"`、固定済みPhase 1 result全体の`metadata_result_hash`、`records`を持つ。各recordは次を持つ。
 
 - Phase 1と同じ`record_id`、`metadata_format_version`、`metadata`、`metadata_hash`
 - 固定済みの`metadata_review`
 - extractorが返した`source`、`source_text`、`source_hash`
 - extractor resultの`adapter`と`coverage`
 
-Phase 1 resultのrecord集合、verdict、hashを変更しない。recordの追加、欠落、重複、metadata hashまたはsource hash不一致、extractor schemaにないfieldはAI審査前に拒否する。
+alignment packet、deep packet、final aggregationは固定済みPhase 1 result artifactを独立入力として受け取り、`metadata_result_hash`と埋め込み`metadata_review`の両方を照合する。Phase 1 resultのrecord集合、verdict、hashを変更しない。source locatorとmetadata hashから`record_id`を再計算する。recordの追加、欠落、重複、metadata hashまたはsource hash不一致、canonical schemaにないfieldはAI審査前に拒否する。
 
 ## Review
 

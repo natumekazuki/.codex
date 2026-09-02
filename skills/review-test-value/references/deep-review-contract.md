@@ -6,7 +6,7 @@ Sol deep reviewは、Lunaだけで閉じないrecord、高リスクrecord、監�
 
 ## Input
 
-packetは`review_contract_version = "deep-review-v1"`と`records`を持つ。各recordは次を持つ。
+packetは`review_contract_version = "deep-review-v1"`と`records`を持つ。builderはalignment packetとは別に固定済みPhase 1 result artifactを受け取り、`metadata_result_hash`と埋め込みreviewを照合してからpacketを構築する。各recordは次を持つ。
 
 - Phase 1、Phase 2と同じrecord identity、metadata、source、hash
 - 固定済みの`metadata_review`と`alignment_review`

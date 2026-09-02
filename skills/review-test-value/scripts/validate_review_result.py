@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from extract_test_values import validate_metadata
 from review_routing import (
     aggregate_gate,
     aggregate_status,
@@ -23,11 +24,47 @@ class ResultValidationError(ValueError):
     """Raised when an AI result or final aggregation input is untrusted."""
 
 
+SOURCE_KEYS = {
+    "path",
+    "symbol",
+    "metadata_start_line",
+    "metadata_end_line",
+    "declaration_start_line",
+    "declaration_end_line",
+}
+ALIGNMENT_RECORD_KEYS = {
+    "record_id",
+    "metadata_format_version",
+    "metadata",
+    "metadata_hash",
+    "metadata_review",
+    "source",
+    "source_text",
+    "source_hash",
+    "adapter",
+    "coverage",
+}
+METADATA_EVIDENCE_KEYS = {"fields", "finding"}
+METADATA_EVIDENCE_FINDINGS = {
+    "SELF_CONTAINED_CLAIM",
+    "CONCRETE_FAILURE_MODE",
+    "COHERENT_BOUNDARY",
+    "LIFECYCLE_ALIGNED",
+    "ORACLE_DECLARED",
+}
+
 PHASE_SPECS = {
     "metadata": {
         "version": "metadata-review-v1",
         "verdicts": {"VALID", "REDESIGN", "NEEDS_CONTEXT"},
-        "keys": {"record_id", "verdict", "evidence", "unverified", "next_action"},
+        "keys": {
+            "record_id",
+            "metadata_hash",
+            "verdict",
+            "evidence",
+            "unverified",
+            "next_action",
+        },
     },
     "alignment": {
         "version": "alignment-review-v1",
@@ -96,7 +133,15 @@ def validate_phase_result(
         review_ids.append(record_id)
         if review["verdict"] not in spec["verdicts"]:
             raise ResultValidationError("review verdict is invalid")
-        _string_list(review["evidence"], "review.evidence")
+        if phase == "metadata":
+            expected = expected_by_id.get(record_id)
+            if expected is None:
+                raise ResultValidationError("review contains an unexpected record")
+            if review["metadata_hash"] != expected.get("metadata_hash"):
+                raise ResultValidationError("metadata_hash does not match the packet")
+            _validate_metadata_evidence(review["evidence"], expected.get("metadata"))
+        else:
+            _string_list(review["evidence"], "review.evidence")
         _string_list(review["unverified"], "review.unverified")
         if review["next_action"] is not None:
             _string(review["next_action"], "review.next_action")
@@ -114,6 +159,9 @@ def validate_phase_result(
         if phase == "metadata" and review["verdict"] == "NEEDS_CONTEXT":
             if not review["unverified"] or review["next_action"] is None:
                 raise ResultValidationError("metadata NEEDS_CONTEXT requires unverified and next_action")
+        if phase == "metadata" and review["verdict"] in {"VALID", "REDESIGN"}:
+            if not review["evidence"]:
+                raise ResultValidationError("completed metadata verdict requires evidence")
         if phase == "deep":
             if review["verdict"] in {"APPROVE", "REDESIGN"} and not review["evidence"]:
                 raise ResultValidationError("completed deep verdict requires evidence")
@@ -124,9 +172,47 @@ def validate_phase_result(
     return result
 
 
+def result_hash(result: dict[str, Any]) -> str:
+    return _sha256_text(_canonical_json(result))
+
+
+def validate_alignment_packet(
+    packet: dict[str, Any], metadata_result: dict[str, Any]
+) -> list[dict[str, Any]]:
+    if not isinstance(packet, dict) or set(packet) != {
+        "review_contract_version",
+        "metadata_result_hash",
+        "records",
+    }:
+        raise ResultValidationError("alignment packet has unexpected keys")
+    if packet["review_contract_version"] != "alignment-review-v1":
+        raise ResultValidationError("alignment packet contract version is invalid")
+    records = packet["records"]
+    if not isinstance(records, list):
+        raise ResultValidationError("alignment packet records must be an array")
+    metadata_records = []
+    for record in records:
+        _validate_alignment_record(record)
+        metadata_records.append(
+            {
+                "record_id": record["record_id"],
+                "metadata_format_version": record["metadata_format_version"],
+                "metadata": record["metadata"],
+                "metadata_hash": record["metadata_hash"],
+            }
+        )
+    reviews = validate_phase_result("metadata", metadata_result, metadata_records)["reviews"]
+    if packet["metadata_result_hash"] != result_hash(metadata_result):
+        raise ResultValidationError("metadata result hash does not match the fixed result")
+    if [record["metadata_review"] for record in records] != reviews:
+        raise ResultValidationError("embedded metadata review does not match the fixed result")
+    return records
+
+
 def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
     required = {
         "alignment_packet",
+        "metadata_result",
         "alignment_result",
         "workflow_routing_context",
         "routing_manifest",
@@ -137,23 +223,7 @@ def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
         raise ResultValidationError("aggregation input has unexpected keys")
     try:
         packet = value["alignment_packet"]
-        if not isinstance(packet, dict) or set(packet) != {"review_contract_version", "records"}:
-            raise ResultValidationError("alignment packet has unexpected keys")
-        if packet["review_contract_version"] != "alignment-review-v1":
-            raise ResultValidationError("alignment packet contract version is invalid")
-        records = packet["records"]
-        if not isinstance(records, list):
-            raise ResultValidationError("alignment packet records must be an array")
-        for record in records:
-            _validate_aggregation_record(record)
-        validate_phase_result(
-            "metadata",
-            {
-                "review_contract_version": "metadata-review-v1",
-                "reviews": [record["metadata_review"] for record in records],
-            },
-            records,
-        )
+        records = validate_alignment_packet(packet, value["metadata_result"])
         alignment_reviews = validate_phase_result(
             "alignment", value["alignment_result"], records
         )["reviews"]
@@ -220,23 +290,83 @@ def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _validate_aggregation_record(record: Any) -> None:
-    if not isinstance(record, dict):
-        raise ResultValidationError("aggregation record must be an object")
-    metadata = record.get("metadata")
-    source_text = record.get("source_text")
-    if not isinstance(metadata, dict) or not isinstance(source_text, str):
-        raise ResultValidationError("aggregation record metadata and source_text are invalid")
-    metadata_digest = "sha256:" + hashlib.sha256(
-        json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
-    ).hexdigest()
-    source_digest = "sha256:" + hashlib.sha256(source_text.encode("utf-8")).hexdigest()
-    if record.get("metadata_hash") != metadata_digest:
-        raise ResultValidationError("aggregation metadata_hash does not match metadata")
-    if record.get("source_hash") != source_digest:
-        raise ResultValidationError("aggregation source_hash does not match source_text")
+def _validate_alignment_record(record: Any) -> None:
+    if not isinstance(record, dict) or set(record) != ALIGNMENT_RECORD_KEYS:
+        raise ResultValidationError("alignment packet record has unexpected keys")
+    source = record["source"]
+    if not isinstance(source, dict) or set(source) != SOURCE_KEYS:
+        raise ResultValidationError("alignment packet source has unexpected keys")
+    metadata = record["metadata"]
+    errors = validate_metadata(metadata)
+    if errors:
+        raise ResultValidationError("record.metadata is invalid: " + "; ".join(errors))
+    if record["metadata_format_version"] != 1:
+        raise ResultValidationError("metadata_format_version must be 1")
+    if record["metadata_hash"] != _sha256_text(_canonical_json(metadata)):
+        raise ResultValidationError("alignment packet metadata_hash does not match metadata")
+    if record["source_hash"] != _sha256_text(_string(record["source_text"], "record.source_text")):
+        raise ResultValidationError("alignment packet source_hash does not match source_text")
+    locator = {
+        "path": _string(source["path"], "record.source.path"),
+        "declaration_start_line": _positive_int(
+            source["declaration_start_line"], "record.source.declaration_start_line"
+        ),
+    }
+    expected_id = _sha256_text(
+        _canonical_json({"locator": locator, "metadata_hash": record["metadata_hash"]})
+    )
+    if record["record_id"] != expected_id:
+        raise ResultValidationError("record_id does not match source locator and metadata_hash")
+    _string(source["symbol"], "record.source.symbol")
+    metadata_start = _positive_int(
+        source["metadata_start_line"], "record.source.metadata_start_line"
+    )
+    metadata_end = _positive_int(
+        source["metadata_end_line"], "record.source.metadata_end_line"
+    )
+    declaration_start = _positive_int(
+        source["declaration_start_line"], "record.source.declaration_start_line"
+    )
+    declaration_end = _positive_int(
+        source["declaration_end_line"], "record.source.declaration_end_line"
+    )
+    if not metadata_start <= metadata_end < declaration_start <= declaration_end:
+        raise ResultValidationError("source line range is invalid")
+    _string(record["adapter"], "record.adapter")
+    _string(record["coverage"], "record.coverage")
+
+
+def _validate_metadata_evidence(value: Any, metadata: Any) -> None:
+    if not isinstance(metadata, dict):
+        raise ResultValidationError("packet metadata is invalid")
+    if not isinstance(value, list):
+        raise ResultValidationError("review.evidence must be an array")
+    for item in value:
+        if not isinstance(item, dict) or set(item) != METADATA_EVIDENCE_KEYS:
+            raise ResultValidationError("metadata evidence has unexpected keys")
+        fields = _string_list(item["fields"], "metadata evidence.fields")
+        if not fields or len(fields) != len(set(fields)):
+            raise ResultValidationError("metadata evidence.fields must be unique and non-empty")
+        for field in fields:
+            root = field.split(".", 1)[0]
+            if root not in metadata or field not in set(metadata) | {"oracle.type", "oracle.ref"}:
+                raise ResultValidationError("metadata evidence references an unavailable field")
+        if item["finding"] not in METADATA_EVIDENCE_FINDINGS:
+            raise ResultValidationError("metadata evidence finding is invalid")
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _sha256_text(value: str) -> str:
+    return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _positive_int(value: Any, name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ResultValidationError(f"{name} must be a positive integer")
+    return value
 
 
 def _validate_retention_records(

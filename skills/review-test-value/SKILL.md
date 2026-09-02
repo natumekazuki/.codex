@@ -5,7 +5,9 @@ description: Python、TypeScript、C#のtest sourceへ隣接する構造化さ�
 
 # Review Test Value
 
-構造化コメントとtest sourceの対応付けをscriptへ任せ、metadata単体の価値、test sourceとの整合、必要なbounded deep review、保持先を分けて審査する。欠落した値や曖昧な結合を会話内で補完しない。
+構造化コメントとtest sourceの対応付けをscriptへ任せ、AIは抽出済みrecordだけを審査する。欠落した値や曖昧な結合を会話内で補完しない。
+
+二段階審査のartifactはbootstrap中であり、runtime activationと新session smokeが完了するまでこのSkillの実行経路には使用しない。`test_value_luna`と`test_value_sol`を必須roleとして起動せず、以下の現行workflowを使う。
 
 抽出CLIには`tomllib`を含むPython 3.11以降を使う。TypeScriptにはNode.jsと固定済みnpm依存、C#には.NET 8 SDKと固定済みNuGet依存を追加で使う。
 
@@ -40,48 +42,8 @@ python -X utf8 <skill-dir>/scripts/extract_test_values.py `
 
 6. exit `1`ではstdoutの`diagnostics`を読み、sourceまたはコメントを修正してから再実行する。抽出器を迂回してAI審査へ進まない。
 7. exit `2`ではstderrを読み、root、path、依存、I/Oを直す。信頼できる部分結果があるとみなさない。
-8. exit `0`のresultからmetadata packetを作る。packetは[references/metadata-review-contract.md](references/metadata-review-contract.md)に従い、source locator、source text、source hashを含めない。
-
-```powershell
-python -X utf8 <skill-dir>/scripts/build_review_packets.py metadata `
-  --extractor <extractor-result.json>
-```
-
-9. `test_value_luna`をmetadata phaseとして起動し、packetだけを渡す。結果を次で検証し、schema不正なら審査結果として採用しない。
-
-```powershell
-python -X utf8 <skill-dir>/scripts/validate_review_result.py metadata `
-  --input <metadata-result.json> `
-  --packet <metadata-packet.json>
-```
-
-10. 固定済みmetadata resultと同じextractor resultからalignment packetを作る。同じ`test_value_luna` childへfollow-upできる場合は二turn目として渡し、できない場合だけ別childを起動する。二phaseを一promptへ統合しない。Phase 1が`REDESIGN`のrecordも省略しない。契約は[references/alignment-review-contract.md](references/alignment-review-contract.md)を使う。
-
-```powershell
-python -X utf8 <skill-dir>/scripts/build_review_packets.py alignment `
-  --extractor <extractor-result.json> `
-  --metadata-result <metadata-result.json>
-
-python -X utf8 <skill-dir>/scripts/validate_review_result.py alignment `
-  --input <alignment-result.json> `
-  --packet <alignment-packet.json>
-```
-
-11. [references/routing-policy.md](references/routing-policy.md)に従い、親workflowが固定したrisk tagとaudit率を`workflow_context`へ分離してrecordごとのrouting inputを作る。次のscriptでSol routingを決める。Phase 1 `NEEDS_CONTEXT`、Phase 2 `RECHECK`、bounded contextが必要、高リスク、監査対象のrecordだけを[references/deep-review-contract.md](references/deep-review-contract.md)のpacketへ入れ、`test_value_sol`へ渡す。packet外を探索させない。
-
-```powershell
-python -X utf8 <skill-dir>/scripts/review_routing.py --input <routing-input.json>
-
-python -X utf8 <skill-dir>/scripts/build_review_packets.py deep `
-  --alignment-packet <alignment-packet.json> `
-  --alignment-result <alignment-result.json> `
-  --routing <routing-manifest.json> `
-  --routing-context <workflow-routing-context.json> `
-  --context <context-by-record.json>
-```
-12. required agentを起動できない場合は親agentが代行せず、そのrecordを`status = NEEDS_CONTEXT`、`disposition = null`、`gate = BLOCKED`として停止する。別modelへsilent fallbackしない。
-13. 完全なalignment packet、Phase 2 result、親workflowのrouting context、routing manifest、required record集合のSol resultまたは未実行を表す`null`、全recordの保持根拠とartifact stateを`validate_review_result.py aggregate`へ渡す。aggregatorはrecord集合を分割せず同順で`status`、`disposition`、record gate、aggregate gateを決める。`sol_required`やphase verdictを独立したscalarとして再入力しない。Bootstrapではmetadata v1を読み、v1 `ephemeral`の削除条件、resolution ledger、元test削除後の`PASS`を有効化しない。
-14. JSON field、diagnostic、exit statusの確認が必要なら[references/output-v1.md](references/output-v1.md)を読む。
+8. exit `0`の`tests`だけを[references/review-contract.md](references/review-contract.md)に従って審査する。
+9. JSON field、diagnostic、exit statusの確認が必要なら[references/output-v1.md](references/output-v1.md)を読む。
 
 ## Extraction Rules
 
@@ -96,11 +58,11 @@ python -X utf8 <skill-dir>/scripts/build_review_packets.py deep `
 
 ## Review Result
 
-test recordごとに`status`、`disposition`、`gate`を分けて返す。
+test recordごとに次を返す。
 
-- `status`: `ACCEPT`、`REDESIGN`、`NEEDS_CONTEXT`
-- `disposition`: `KEEP_PERMANENT`、`KEEP_TEMPORARY`、`MOVE_TO_POLICY_CHECK`、`DROP`、または未確定の`null`
-- `gate`: `PASS`、`CHANGES_REQUIRED`、`BLOCKED`
+- `ACCEPT`: 抽出record内では価値コメントが反証可能で、本文のobservableが同じfailure modeを検出する。
+- `REDESIGN`: claim、oracle、failure mode、scope、distinctness、または本文との対応に具体的な欠陥がある。
+- `NEEDS_CONTEXT`: record外の根拠がなければrecord内の設計判定も確定できず、明示的な追加sourceが必要である。
 
 phase判定には`evidence`、`unverified`、必要なら`next_action`を添える。oracle本文が入力されていない場合は`oracle.ref`を必ず`unverified`へ残し、参照先の存在、claimの裏付け、非循環性を確認済みと表現しない。文章の巧拙だけを`REDESIGN`理由にしない。
 
