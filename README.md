@@ -31,6 +31,7 @@
 | `commit-note` | 軽量 | commit message と commit 前後の短い記録を整える |
 | `contract-closure` | 専門 | 高リスクな契約変更の不変条件を兄弟入口、状態遷移、failure timing、scopeへ展開し、直接検証と反証reviewで閉じる |
 | `withmate-memory` | runtime管理 | WithMateが自動配置し、injected Character context、MCP優先のCharacter Memory / affect / semantic Memoryの運用契約を提供する |
+| `withmate-glossary` | runtime管理 | WithMateが自動配置し、Session-boundなRepository Glossaryの参照と安全な更新契約を提供する |
 | `relaygraph` | 専門 | RelayGraph の関係グラフ調査、検証、ルール作成を行う |
 | `present-review-results` | 軽量 | review findingのseverity、classification、必須項目、提示順を統一する |
 | `review-test-value` | 専門 | 構造化された価値コメントとPython・TypeScript・C# test sourceを抽出し、コメントの検証価値と本文の整合を審査する |
@@ -41,13 +42,14 @@
 
 ## 別端末への反映
 
-- Git 管理する正本は `AGENTS.md`、`README.md`、`agents/`、`docs/adr/`、`docs/architecture/`、`docs/runbooks/`、`hooks/`、`hooks.json`、`skills/`（`skills/withmate-memory/`を除く）、`templates/`、`config.example.toml`、`config/agents.example.toml` とする
+- Git 管理する正本は `AGENTS.md`、`README.md`、`agents/`、`docs/adr/`、`docs/architecture/`、`docs/runbooks/`、`hooks/`、`hooks.json`、runtime-managedな`skills/withmate-memory/`と`skills/withmate-glossary/`を除く`skills/`、`templates/`、`config.example.toml`、`config/agents.example.toml` とする
 - `config.toml` は端末固有の local file として Git 管理しない。`projects.*`、`hooks.state`、runtime/plugin の `source`、MCP server の `command` / `env`、通知コマンド、Chrome native host 設定は端末ごとに生成または調整する
 - 新しい端末ではこの repo を `$HOME/.codex` に配置し、既存の `config.toml` に `config.example.toml` と `config/agents.example.toml` の必要 section だけを移す
 - hook は `hooks.json` から `$HOME/.codex/hooks/implementation-restraint.ps1` と `$HOME/.codex/hooks/subagent-routing.ps1` を呼び出す。Windows では `commandWindows` が `%USERPROFILE%\.codex` を使う
 - Spark routing の現在 mode は `hooks/subagent-routing.local.json` に保存される。このファイルは端末ごとの一時状態なので Git 管理しない
-- WithMateを使う端末では、起動後に`skills/withmate-memory/`が自動配置され、managed markerの`bundleVersion`とSkill一覧への認識を確認する
+- WithMateを使う端末では、起動後に`skills/withmate-memory/`と`skills/withmate-glossary/`が自動配置され、managed markerの`bundleVersion`とSkill一覧への認識を確認する
 - Character context MCPを使う端末では、`config.example.toml`の`withmate-character-context`設定をlocal `config.toml`へ反映し、WithMate起動後の新しいCodex sessionで`codex mcp list`と公開toolを確認する。詳細は`docs/runbooks/withmate-character-context.md`を参照する
+- Repository Glossary MCPを使う端末では、`config.example.toml`の`withmate-glossary`設定をlocal `config.toml`へ反映し、新しいCodex sessionで公開toolとprimary checkoutへの束縛を確認する。詳細は`docs/runbooks/withmate-repository-glossary.md`を参照する
 - `browser/`、`computer-use/`、`process_manager/`、`chrome-native-hosts.json` は plugin/runtime の生成状態として扱い、別端末では Codex が再生成する
 
 ## 設計判断
