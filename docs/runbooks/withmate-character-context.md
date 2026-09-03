@@ -2,7 +2,7 @@
 
 ## 対応契約
 
-このrunbookはWithMate 6.3.24で確認した次のinterfaceを対象とする。
+このrunbookはWithMate 6.3.25で確認した次のinterfaceを対象とする。
 
 | Contract | Value |
 | --- | --- |
@@ -10,6 +10,7 @@
 | Verified MCP protocol | `2025-06-18` |
 | Character context schema | `withmate-character-context-v1` |
 | Affect candidate schema | `withmate-affect-v1` |
+| Runtime discovery | application instanceとMemory runtime generationの固定tuple |
 | STDIO command | `withmate-memory mcp-server` |
 
 実行時の正本は、WithMateが配置した`skills/withmate-memory/.withmate-managed-skill.json`の`bundleVersion`と、同Skillの`reference/character-context.md`である。versionまたはschemaが変わった場合は、固定値を推測で読み替えず、配布SkillとWithMateのrelease contractを再確認する。
@@ -52,6 +53,9 @@ MCP serverはWithMateのloopback application serviceへ接続する。WithMate�
 14. `authority_denied`、`invalid_input`、`version_conflict`その他のdomain resultをCLIで迂回しない。
 15. routineなcontext取得、Memory検索、affect処理をuser-facing responseで逐次実況しない。
 16. affect contextがない場合は状態を捏造せず、現在のCharacter Definitionと会話だけで応答を継続する。
+17. 別Sessionのaffect afterglowはread-time projectionとしてだけ扱い、新規event、Character Memory episode、relationship stateへコピーしない。
+18. Session-bound MCPとCLIは起動元のapplication instanceとMemory runtime generationへ接続し、別instanceまたは新しいgenerationへfallbackしない。
+19. generation mismatchや複数instanceのambiguous resultをtransport availability failureへ読み替えず、別runtimeを推測して選択しない。
 
 破壊的なscenarioを検証だけのために本番Memoryへ実行しない。affect correction、sessionまたはrelationship affect reset、relationship boundary変更は、明示指示またはoperator recoveryの対象がある場合だけ実行する。
 
@@ -71,5 +75,6 @@ rollout全体では、WithMate lifecycleとCodex側の利用記録から次を�
 - idempotent replay抑止数
 - MCP failureと`mcp->cli` fallback数
 - correction、forget、reset数
+- afterglowの候補、採用、continuity除外、same-target除外、component上限到達数
 
 metricsへ会話本文、Memory本文、affect evidence、推定したユーザー感情、secret、raw transcriptを保存しない。

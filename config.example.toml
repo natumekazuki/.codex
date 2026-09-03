@@ -41,3 +41,11 @@ command = "withmate-memory"
 args = ["mcp-server"]
 enabled = true
 required = false
+
+# WithMate installs the `withmate-glossary` shim and managed Skill.
+# The server is Session-bound and can operate only on the primary checkout.
+[mcp_servers.withmate-glossary]
+command = "withmate-glossary"
+args = ["mcp-server"]
+enabled = true
+required = false
