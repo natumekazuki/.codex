@@ -34,7 +34,9 @@
 - bug fixは費用対効果が合う範囲で修正前の失敗と修正後の解消を確認する。
 - scope、contract、canonical owner、外部consumer、責務境界が変わった場合は、関連sourceと契約の確認へ戻る。
 - failing test、type constraint、schema、static checkを、現在のsourceへ合わせるためだけに削除、弱体化、skipしない。
-- 後方互換性または移行期間がaccepted contractとして確認できない限り、古い経路をfallbackとして残さない。無関係なcleanup、rename、format、refactorを混ぜない。
+- 後方互換性、旧実装の経路、互換性維持を目的とするshim、adapter、二重read / write、fallbackは原則として追加または維持しない。
+- 現在の要求が互換性対応なしでは成立せず、具体的な外部consumerまたはmigration要件を確認できる場合だけ、必要性、対象範囲、trade-off、撤去条件を示し、その作業に対するユーザーの明示承認を得てから実装する。
+- 既存codeやtest、過去の挙動、互換性が有益という推測は、必要性または承認の根拠にしない。承認がなければ現在のcontractだけを実装し、旧入力や旧経路は暗黙に救済せず明示的に失敗させる。無関係なcleanup、rename、format、refactorを混ぜない。
 
 ## 4. Planning, Structure, and Tests
 
