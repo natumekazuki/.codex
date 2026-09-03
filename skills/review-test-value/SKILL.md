@@ -7,6 +7,8 @@ description: Python、TypeScript、C#のtest sourceへ隣接する構造化さ�
 
 構造化コメントとtest sourceの対応付けをscriptへ任せ、AIは抽出済みrecordだけを審査する。欠落した値や曖昧な結合を会話内で補完しない。
 
+二段階審査のartifactはbootstrap中であり、runtime activationと新session smokeが完了するまでこのSkillの実行経路には使用しない。`test_value_luna`と`test_value_sol`を必須roleとして起動せず、以下の現行workflowを使う。
+
 抽出CLIには`tomllib`を含むPython 3.11以降を使う。TypeScriptにはNode.jsと固定済みnpm依存、C#には.NET 8 SDKと固定済みNuGet依存を追加で使う。
 
 ## Workflow
@@ -62,7 +64,7 @@ test recordごとに次を返す。
 - `REDESIGN`: claim、oracle、failure mode、scope、distinctness、または本文との対応に具体的な欠陥がある。
 - `NEEDS_CONTEXT`: record外の根拠がなければrecord内の設計判定も確定できず、明示的な追加sourceが必要である。
 
-判定には`evidence`、`unverified`、必要なら`next_action`を添える。oracle本文が入力されていない場合は`oracle.ref`を必ず`unverified`へ残し、参照先の存在、claimの裏付け、非循環性を確認済みと表現しない。文章の巧拙だけを`REDESIGN`理由にしない。
+phase判定には`evidence`、`unverified`、必要なら`next_action`を添える。oracle本文が入力されていない場合は`oracle.ref`を必ず`unverified`へ残し、参照先の存在、claimの裏付け、非循環性を確認済みと表現しない。文章の巧拙だけを`REDESIGN`理由にしない。
 
 ## Validation
 
@@ -71,7 +73,13 @@ Skillまたはscriptを変更したら次を実行する。
 ```powershell
 python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values_multilang.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_values.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/git_diff_selection.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py
 python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-value
 ```

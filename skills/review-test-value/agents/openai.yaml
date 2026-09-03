@@ -1,4 +1,4 @@
 interface:
   display_name: "Review Test Value"
-  short_description: "構造化コメントとテスト本文を抽出して価値と整合性を審査する"
-  default_prompt: "$review-test-value を使って、対象テストの価値コメントと本文の整合性を審査してください。"
+  short_description: "構造化コメントとテスト本文の検証価値を審査する"
+  default_prompt: "$review-test-value を使って、対象テストの価値コメントと本文の整合を審査してください。"
