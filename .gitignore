@@ -40,6 +40,7 @@ cap_sid
 installation_id
 /memories
 /skills/withmate-memory/
+/skills/withmate-glossary/
 /mcp-oauth-locks/
 session_index.jsonl
 /archived_sessions/*

@@ -42,7 +42,7 @@ update requestの`explicitUserRequest: true`は、`AGENTS.md`に記録された�
 4. proactive createが無効または上限超過の場合、explicit createへ読み替えず拒否する。
 5. updateはreadで得たcurrent revisionを使い、適用後のentryをread-backする。
 6. revision conflictでは新しいrevisionを使って自動再試行せず、current valueと変更目的を再評価する。
-7. `effect: unknown`では同じ操作を自動実行せず、current valueを読み直してから次のwriteを判断する。
+7. `effect: unknown`では同じ操作を自動実行しない。current valueをread-backし、新しいwriteを選ぶ前にユーザーへ確認する。
 8. structured validation、authority、revision、conflict errorをCLIで迂回しない。
 9. Glossaryの内容をMemory、Session data、prompt、別cacheへ複製しない。
 
