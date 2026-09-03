@@ -26,7 +26,7 @@ alignment packet、deep packet、final aggregationは固定済みPhase 1 result 
 
 ## Output
 
-`verdict`は`ALIGNED`、`MISMATCH`、`RECHECK`のいずれかとする。`ALIGNED`と`MISMATCH`はrecord内のsourceを示す`evidence`を一件以上必要とし、全verdictで`actual_observables`を一件以上返す。`RECHECK`は`context_requirements`を一件以上必要とする。Phase 1 verdictを出力し直さない。
+`verdict`は`ALIGNED`、`MISMATCH`、`RECHECK`のいずれかとする。`ALIGNED`は`overclaim = false`を必要とし、`declared_boundary`が明示されている場合は`actual_boundary`と一致させる。`ALIGNED`と`MISMATCH`はrecord内のsourceを示す`evidence`を一件以上必要とし、全verdictで`actual_observables`を一件以上返す。`RECHECK`は`context_requirements`を一件以上必要とする。Phase 1 verdictを出力し直さない。
 
 `disposition_candidate`は`KEEP_PERMANENT`、`KEEP_TEMPORARY`、`MOVE_TO_POLICY_CHECK`、`DROP`、`null`のいずれかであり、final dispositionではない。
 

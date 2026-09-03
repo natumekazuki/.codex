@@ -68,7 +68,7 @@ def deterministic_audit(record_id: str, contract_version: str, audit_percent: in
     if not isinstance(audit_percent, int) or isinstance(audit_percent, bool) or not 0 <= audit_percent <= 100:
         raise RoutingError("audit_percent must be an integer from 0 through 100")
     digest = hashlib.sha256(f"{record_id}\n{contract_version}".encode("utf-8")).digest()
-    return int.from_bytes(digest[:8], "big") % 100 < audit_percent
+    return int.from_bytes(digest, "big") % 100 < audit_percent
 
 
 def route_record(
@@ -332,6 +332,8 @@ def decide_disposition(
         raise RoutingError("actual_boundary is invalid")
     if retention_basis not in {"PRESENT", "ABSENT", "UNRESOLVED"}:
         raise RoutingError("retention_basis is invalid")
+    if retention_basis == "UNRESOLVED":
+        return None
     if actual_boundary == "declaration":
         return "MOVE_TO_POLICY_CHECK"
     if lifecycle == "ephemeral":
@@ -345,8 +347,6 @@ def decide_disposition(
         return "KEEP_TEMPORARY"
     if lifecycle == "characterization":
         return "DROP"
-    if retention_basis == "UNRESOLVED":
-        return None
     return "KEEP_PERMANENT" if retention_basis == "PRESENT" else "DROP"
 
 

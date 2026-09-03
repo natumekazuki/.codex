@@ -514,6 +514,16 @@ def _validate_alignment(review: dict[str, Any]) -> None:
         raise ResultValidationError("actual_observables must not be empty")
     if not isinstance(review["overclaim"], bool):
         raise ResultValidationError("overclaim must be a boolean")
+    if review["verdict"] == "ALIGNED":
+        if review["overclaim"]:
+            raise ResultValidationError("ALIGNED review must not report overclaim")
+        if (
+            review["declared_boundary"] is not None
+            and review["declared_boundary"] != review["actual_boundary"]
+        ):
+            raise ResultValidationError(
+                "ALIGNED review must match declared_boundary and actual_boundary"
+            )
     candidates = {"KEEP_PERMANENT", "KEEP_TEMPORARY", "MOVE_TO_POLICY_CHECK", "DROP", None}
     if review["disposition_candidate"] not in candidates:
         raise ResultValidationError("disposition_candidate is invalid")

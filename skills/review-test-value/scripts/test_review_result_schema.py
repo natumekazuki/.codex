@@ -59,6 +59,8 @@ def aggregation_input(
     artifact_state="PERMANENT_TEST",
     parent_risk_tags=None,
     source_path="tests/test_final_result.py",
+    actual_boundary="component-behavior",
+    expires_on=None,
 ):
     metadata = {
         "kind": kind,
@@ -68,6 +70,8 @@ def aggregation_input(
         "scope": "review-result-aggregation",
         "lifecycle": lifecycle,
     }
+    if expires_on is not None:
+        metadata["expires_on"] = expires_on
     source_text = "def test_final_result(self):\n    self.assertEqual(result['gate'], 'PASS')\n"
     source = {
         "path": source_path,
@@ -125,6 +129,8 @@ def aggregation_input(
         record_id=identity["record_id"],
         metadata_hash=identity["metadata_hash"],
         source_hash=identity["source_hash"],
+        declared_boundary=actual_boundary,
+        actual_boundary=actual_boundary,
     )
     routing_records = [
         {
@@ -385,25 +391,23 @@ class ReviewResultSchemaTests(unittest.TestCase):
     # lifecycle = "permanent"
     # @end-test-value
     def test_needs_context_results_require_actionable_context(self):
-        record = alignment_record()
-        metadata = {
-            "review_contract_version": "metadata-review-v1",
-            "reviews": [
-                {
-                    "record_id": record["record_id"],
-                    "verdict": "NEEDS_CONTEXT",
-                    "evidence": [],
-                    "unverified": [],
-                    "next_action": None,
-                }
-            ],
-        }
+        value = aggregation_input()
+        record = value["alignment_packet"]["records"][0]
+        metadata = copy.deepcopy(value["metadata_result"])
+        metadata["reviews"][0].update(
+            verdict="NEEDS_CONTEXT",
+            evidence=[],
+            unverified=[],
+            next_action=None,
+        )
         deep = {
             "review_contract_version": "deep-review-v1",
             "input_hash": "sha256:" + "4" * 64,
             "reviews": [
                 {
-                    **record,
+                    "record_id": record["record_id"],
+                    "metadata_hash": record["metadata_hash"],
+                    "source_hash": record["source_hash"],
                     "verdict": "NEEDS_CONTEXT",
                     "evidence": [],
                     "unverified": [],
@@ -413,9 +417,15 @@ class ReviewResultSchemaTests(unittest.TestCase):
             ],
         }
 
-        with self.assertRaises(ResultValidationError):
+        with self.assertRaisesRegex(
+            ResultValidationError,
+            "metadata NEEDS_CONTEXT requires unverified and next_action",
+        ):
             validate_phase_result("metadata", metadata, [record])
-        with self.assertRaises(ResultValidationError):
+        with self.assertRaisesRegex(
+            ResultValidationError,
+            "deep NEEDS_CONTEXT requires context_requirements",
+        ):
             validate_phase_result(
                 "deep", deep, [record], "sha256:" + "4" * 64
             )
@@ -438,6 +448,26 @@ class ReviewResultSchemaTests(unittest.TestCase):
                 result = alignment_result(verdict)
                 result["reviews"][0][field] = []
                 with self.assertRaises(ResultValidationError):
+                    validate_phase_result("alignment", result, [alignment_record()])
+
+    # @test-value v1
+    # kind = "regression"
+    # claim = "ALIGNED resultはoverclaimがfalseで、明示されたdeclared boundaryとactual boundaryが一致する"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # failure_mode = "metadataより狭いsource境界またはoverclaimを報告しながらALIGNEDとして最終gateをPASSにする"
+    # scope = "alignment-review-semantic-tuple"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_alignment_result_rejects_contradictory_aligned_tuple(self):
+        mutations = (
+            {"overclaim": True},
+            {"declared_boundary": "consumer", "actual_boundary": "component-behavior"},
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                result = alignment_result()
+                result["reviews"][0].update(mutation)
+                with self.assertRaisesRegex(ResultValidationError, "ALIGNED"):
                     validate_phase_result("alignment", result, [alignment_record()])
 
     # @test-value v1
@@ -501,17 +531,19 @@ class ReviewResultSchemaTests(unittest.TestCase):
 
     # @test-value v1
     # kind = "contract"
-    # claim = "保持根拠またはv1 ephemeral削除条件を確定できないACCEPT候補はdisposition null、NEEDS_CONTEXT、BLOCKEDになる"
+    # claim = "保持根拠がUNRESOLVEDの一時implementation testはdisposition null、NEEDS_CONTEXT、BLOCKEDになる"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "保持先を確定できないtest artifactをPASSとしてBootstrap changeの完了条件に通す"
+    # failure_mode = "保持根拠が未解決でもcharacterization lifecycleを先に適用してKEEP_TEMPORARY、PASSにする"
     # scope = "review-disposition-gate"
     # lifecycle = "permanent"
     # @end-test-value
     def test_aggregate_results_blocks_unresolved_disposition(self):
         record = aggregation_input(
-            lifecycle="ephemeral",
+            lifecycle="characterization",
             retention_basis="UNRESOLVED",
             artifact_state="TEMPORARY_TEST",
+            actual_boundary="implementation",
+            expires_on="2026-12-31",
         )
 
         self.assertEqual(

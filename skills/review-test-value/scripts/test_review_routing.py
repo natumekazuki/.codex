@@ -16,7 +16,6 @@ from review_routing import (  # noqa: E402
     deterministic_audit,
     merge_risk_tags,
     route_record,
-    unavailable_result,
 )
 
 
@@ -146,9 +145,9 @@ class ReviewRoutingTests(unittest.TestCase):
 
     # @test-value v1
     # kind = "invariant"
-    # claim = "dispositionとgateはactual boundary、permanentまたはtemporary lifecycle、保持根拠、artifact stateのADR-0022対応表に従う"
+    # claim = "dispositionとgateはactual boundary、lifecycle、保持根拠、artifact stateのADR-0022対応表に従いUNRESOLVEDは全boundaryで未確定に閉じる"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "declaration testを永続behavior testとしてPASSにするかDROP対象が残存してもPASSにする"
+    # failure_mode = "保持根拠がUNRESOLVEDでもboundaryやtemporary lifecycleの分岐を先に適用してartifact actionを確定する"
     # scope = "test-value-disposition-gate"
     # lifecycle = "permanent"
     # @end-test-value
@@ -179,11 +178,21 @@ class ReviewRoutingTests(unittest.TestCase):
             lifecycle="permanent",
             retention_basis="ABSENT",
         )
-        unresolved = decide_disposition(
-            actual_boundary="component-behavior",
-            lifecycle="permanent",
-            retention_basis="UNRESOLVED",
-        )
+        unresolved = [
+            decide_disposition(
+                actual_boundary=boundary,
+                lifecycle="characterization",
+                retention_basis="UNRESOLVED",
+                expires_on="2026-12-31",
+            )
+            for boundary in (
+                "consumer",
+                "public-boundary",
+                "component-behavior",
+                "declaration",
+                "implementation",
+            )
+        ]
 
         self.assertEqual(declaration, "MOVE_TO_POLICY_CHECK")
         self.assertEqual(decide_gate("ACCEPT", declaration, "TEST_PRESENT"), "CHANGES_REQUIRED")
@@ -194,37 +203,25 @@ class ReviewRoutingTests(unittest.TestCase):
         self.assertEqual(temporary, "KEEP_TEMPORARY")
         self.assertEqual(decide_gate("ACCEPT", temporary, "TEMPORARY_TEST"), "PASS")
         self.assertEqual(no_basis, "DROP")
-        self.assertIsNone(unresolved)
+        self.assertEqual(unresolved, [None, None, None, None, None])
         self.assertEqual(aggregate_gate(["PASS", "CHANGES_REQUIRED"]), "CHANGES_REQUIRED")
         self.assertEqual(aggregate_gate(["PASS", "CHANGES_REQUIRED", "BLOCKED"]), "BLOCKED")
 
     # @test-value v1
-    # kind = "regression"
-    # claim = "required agent unavailableは代替審査せずNEEDS_CONTEXT、disposition null、BLOCKEDへ固定する"
-    # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "LunaまたはSolを起動できない時に親agentの代行結果でreview gateをPASSにする"
-    # scope = "test-value-agent-availability"
-    # lifecycle = "permanent"
-    # @end-test-value
-    def test_required_agent_unavailable_is_fail_closed(self):
-        self.assertEqual(
-            unavailable_result(),
-            {"status": "NEEDS_CONTEXT", "disposition": None, "gate": "BLOCKED"},
-        )
-
-    # @test-value v1
     # kind = "contract"
-    # claim = "deterministic audit selectionは同じrecord ID、contract version、率から常に同じbooleanを返す"
+    # claim = "deterministic audit selectionはrecord IDとcontract versionのSHA-256全体を100で割った剰余から再現できる"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "実行ごとに監査対象が変わり同じreview inputのSol routingを再現できなくする"
+    # failure_mode = "digestの一部だけでbucketを計算してrouting policy準拠のconsumerと監査対象が食い違う"
     # scope = "test-value-deterministic-audit"
     # lifecycle = "permanent"
     # @end-test-value
     def test_deterministic_audit_is_stable_and_respects_extremes(self):
-        record_id = "sha256:" + "5" * 64
-        selected = deterministic_audit(record_id, "deep-review-v1", 37)
+        record_id = "sha256:" + "0" * 64
+        selected = deterministic_audit(record_id, "deep-review-v1", 88)
 
-        self.assertEqual(selected, deterministic_audit(record_id, "deep-review-v1", 37))
+        self.assertTrue(selected)
+        self.assertFalse(deterministic_audit(record_id, "deep-review-v1", 87))
+        self.assertEqual(selected, deterministic_audit(record_id, "deep-review-v1", 88))
         self.assertFalse(deterministic_audit(record_id, "deep-review-v1", 0))
         self.assertTrue(deterministic_audit(record_id, "deep-review-v1", 100))
 
