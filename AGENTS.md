@@ -36,7 +36,7 @@
 - failing test、type constraint、schema、static checkを、現在のsourceへ合わせるためだけに削除、弱体化、skipしない。
 - 後方互換性、旧実装の経路、互換性維持を目的とするshim、adapter、二重read / write、fallbackは原則として追加または維持しない。
 - 現在の要求が互換性対応なしでは成立せず、互換性を明示的に要求するaccepted contract、具体的な外部consumer、またはmigration要件を確認できる場合だけ、必要性、対象範囲、trade-off、撤去条件を示し、その作業に対するユーザーの明示承認を得てから実装する。
-- 既存codeやtest、過去の挙動、互換性が有益という推測は、必要性または承認の根拠にしない。承認がなく、互換性対応なしではaccepted contractを満たせない場合は、部分的に実装せずblockedとして報告する。互換性を要求しないcontractでは、旧入力や旧経路を暗黙に救済せず明示的に失敗させる。無関係なcleanup、rename、format、refactorを混ぜない。
+- 既存codeやtestが存在すること、過去の挙動、互換性が有益という推測だけでは、必要性または承認の根拠にしない。承認がなく、互換性対応なしではaccepted contractを満たせない場合は、部分的に実装せずblockedとして報告する。互換性を要求しないcontractでは、旧入力や旧経路を暗黙に救済せず明示的に失敗させる。無関係なcleanup、rename、format、refactorを混ぜない。
 
 ## 4. Planning, Structure, and Tests
 
