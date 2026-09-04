@@ -51,7 +51,7 @@ WithMate 6.3.26は、Character context injection、Provider共通の`withmate-ch
 - Negative: Codex hostごとにMCP server設定、`env_vars`、新Sessionでの認識確認が必要になる。
 - Negative: Global instructionとproject instructionの合計sizeを見直し、configured byte limit内に維持する必要がある。
 - Negative: Character responseの自然さは自然言語上の判断を含み、shadow modeの観測と段階的な有効化が必要になる。
-- Negative: MCP unavailable時は同一runtimeを確認できる範囲でしかCharacter CLI writeへfallbackできない。
+- Negative: `details.fallbackEligible=true`が明示されたeligible transport errorでも、同一runtimeと変更していない同一operationを確認できる範囲でしかCharacter CLI writeへfallbackできない。
 
 ## Contract Anchors
 
