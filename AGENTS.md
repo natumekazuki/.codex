@@ -61,13 +61,11 @@
 
 ## 6. WithMate-managed Context and Repository Metadata
 
-- WithMate Memory、Character context / affect、Repository Glossaryでは、runtime-managedな`withmate-memory`または`withmate-glossary` Skillを使う。schema、target、authority、idempotency、effect、retry、MCP-first、CLI fallbackの正確な手順は各Skillを正本とし、ここへ複製しない。
-- Persisted MemoryとCharacter affectはWithMateを正本とし、独自の永続状態やfallback fileを作らない。repository-ownedな契約や実装状態をMemoryだけへ置かない。応答前のcontext優先順位、cue-driven recall、event-time appraisal、final直前のreflectionは`withmate-memory` Skillに従う。
+- Persisted MemoryとCharacter affectはWithMateを正本とし、独自の永続状態やfallback fileを作らない。repository-ownedな契約や実装状態をMemoryだけへ置かない。Memory、Character context / affectを扱うturnでは`docs/runbooks/withmate-character-context.md`、Repository Glossaryではruntime-managedな`withmate-glossary` Skillを読んで従う。tool schemaはMCPの`tools/list`を正本とし、ここへ複製しない。
 - Memoryは、repositoryの正本にするほどではない文脈、projectをまたぐ選好、会話継続に役立つ関係性やepisodeに限定する。secret、private path、raw log、大きなdiff、speculative claim、未完了状態や未実行作業を保存しない。
-- runtime bindingで許可された明示targetのMemoryは、Agentがユーザーの代理として検索、取得、追加、訂正、forget、moveできる。別Characterをownerに持つtargetは扱わない。affect correction、session / relationship affect reset、relationship boundary変更には明示的なユーザー指示またはoperator authorityを要求する。
+- runtime bindingで許可された明示targetのMemoryは、Agentがユーザーの代理として検索、取得、追加、訂正、forget、moveできる。別Characterをownerに持つtargetは扱わず、structuredなauthorityまたはdomain rejectionをCLIで迂回しない。affect correction、session / relationship affect reset、relationship boundary変更には明示的なユーザー指示またはoperator authorityを要求する。
 - Repository固有の用語、alias、境界名、概念は、primary checkoutの`.withmate/glossary.yaml`をGlossaryの正本とする。Glossary内容をMemory、Session data、prompt、別cacheへ複製せず、Additional Directoriesやcaller指定pathからauthorityを拡張しない。
-- Glossaryのread、search、validate、create、create-batch、updateは、根拠と再利用性があり、runtime Settingsと`withmate-glossary` Skillの制約を満たす場合に自律実行できる。この規則をupdateへの継続的な明示authorizationとする。sourceやaccepted contractとの不一致、明確に古い定義、canonical termやaliasの誤りを直す場合に限り、単なる表現変更は行わない。
-- Glossary deleteは、current entryとrevisionを確認し、対象entryごとの明示的なユーザー確認を得た場合だけ実行する。
+- Glossaryのread、search、validate、create、create-batch、updateは、根拠と再利用性があり、runtime Settingsと`withmate-glossary` Skillの制約を満たす場合に自律実行できる。この規則をupdateへの継続的な明示authorizationとする。updateはsourceやaccepted contractとの不一致、明確に古い定義、canonical termやaliasの誤りを直す場合に限定し、deleteはcurrent entryとrevisionを確認して対象entryごとの明示的なユーザー確認を得た場合だけ実行する。
 
 ## 7. Delegation
 

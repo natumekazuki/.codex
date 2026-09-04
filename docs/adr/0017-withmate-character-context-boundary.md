@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-10
-- Updated: 2026-09-03
+- Updated: 2026-09-05
 
 ## Context
 
@@ -10,7 +10,7 @@ WithMateはProject Memory、Character Memory、Character affectを保持し、�
 
 Project Memoryやsemantic Memoryは同義entryの重複を避ける。一方、Character episodeは別時点の類似した出来事自体に想起価値があり、semantic duplicateと同じ抑止規則を適用できない。同一eventのretryだけはidempotencyで抑止する必要がある。
 
-WithMate 6.3.25は、runtime-managed Skill、Character context injection、`withmate-character-context` MCP server、同じapplication serviceへ接続するCLI fallbackを提供する。配布Skillは、通常Sessionのmandatory post-turn appraisalをlifecycleが所有しつつ、turn中に具体的な感情変化を認識したAgentがMCPからevent-time appraisalを行う契約を定めている。Memory runtime discoveryはapplication instanceとruntime generationを分離し、Session-bound providerを起動元のtupleへ固定する。別Sessionのsession-layer affectは、保存状態を変更しないread-time afterglowとしてeffective contextへ投影される。
+WithMate 6.3.26は、Character context injection、Provider共通の`withmate-character-context` MCP server、同じapplication serviceへ接続するCLI fallbackを提供する。通常Sessionのmandatory post-turn appraisalはlifecycleが所有し、turn中に具体的な感情変化を認識したAgentはMCPからevent-time appraisalを行える。Memory runtime discoveryはapplication instanceとruntime generationを分離し、Session-bound providerを起動元のtupleへ固定する。別Sessionのsession-layer affectは、保存状態を変更しないread-time afterglowとしてeffective contextへ投影される。
 
 ## Decision
 
@@ -22,14 +22,15 @@ WithMate 6.3.25は、runtime-managed Skill、Character context injection、`with
 - cross-session affect afterglowはread-time projectionとしてだけ利用し、新規affect event、Character Memory episode、relationship stateへコピーしない。source Sessionのidentityや根拠を公開projectionから推測しない。
 - lifecycleは通常Sessionのmandatory post-turn appraisalを所有するが、event-time appraisalの単一ownerではない。Agentはlifecycleの同じpost-turn requestをMCPへ再送しない。即時eventと後続のpost-turn eventは、意味が似ていても別eventとして保存できる。
 - Affect eventと同じ出来事に属するlinked episodeは同じappraisalへ含め、`character_memory.append_episode`から重複mutationしない。
-- Character context、affect、episode、general semantic Memoryの通常操作はMCPを第一選択とする。CLIはMCP availability failureまたはoperatorによるinspect、migration、manual recoveryに限定し、同じWithMate application serviceと永続化先を確認できる場合だけ使う。
+- Character context、affect、episode、general semantic Memoryの通常操作はMCPを第一選択とする。Agent-bound CLI fallbackは、同じprovider executionでMCP initializeと`tools/list`が成功した後のtransport errorが`details.fallbackEligible=true`を返した場合だけ、変更していない同一operationへ使用する。MCP未設定、process起動不能、initializeまたは`tools/list`の失敗、structured error、非idempotentな`memory.get_file`と`memory.export_files`は対象外とする。operator CLIによるinspect、migration、manual recoveryは別authority modeとして扱う。
 - Semantic Memoryは同義のactive entryを重ねない。Character episodeとCharacter affect eventは別時点または別の根拠を持つ出来事なら、意味やmotifが似ていても別entryまたは別eventとして残す。同一eventのtimeout、response loss、client resendだけはrequestとidempotency keyを維持する。
 - runtime bindingで解決されたAgentは、許可された明示targetのMemoryをユーザーの代理として自律的に検索、取得、追加、訂正、forget、moveできる。許可targetは`user-global`、明示Project、actor Session自身のCharacter、actor Session自身のCharacterと明示Projectの組み合わせに限定し、別Characterをownerに持つtargetは読み書きとも拒否する。
 - Memoryの訂正、forget、moveは具体的な理由とidempotency keyを伴わせ、mutation後にcurrent stateをread-backする。general Memoryのbulk forgetは実行前にdry-runする。
 - MCPのdomain rejection、authority不足、invalid input、version conflict、idempotent replay、migration requiredをavailability failureへ読み替えず、CLIで迂回しない。`saved`、`rejected`、`replayed`、effect certainty、read-backを区別し、未確認の保存結果を推測しない。
 - Session-bound Memory operationは起動元のapplication instanceとMemory runtime generationへ固定し、別instanceまたは再起動後のgenerationへfallbackしない。generation mismatchとambiguous selectionはstructured discovery resultとして扱い、transport availability failureへ読み替えない。
 - affect correction、sessionまたはrelationship affect reset、relationship boundary変更には明示的なユーザー指示またはoperator authorityを要求し、mutation後にcurrent stateをread-backする。
-- Exact tool schema、authority、version、idempotency、error semantics、fallback commandはWithMateが配布する`withmate-memory` Skillを正本とする。`AGENTS.md`はCodexの判断原則とlifecycle上の責務だけを所有する。
+- Exact tool schemaとannotationはMCPの`tools/list`、runtimeのauthority、version、idempotency、error semantics、fallback commandはWithMateのrelease contractを正本とする。`AGENTS.md`はCodexの判断原則とstanding authorizationだけを所有し、端末設定と運用手順はrunbookへ置く。
+- CodexのSTDIO MCP設定は、WithMateがCodex processへ注入するSession binding、turn capability、runtime identityの5変数名を`env_vars`へ列挙する。値はSessionごとに変わるため、固定値を`config.toml`へ保存しない。
 - Global `AGENTS.md`のMemory policyがinstruction discoveryのbyte limit外へ切り落とされないよう、portable Codex configで`project_doc_max_bytes`を明示する。端末固有のlocal configは利用者がportable sectionを反映する。
 
 ## Alternatives
@@ -47,18 +48,17 @@ WithMate 6.3.25は、runtime-managed Skill、Character context injection、`with
 - Positive: injected contextと追加tool利用の境界が明確になり、routineなtool実況なしで会話へ継続性を反映できる。
 - Positive: lifecycle、MCP、CLIが同じWithMate application serviceへ収束し、別local stateを避けられる。
 - Positive: turn中に解消または反転した感情もeventとして保持し、semantic duplicate、別episode、別affect event、同一event retryを異なる規則で扱える。
-- Negative: Codex hostごとにMCP server設定と新sessionでの認識確認が必要になる。
+- Negative: Codex hostごとにMCP server設定、`env_vars`、新Sessionでの認識確認が必要になる。
 - Negative: Global instructionとproject instructionの合計sizeを見直し、configured byte limit内に維持する必要がある。
 - Negative: Character responseの自然さは自然言語上の判断を含み、shadow modeの観測と段階的な有効化が必要になる。
-- Negative: MCP unavailable時は同一runtimeを確認できる範囲でしかCharacter CLI writeへfallbackできない。
+- Negative: `details.fallbackEligible=true`が明示されたeligible transport errorでも、同一runtimeと変更していない同一operationを確認できる範囲でしかCharacter CLI writeへfallbackできない。
 
 ## Contract Anchors
 
 - Codex policy: `AGENTS.md`の「WithMate-managed Context and Repository Metadata」
 - Portable MCP configuration: `config.example.toml`
 - Operator verification: `docs/runbooks/withmate-character-context.md`
-- Runtime-managed procedure: `skills/withmate-memory/SKILL.md`
-- Installed bundle version anchor: `skills/withmate-memory/.withmate-managed-skill.json`
-- External contract: WithMate 6.3.25 `resources/skills/withmate-memory/reference/character-context.md`
-- External decision: WithMate `docs/adr/020-memory-affect-mcp-application-boundary.md`
-- External executable contracts: WithMate `scripts/tests/withmate-memory-mcp.test.ts`、`scripts/tests/character-context-cli-mcp-integration.test.ts`、`scripts/tests/withmate-memory-skill-contract.test.ts`、`scripts/tests/withmate-memory-runtime-discovery.test.ts`、`scripts/tests/character-affect-storage.test.ts`
+- Runtime procedure: `docs/runbooks/withmate-character-context.md`
+- External contract: WithMate 6.3.26 `docs/adr/024-provider-common-memory-mcp-boundary.md`
+- External decision: WithMate `docs/adr/020-memory-affect-mcp-application-boundary.md`、`docs/adr/024-provider-common-memory-mcp-boundary.md`
+- External executable contracts: WithMate `scripts/tests/withmate-memory-mcp.test.ts`、`scripts/tests/character-context-cli-mcp-integration.test.ts`、`scripts/tests/withmate-memory-runtime-discovery.test.ts`、`scripts/tests/character-affect-storage.test.ts`

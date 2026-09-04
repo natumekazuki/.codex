@@ -44,6 +44,6 @@
 - Workflow: `AGENTS.md`
 - Role contracts: `agents/*.toml`
 - Current workflow and reporting: `AGENTS.md`
-- Memory procedure: `skills/withmate-memory/SKILL.md`
+- Memory procedure: `docs/runbooks/withmate-character-context.md`
 - Instruction ownership: `docs/architecture/instruction-governance.md`
 - Executable contract: なし。task lifecycleは自然言語の運用契約であり、runtime routing testの責務には含めない

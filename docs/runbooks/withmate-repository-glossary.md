@@ -2,7 +2,7 @@
 
 ## 対応契約
 
-このrunbookはWithMate 6.3.25で確認した次のinterfaceを対象とする。
+このrunbookはWithMate 6.3.26で確認した次のinterfaceを対象とする。
 
 | Contract | Value |
 | --- | --- |
@@ -22,6 +22,8 @@
 5. `glossary.list_targets`、`glossary.list`、`glossary.search`、`glossary.get`、`glossary.create`、`glossary.create_batch`、`glossary.update`、`glossary.delete`、`glossary.validate`が公開されていることを確認する。
 
 MCP serverはWithMateのSession-bound runtimeへ接続する。Session ID、repository path、branch名をauthority入力にせず、`glossary.list_targets`が返すprimary checkoutだけを操作する。
+
+`mcp_servers.withmate-glossary`の`env_vars`には、Character context MCPと同じ5つの`WITHMATE_*` Session binding変数をすべて指定する。値はWithMateがSessionごとのCodex processへ注入するため、固定値を`env`へ保存しない。設定変更後は新しいCodex Sessionを開始し、MCP processを再起動する。
 
 ## Codexの操作権限
 
@@ -49,3 +51,5 @@ update requestの`explicitUserRequest: true`は、`AGENTS.md`に記録された�
 ## 障害時の扱い
 
 MCPが未設定、起動不能、またはtransport-levelで利用不能な場合だけ、managed Skillの手順に従ってCLI fallbackを使用できる。CLIも同じactive provider Session bindingを必要とする。bindingとprimary checkoutを確認できない場合はwriteせず、Glossary操作を未実行として報告する。
+
+`codex mcp get withmate-glossary`の`env`が`-`の場合は、`config.example.toml`の`env_vars`をlocal設定へ反映して新しいSessionを開始する。`glossary.list_targets`が`GLOSSARY_SESSION_BINDING_REQUIRED`を返した場合も同じ設定を確認する。structuredなauthority、validation、revision、conflict errorはavailability failureへ読み替えず、CLIで迂回しない。
