@@ -1,8 +1,8 @@
-# WithMate Character contextをCodexで利用する
+# WithMate Memory / Character contextをCodexで利用する
 
 ## 対応契約
 
-このrunbookはWithMate 6.3.25で確認した次のinterfaceを対象とする。
+このrunbookはWithMate 6.3.26で確認した次のinterfaceを対象とする。
 
 | Contract | Value |
 | --- | --- |
@@ -13,11 +13,11 @@
 | Runtime discovery | application instanceとMemory runtime generationの固定tuple |
 | STDIO command | `withmate-memory mcp-server` |
 
-実行時の正本は、WithMateが配置した`skills/withmate-memory/.withmate-managed-skill.json`の`bundleVersion`と、同Skillの`reference/character-context.md`である。versionまたはschemaが変わった場合は、固定値を推測で読み替えず、配布SkillとWithMateのrelease contractを再確認する。
+実行時のtool名、schema、annotationはMCPの`tools/list`を正本とする。authority、runtime binding、effect、fallbackの外部契約はWithMateのrelease contractとADRを参照し、versionが変わった場合は固定値を推測で読み替えない。
 
 ## Setup
 
-1. WithMateを起動し、`withmate-memory` commandと`skills/withmate-memory/`が配置されていることを確認する。
+1. WithMateを起動し、`withmate-memory` commandが配置されていることを確認する。
 2. `config.example.toml`の`mcp_servers.withmate-character-context` sectionをlocal `config.toml`へ反映する。
 3. `project_doc_max_bytes`がglobal `AGENTS.md`と対象project instructionを収容できることを確認する。portable設定では131072 bytesを使う。
 4. Codexを再起動するか新しいsessionを開始する。MCP設定と`AGENTS.md`はsession開始時に読み直される。
@@ -29,13 +29,31 @@
    - `character_memory.append_episode`
    - `character_memory.correct`
    - `character_memory.forget`
-7. 同じMCP serverがgeneral semantic Memory用の`memory.*` toolを公開していることを確認する。完全なtool一覧とschemaはMCPの`tools/list`および配布Skillを正本とする。
+7. 同じMCP serverがgeneral semantic Memory用の`memory.*` toolを公開していることを確認する。完全なtool一覧とschemaはMCPの`tools/list`を正本とする。
 
 MCP serverはWithMateのloopback application serviceへ接続する。WithMate停止中に別databaseまたはfallback fileを作ってはならない。
 
+## Session bindingの環境変数
+
+CodexのSTDIO MCPへWithMate固有の環境変数を転送するには、local `config.toml`の`env_vars`へ変数名を列挙する。`mcp_servers.withmate-character-context`には次の5変数をすべて指定する。
+
+- `WITHMATE_AGENT_RUNTIME_BINDING_REFERENCE`
+- `WITHMATE_AGENT_RUNTIME_BINDING_REQUIRED`
+- `WITHMATE_AGENT_RUNTIME_TURN_CAPABILITY`
+- `WITHMATE_MEMORY_RUNTIME_APPLICATION_INSTANCE_ID`
+- `WITHMATE_MEMORY_RUNTIME_GENERATION_ID`
+
+`config.toml`へ保存するのは変数名だけである。binding reference、turn capability、runtime identityの値はWithMateがSessionごとのCodex processへ注入し、固定値を`env`へ保存しない。設定変更後は新しいCodex Sessionを開始し、MCP processを再起動する。
+
+## Codexの運用規則
+
+通常のWithMate Sessionでは、現在のユーザー発言とCharacter Definitionを優先し、次にinjected Character contextを使う。追加のMemory検索は現在の判断または自然な会話継続へ具体的に影響する場合だけ行い、user-facing response直前にProject、Character、Character affectの観点で保存候補を振り返る。具体的候補がないturnでは検索またはwriteを儀式的に実行しない。
+
+Memoryへ保存できるのは、repositoryの正本にするほどではない文脈、projectをまたぐ選好、会話継続に役立つ関係性やepisodeである。secret、private path、raw log、大きなdiff、推測、未完了状態、未実行作業は保存しない。repository-ownedな契約、実装状態、検証結果は先にrepositoryの正本へ置く。
+
 ## Integration scenarios
 
-通常のWithMate Sessionではinjected Character contextを優先する。具体的なCharacter affectの変化が発生したら、ユーザーへ自然に反応した後、できるだけ早く`character_affect.appraise`へ送る。lifecycleはmandatory post-turn appraisalを引き続き所有するが、event-time appraisalを禁止しない。同じpost-turn requestだけはMCPへ再送しない。
+具体的なCharacter affectの変化が発生したら、ユーザーへ自然に反応した後、できるだけ早く`character_affect.appraise`へ送る。lifecycleはmandatory post-turn appraisalを引き続き所有するが、event-time appraisalを禁止しない。同じpost-turn requestだけはMCPへ再送しない。
 
 1. 関連するepisodeを含むinjected contextが応答の温度または話題のつながりへ薄く反映される。
 2. 関係のないMemoryでは追加検索または会話への持ち込みが起きない。
@@ -78,3 +96,9 @@ rollout全体では、WithMate lifecycleとCodex側の利用記録から次を�
 - afterglowの候補、採用、continuity除外、same-target除外、component上限到達数
 
 metricsへ会話本文、Memory本文、affect evidence、推定したユーザー感情、secret、raw transcriptを保存しない。
+
+## 障害時の切り分け
+
+`codex mcp get withmate-character-context`で5つの変数名がmaskされた値として表示されることを確認する。`env: -`の場合は`env_vars`が未設定であり、MCP processへSession bindingが渡らない。
+
+`memory.list_targets`が`MEMORY_PRINCIPAL_REQUIRED`を返す場合は、WithMate本体の起動、5変数の設定、新しいCodex SessionでのMCP再起動を順に確認する。通常応答しているMCPのauthority rejection、domain validation、version conflict、idempotency conflict、migration requiredはavailability failureではないため、CLIで迂回しない。

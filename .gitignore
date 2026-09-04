@@ -39,7 +39,6 @@ cap_sid
 /plugins/cache
 installation_id
 /memories
-/skills/withmate-memory/
 /skills/withmate-glossary/
 /mcp-oauth-locks/
 session_index.jsonl
