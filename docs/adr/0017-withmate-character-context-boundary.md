@@ -22,7 +22,7 @@ WithMate 6.3.26は、Character context injection、Provider共通の`withmate-ch
 - cross-session affect afterglowはread-time projectionとしてだけ利用し、新規affect event、Character Memory episode、relationship stateへコピーしない。source Sessionのidentityや根拠を公開projectionから推測しない。
 - lifecycleは通常Sessionのmandatory post-turn appraisalを所有するが、event-time appraisalの単一ownerではない。Agentはlifecycleの同じpost-turn requestをMCPへ再送しない。即時eventと後続のpost-turn eventは、意味が似ていても別eventとして保存できる。
 - Affect eventと同じ出来事に属するlinked episodeは同じappraisalへ含め、`character_memory.append_episode`から重複mutationしない。
-- Character context、affect、episode、general semantic Memoryの通常操作はMCPを第一選択とする。CLIはMCP availability failureまたはoperatorによるinspect、migration、manual recoveryに限定し、同じWithMate application serviceと永続化先を確認できる場合だけ使う。
+- Character context、affect、episode、general semantic Memoryの通常操作はMCPを第一選択とする。Agent-bound CLI fallbackは、同じprovider executionでMCP initializeと`tools/list`が成功した後のtransport errorが`details.fallbackEligible=true`を返した場合だけ、変更していない同一operationへ使用する。MCP未設定、process起動不能、initializeまたは`tools/list`の失敗、structured error、非idempotentな`memory.get_file`と`memory.export_files`は対象外とする。operator CLIによるinspect、migration、manual recoveryは別authority modeとして扱う。
 - Semantic Memoryは同義のactive entryを重ねない。Character episodeとCharacter affect eventは別時点または別の根拠を持つ出来事なら、意味やmotifが似ていても別entryまたは別eventとして残す。同一eventのtimeout、response loss、client resendだけはrequestとidempotency keyを維持する。
 - runtime bindingで解決されたAgentは、許可された明示targetのMemoryをユーザーの代理として自律的に検索、取得、追加、訂正、forget、moveできる。許可targetは`user-global`、明示Project、actor Session自身のCharacter、actor Session自身のCharacterと明示Projectの組み合わせに限定し、別Characterをownerに持つtargetは読み書きとも拒否する。
 - Memoryの訂正、forget、moveは具体的な理由とidempotency keyを伴わせ、mutation後にcurrent stateをread-backする。general Memoryのbulk forgetは実行前にdry-runする。

@@ -67,8 +67,8 @@ Memoryへ保存できるのは、repositoryの正本にするほどではない�
 10. Affect eventと同じ出来事に属するepisodeはappraisalのlinked episodeとして保存し、`character_memory.append_episode`へ重複送信しない。
 11. 許可された明示targetのMemoryはAgentがユーザーの代理として検索、取得、追加、訂正、forget、moveできる。別Characterをownerに持つtargetは読み書きしない。
 12. Memoryの訂正、forget、moveには具体的な理由とidempotency keyを指定し、mutation後にcurrent stateをread-backする。general Memoryのbulk forgetは実行前にdry-runする。
-13. MCP availability failure時だけ`--fallback-from mcp`でCLIを使い、復旧後のMCP read-backと同じscope、versionを確認する。
-14. `authority_denied`、`invalid_input`、`version_conflict`その他のdomain resultをCLIで迂回しない。
+13. Agent-bound CLI fallbackは、同じprovider executionでMCP initializeと`tools/list`が成功した後のtransport errorが`details.fallbackEligible=true`を返した場合だけ、変更していない同一operationと同じactor-relative requestで`--fallback-from mcp`を指定して実行する。復旧後はMCPで同じscopeとversionをread-backする。
+14. MCP未設定、process起動不能、initializeまたは`tools/list`の失敗、`authority_denied`、`invalid_input`、`version_conflict`その他のstructured errorではCLIへfallbackしない。非idempotentな`memory.get_file`と`memory.export_files`も対象外とし、response loss時は出力先をread-onlyで確認するかoperatorによるmanual recoveryで閉じる。
 15. routineなcontext取得、Memory検索、affect処理をuser-facing responseで逐次実況しない。
 16. affect contextがない場合は状態を捏造せず、現在のCharacter Definitionと会話だけで応答を継続する。
 17. 別Sessionのaffect afterglowはread-time projectionとしてだけ扱い、新規event、Character Memory episode、relationship stateへコピーしない。
@@ -101,4 +101,4 @@ metricsへ会話本文、Memory本文、affect evidence、推定したユーザ�
 
 `codex mcp get withmate-character-context`で5つの変数名がmaskされた値として表示されることを確認する。`env: -`の場合は`env_vars`が未設定であり、MCP processへSession bindingが渡らない。
 
-`memory.list_targets`が`MEMORY_PRINCIPAL_REQUIRED`を返す場合は、WithMate本体の起動、5変数の設定、新しいCodex SessionでのMCP再起動を順に確認する。通常応答しているMCPのauthority rejection、domain validation、version conflict、idempotency conflict、migration requiredはavailability failureではないため、CLIで迂回しない。
+`memory.list_targets`が`MEMORY_PRINCIPAL_REQUIRED`を返す場合は、WithMate本体の起動、5変数の設定、新しいCodex SessionでのMCP再起動を順に確認する。このerrorを含むstartup、initialize、`tools/list`、authority、domain validation、version、idempotency、migration、storageの失敗はfallback開始条件ではない。CLI fallbackを試さず、MCPの設定またはruntimeを復旧する。
