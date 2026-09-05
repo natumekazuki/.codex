@@ -290,7 +290,7 @@ def _extract_packet_records(
             packet_records.append((after, False))
             after_records.append(after)
         elif kind == "SURVIVED":
-            _validate_extractor_record(before, "SURVIVED transition before")
+            _validate_historical_extractor_record(before, "SURVIVED transition before")
             _validate_extractor_record(after, "SURVIVED transition after")
             packet_records.append((after, False))
             after_records.append(after)
@@ -316,10 +316,20 @@ def _extract_packet_records(
 
 
 def _validate_extractor_record(record: Any, name: str) -> None:
+    _validate_historical_extractor_record(record, name)
     if not isinstance(record, dict) or set(record) != EXTRACTOR_RECORD_KEYS:
         raise PacketError(f"{name} has unexpected keys")
     if record["metadata_format_version"] != 2:
         raise PacketError(f"{name} metadata_format_version must be 2")
+    metadata = _object(record.get("metadata"), f"{name}.metadata")
+    metadata_errors = validate_metadata(metadata, 2)
+    if metadata_errors:
+        raise PacketError(f"{name}.metadata is invalid: " + "; ".join(metadata_errors))
+
+
+def _validate_historical_extractor_record(record: Any, name: str) -> None:
+    if not isinstance(record, dict) or set(record) != EXTRACTOR_RECORD_KEYS:
+        raise PacketError(f"{name} has unexpected keys")
     source = _object(record.get("source"), f"{name}.source")
     if set(source) != SOURCE_KEYS:
         raise PacketError(f"{name}.source has unexpected keys")
@@ -330,11 +340,25 @@ def _validate_extractor_record(record: Any, name: str) -> None:
     source_hash = _hash(record.get("source_hash"), f"{name}.source_hash")
     if sha256_text(source_text) != source_hash:
         raise PacketError(f"{name}.source_hash does not match source_text")
-    metadata = _object(record.get("metadata"), f"{name}.metadata")
-    metadata_errors = validate_metadata(metadata, 2)
+
+    metadata_format_version = record.get("metadata_format_version")
+    metadata = record.get("metadata")
+    metadata_hash = record.get("metadata_hash")
+    if metadata is None:
+        if metadata_hash is not None:
+            raise PacketError(f"{name}.metadata_hash must be null without metadata")
+        return
+    if (
+        not isinstance(metadata_format_version, int)
+        or isinstance(metadata_format_version, bool)
+        or metadata_format_version <= 0
+    ):
+        raise PacketError(f"{name}.metadata_format_version is invalid")
+    metadata = _object(metadata, f"{name}.metadata")
+    metadata_errors = validate_metadata(metadata, metadata_format_version)
     if metadata_errors:
         raise PacketError(f"{name}.metadata is invalid: " + "; ".join(metadata_errors))
-    metadata_hash = _hash(record.get("metadata_hash"), f"{name}.metadata_hash")
+    metadata_hash = _hash(metadata_hash, f"{name}.metadata_hash")
     if sha256_text(canonical_json(metadata)) != metadata_hash:
         raise PacketError(f"{name}.metadata_hash does not match canonical metadata")
 

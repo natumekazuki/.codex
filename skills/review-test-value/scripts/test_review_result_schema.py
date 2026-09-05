@@ -301,9 +301,9 @@ class ReviewResultSchemaTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "security"
-    # claim = "Solのcontext解決は同じdeep recordのrefとcontent hashへ結合され既知のLuna境界をAPPROVEで置換しない"
+    # claim = "Solのcontext解決は同じdeep recordのcontextとmetadata宣言境界へ結合され、既知のLuna境界もAPPROVEで置換しない"
     # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/43" }
-    # fault = "別contextまたは矛盾する境界でRECHECKを解消してfinalをACCEPTにする"
+    # fault = "別context、metadata宣言と異なる境界、または既知のLuna境界と矛盾する境界でRECHECKを解消してfinalをACCEPTにする"
     # observable = "aggregate_resultsのfinal recordとResultValidationError"
     # observation_boundary = "component-behavior"
     # scope = "deep-review-context-resolution"
@@ -318,6 +318,15 @@ class ReviewResultSchemaTests(unittest.TestCase):
         result = aggregate_results(value)
         self.assertEqual(result["records"][0]["status"], "ACCEPT")
         self.assertEqual(result["records"][0]["disposition"], "KEEP_PERMANENT")
+
+        metadata_mismatch = copy.deepcopy(value)
+        metadata_mismatch["sol_result"]["reviews"][0]["context_resolution"][
+            "actual_boundary"
+        ] = "consumer"
+        with self.assertRaisesRegex(
+            ResultValidationError, "metadata observation_boundary"
+        ):
+            aggregate_results(metadata_mismatch)
 
         wrong_context = copy.deepcopy(value)
         wrong_context["sol_result"]["reviews"][0]["context_resolution"][

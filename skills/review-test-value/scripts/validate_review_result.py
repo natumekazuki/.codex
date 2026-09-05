@@ -729,6 +729,14 @@ def _validate_context_resolution(review: dict[str, Any], expected: dict[str, Any
     luna_boundary = alignment_review.get("actual_boundary")
     if review["verdict"] == "APPROVE" and luna_boundary is not None and boundary != luna_boundary:
         raise ResultValidationError("APPROVE context_resolution contradicts known Luna boundary")
+    metadata = expected.get("metadata")
+    declared_boundary = (
+        metadata.get("observation_boundary") if isinstance(metadata, dict) else None
+    )
+    if review["verdict"] == "APPROVE" and boundary != declared_boundary:
+        raise ResultValidationError(
+            "APPROVE context_resolution must match metadata observation_boundary"
+        )
 
 
 def _string(value: Any, name: str) -> str:

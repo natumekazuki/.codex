@@ -11,12 +11,18 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("extract_test_values.py")
+SCRIPTS = Path(__file__).resolve().parent
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+
+SCRIPT = SCRIPTS / "extract_test_values.py"
 SPEC = importlib.util.spec_from_file_location("extract_test_values", SCRIPT)
 assert SPEC and SPEC.loader
 EXTRACTOR = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = EXTRACTOR
 SPEC.loader.exec_module(EXTRACTOR)
+
+from build_review_packets import build_metadata_packet  # noqa: E402
 
 
 VALID_METADATA = '''# @test-value v2
@@ -982,6 +988,53 @@ def test_oracle_table_with_decoy():
             ["TEST_VALUE_V2_REQUIRED"],
         )
         self.assertEqual(mixed_result["tests"][0]["metadata_format_version"], 1)
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "Git modeでv1、metadata未付与、壊れたmetadataからv2へ修正したSURVIVED testをPhase 1 packetへ渡せる"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/pull/46#discussion_r3941758175" }
+    # fault = "移行元のbefore recordを現行v2として検証し、修正済みafter recordの価値審査を開始できない"
+    # observable = "Git抽出結果からbuild_metadata_packetが生成する現行v2 record"
+    # observation_boundary = "component-behavior"
+    # scope = "git-transition-review-packet"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_packets_repaired_historical_metadata(self) -> None:
+        historical_sources = {
+            "v1": V1_METADATA + "def test_migrate():\n    assert observed() == 1\n",
+            "unannotated": "def test_migrate():\n    assert observed() == 1\n",
+            "broken": (
+                "# @test-value v2\n"
+                "# kind =\n"
+                "# @end-test-value\n"
+                "def test_migrate():\n"
+                "    assert observed() == 1\n"
+            ),
+        }
+
+        for label, historical_source in historical_sources.items():
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as tempdir:
+                    self.root = Path(tempdir)
+                    path = self.write("tests/test_migration.py", historical_source)
+                    base = self.initialize_git()
+                    path.write_text(
+                        VALID_METADATA
+                        + "def test_migrate():\n    assert observed() == 2\n",
+                        encoding="utf-8",
+                    )
+
+                    result, exit_status, stderr = self.extract_git(base)
+
+                    self.assertEqual(exit_status, 0, stderr)
+                    self.assertEqual(result["diagnostics"], [])
+                    self.assertEqual(
+                        [transition["kind"] for transition in result["transitions"]],
+                        ["SURVIVED"],
+                    )
+                    packet = build_metadata_packet(result)
+                    self.assertEqual(len(packet["records"]), 1)
+                    self.assertEqual(packet["records"][0]["metadata_format_version"], 2)
 
     # @test-value v2
     # kind = "regression"
