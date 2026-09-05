@@ -64,10 +64,33 @@ def record_id_for(record: dict[str, Any]) -> str:
     return sha256_text(canonical_json({"locator": locator, "metadata_hash": metadata_hash}))
 
 
+def deleted_record_id_for(record: dict[str, Any]) -> str:
+    source = _object(record.get("source"), "record.source")
+    locator = {
+        "path": _string(source.get("path"), "record.source.path"),
+        "declaration_start_line": _positive_int(
+            source.get("declaration_start_line"),
+            "record.source.declaration_start_line",
+        ),
+    }
+    source_hash = _hash(record.get("source_hash"), "record.source_hash")
+    metadata_hash = _hash(record.get("metadata_hash"), "record.metadata_hash")
+    return sha256_text(
+        canonical_json(
+            {
+                "transition": "DELETED",
+                "locator": locator,
+                "source_hash": source_hash,
+                "metadata_hash": metadata_hash,
+            }
+        )
+    )
+
+
 def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
-    records = _extract_records(extractor_result)
+    records = _extract_packet_records(extractor_result)
     packet_records = []
-    for record in records:
+    for record, deleted in records:
         metadata = _object(record.get("metadata"), "record.metadata")
         metadata_errors = validate_metadata(metadata, 2)
         if metadata_errors:
@@ -77,7 +100,7 @@ def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
             raise PacketError("record.metadata_hash does not match canonical metadata")
         packet_records.append(
             {
-                "record_id": record_id_for(record),
+                "record_id": deleted_record_id_for(record) if deleted else record_id_for(record),
                 "metadata_format_version": 2,
                 "metadata": metadata,
                 "metadata_hash": metadata_hash,
@@ -101,8 +124,11 @@ def build_alignment_packet(
     except ResultValidationError as exc:
         raise PacketError(str(exc)) from exc
     review_by_id = {item["record_id"]: item for item in metadata_reviews}
-    extractor_records = _extract_records(extractor_result)
-    records_by_id = {record_id_for(item): item for item in extractor_records}
+    extractor_records = _extract_packet_records(extractor_result)
+    records_by_id = {
+        deleted_record_id_for(item) if deleted else record_id_for(item): item
+        for item, deleted in extractor_records
+    }
     packet_records = []
     for metadata_record in metadata_packet["records"]:
         record_id = metadata_record["record_id"]
@@ -206,7 +232,9 @@ def build_deep_packet(
     return {**packet, "input_hash": result_hash(packet)}
 
 
-def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
+def _extract_packet_records(
+    extractor_result: dict[str, Any],
+) -> list[tuple[dict[str, Any], bool]]:
     if set(extractor_result) != EXTRACTOR_RESULT_KEYS:
         raise PacketError("extractor result has unexpected keys")
     if extractor_result.get("schema_version") != 2:
@@ -239,12 +267,13 @@ def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
         raise PacketError("extractor result contains duplicate record locator")
     transitions = extractor_result.get("transitions")
     if transitions is None:
-        return records
+        return [(record, False) for record in records]
     if not isinstance(transitions, list):
         raise PacketError("extractor transitions must be null or an array")
     before_locators = []
     after_locators = []
     transition_values = []
+    packet_records = []
     after_records = []
     for transition in transitions:
         if not isinstance(transition, dict) or set(transition) != {"kind", "before", "after"}:
@@ -258,13 +287,16 @@ def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
             if before is not None:
                 raise PacketError("ADDED transition before must be null")
             _validate_extractor_record(after, "ADDED transition after")
+            packet_records.append((after, False))
             after_records.append(after)
         elif kind == "SURVIVED":
             _validate_extractor_record(before, "SURVIVED transition before")
             _validate_extractor_record(after, "SURVIVED transition after")
+            packet_records.append((after, False))
             after_records.append(after)
         else:
             _validate_extractor_record(before, "DELETED transition before")
+            packet_records.append((before, True))
             if after is not None:
                 raise PacketError("DELETED transition after must be null")
         if before is not None:
@@ -280,7 +312,7 @@ def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
         raise PacketError("extractor transitions contain a duplicate transition")
     if after_records != records:
         raise PacketError("transition after records do not match extractor tests")
-    return records
+    return packet_records
 
 
 def _validate_extractor_record(record: Any, name: str) -> None:

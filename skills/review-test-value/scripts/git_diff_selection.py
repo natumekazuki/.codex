@@ -270,8 +270,26 @@ def _map_old_declaration_start_to_new(
 
 def _hunk_intersects_old_span(hunk: DiffHunk, start: int, end: int) -> bool:
     if hunk.old_count == 0:
-        return start <= hunk.old_start < end
+        # An insertion immediately after a declaration still belongs to its
+        # body.  Include the exclusive end boundary, while keeping a blank
+        # line between adjacent declarations outside the preceding span.
+        return start <= hunk.old_start <= end + 1
     return start <= hunk.old_end and end >= hunk.old_start
+
+
+def _base_diagnostic_was_fully_replaced(
+    item: ChangedFile,
+    diagnostic: dict[str, Any],
+) -> bool:
+    start = diagnostic.get("_selection_start_line", diagnostic["line"])
+    end = diagnostic.get("_selection_end_line", diagnostic["line"])
+    return any(
+        hunk.old_count
+        and hunk.new_count == 0
+        and hunk.old_start <= start
+        and hunk.old_end >= end
+        for hunk in item.hunks
+    )
 
 
 def _base_change_projection(
@@ -637,6 +655,12 @@ def select_git(
                 base_diagnostics,
                 project_diagnostic,
             )
+        )
+        diagnostics.extend(
+            project_diagnostic(value)
+            for value in base_diagnostics
+            if value["code"] == "TEST_DECLARATION_UNSUPPORTED"
+            and _base_diagnostic_was_fully_replaced(item, value)
         )
     tests.sort(key=_record_sort_key)
     transitions.sort(

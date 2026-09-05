@@ -553,11 +553,23 @@ def _validate_alignment_record(record: Any) -> None:
             source["declaration_start_line"], "record.source.declaration_start_line"
         ),
     }
-    expected_id = _sha256_text(
+    current_id = _sha256_text(
         _canonical_json({"locator": locator, "metadata_hash": record["metadata_hash"]})
     )
-    if record["record_id"] != expected_id:
-        raise ResultValidationError("record_id does not match source locator and metadata_hash")
+    deleted_id = _sha256_text(
+        _canonical_json(
+            {
+                "transition": "DELETED",
+                "locator": locator,
+                "source_hash": record["source_hash"],
+                "metadata_hash": record["metadata_hash"],
+            }
+        )
+    )
+    if record["record_id"] not in {current_id, deleted_id}:
+        raise ResultValidationError(
+            "record_id does not match the current or deleted source identity"
+        )
     _string(source["symbol"], "record.source.symbol")
     metadata_start = _positive_int(
         source["metadata_start_line"], "record.source.metadata_start_line"

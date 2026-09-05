@@ -27,6 +27,8 @@ stdoutへUTF-8 JSON objectを一つ返す。
 
 Git modeの`tests`は`ADDED`と`SURVIVED`の`after`を同じ決定論的順序で並べたものと一致する。`DELETED.before`は削除前のmetadata、source locator、本文、hashを保持し、削除によって元の審査義務を失わせない。対応が一意に確定しない場合は`RECORD_TRANSITION_UNRESOLVED`を返し、exit `1`とする。
 
+Git modeのphase packetはtransition順に`ADDED.after`、`SURVIVED.after`、`DELETED.before`を一度ずつ含める。`DELETED.before`のrecord IDはtransition種別と削除前のsource hashを含み、同じlocatorへ追加された現recordと区別する。
+
 source locator、LF正規化、canonical JSONとSHA-256、決定論的な順序はv1の規則を維持する。locatorは編集をまたぐ永続IDではない。`warnings`と`diagnostics`はそれぞれ`code`、`path`、`line`、`message`を持つ配列とし、errorをwarningへ弱めない。
 
 exit `0`は抽出errorなし、`1`は修正可能なsource/metadata diagnostic、`2`は信頼できる結果を構築できないCLI、環境、I/O等の失敗である。`TEST_VALUE_V2_REQUIRED`は両modeでerrorとする。空の抽出結果とexit `0`は、coordinatorの未解決義務やresolutionの完了を意味しない。

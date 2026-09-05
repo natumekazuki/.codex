@@ -983,11 +983,13 @@ def test_oracle_table_with_decoy():
         )
         self.assertEqual(mixed_result["tests"][0]["metadata_format_version"], 1)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "改行コードだけの変更はtest価値の再審査対象にしない"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "LFからCRLFへの変換で未変更legacy testまで選択し審査を停止する"
+    # fault = "LFからCRLFへの変換で未変更legacy testまで選択し審査を停止する"
+    # observable = "Git抽出結果のtestsとdiagnostics"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # distinction = "本文変更を伴わないfile全体のline-ending変換だけを扱う"
@@ -1021,6 +1023,52 @@ def test_oracle_table_with_decoy():
                 self.assertEqual(exit_status, 0, stderr)
                 self.assertEqual(result["tests"], [])
                 self.assertEqual(result["diagnostics"], [])
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "test本文末尾への追記を既存testのSURVIVEDとして選択する"
+    # oracle = { type = "adr", ref = "ADR-0021" }
+    # fault = "末尾のzero-count insertionをADDEDとして扱い元testの変更審査を失う"
+    # observable = "working、staged、headのSURVIVED transition"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_selects_test_body_append_as_survived(self) -> None:
+        source = VALID_METADATA + (
+            "def test_appended():\n"
+            "    assert before()\n"
+        )
+        path = self.write("tests/test_append.py", source)
+        base = self.initialize_git()
+        path.write_text(
+            source + "    assert after()\n",
+            encoding="utf-8",
+        )
+
+        working = self.extract_git(base)
+        self.git("add", "tests/test_append.py")
+        staged = self.extract_git(base, "python", "--staged")
+        self.git("commit", "--quiet", "-m", "append test body")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "python", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [record["source"]["symbol"] for record in result["tests"]],
+                    ["test_appended"],
+                )
+                self.assertEqual(
+                    [transition["kind"] for transition in result["transitions"]],
+                    ["SURVIVED"],
+                )
 
     # @test-value v1
     # kind = "regression"
@@ -1586,11 +1634,13 @@ def test_oracle_table_with_decoy():
                     ["TEST_DECLARATION_UNSUPPORTED"],
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "未対応test宣言の全削除で直後の未変更testを選択しない"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "全削除anchorを隣接legacy testへ結合してmetadata移行を誤要求する"
+    # fault = "全削除した未対応testのdiagnosticを失うか、削除anchorを隣接legacy testへ結合する"
+    # observable = "Git抽出結果のTEST_DECLARATION_UNSUPPORTEDと空のtests"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # distinction = "未対応宣言がsurviveする本文削除ではなく宣言range全体の削除を扱う"
@@ -1627,9 +1677,12 @@ def test_oracle_table_with_decoy():
             "head": committed,
         }.items():
             with self.subTest(mode=mode):
-                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(exit_status, 1, stderr)
                 self.assertEqual(result["tests"], [])
-                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_DECLARATION_UNSUPPORTED"],
+                )
 
     # @test-value v1
     # kind = "regression"

@@ -100,10 +100,10 @@ def extractor_result_with_two_records():
 class ReviewPacketTests(unittest.TestCase):
     # @test-value v2
     # kind = "invariant"
-    # claim = "packet builderはGit transitionのafter recordsを現在のtestsと同一順序でのみ信頼する"
+    # claim = "packet builderはGit transition順にafterまたは削除前beforeをPhase 1へ投影する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # fault = "削除、重複、未解決のtransitionを現在testのmetadataとして黙って審査へ渡す"
-    # observable = "build_metadata_packetが返すPacketErrorまたはcurrent record集合"
+    # fault = "削除testをPhase 1から欠落させるか同一locatorの追加testと衝突させる"
+    # observable = "metadata packetのrecord集合、順序、record_id"
     # observation_boundary = "component-behavior"
     # scope = "extractor-transition-envelope"
     # lifecycle = "permanent"
@@ -120,7 +120,9 @@ class ReviewPacketTests(unittest.TestCase):
             {"kind": "ADDED", "before": None, "after": current},
             {"kind": "DELETED", "before": copy.deepcopy(current), "after": None},
         ]
-        self.assertEqual(len(build_metadata_packet(extracted)["records"]), 1)
+        packet = build_metadata_packet(extracted)
+        self.assertEqual(len(packet["records"]), 2)
+        self.assertNotEqual(packet["records"][0]["record_id"], packet["records"][1]["record_id"])
 
         deleted = copy.deepcopy(current)
         deleted["source"]["path"] = "tests/test_packet_deleted.py"
@@ -130,7 +132,7 @@ class ReviewPacketTests(unittest.TestCase):
             {"kind": "SURVIVED", "before": current, "after": current},
             {"kind": "DELETED", "before": deleted, "after": None},
         ]
-        self.assertEqual(len(build_metadata_packet(extracted)["records"]), 1)
+        self.assertEqual(len(build_metadata_packet(extracted)["records"]), 2)
 
         invalid_cases = []
         mismatch = copy.deepcopy(extracted)
@@ -151,6 +153,78 @@ class ReviewPacketTests(unittest.TestCase):
         for candidate in invalid_cases:
             with self.assertRaises(PacketError):
                 build_metadata_packet(candidate)
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "削除だけのGit差分でも削除前metadataを一件のPhase 1 packet recordとして保持する"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # fault = "current testsが空であることを理由に削除testの審査義務を消失させる"
+    # observable = "metadata packetのrecord数とmetadata hash"
+    # observation_boundary = "component-behavior"
+    # scope = "deleted-transition-packet"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_deleted_only_transition_yields_one_metadata_record(self):
+        extracted = extractor_result()
+        deleted = copy.deepcopy(extracted["tests"][0])
+        extracted["tests"] = []
+        extracted["transitions"] = [
+            {"kind": "DELETED", "before": deleted, "after": None}
+        ]
+
+        packet = build_metadata_packet(extracted)
+
+        self.assertEqual(len(packet["records"]), 1)
+        self.assertEqual(packet["records"][0]["metadata_hash"], deleted["metadata_hash"])
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "同一locatorの追加と削除はtransition状態を含む異なるrecord_idでPhase 1へ渡す"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # fault = "削除前recordを現行追加recordと同一IDへ畳み込み片方の審査を欠落させる"
+    # observable = "metadata packetの二件のrecord_idとtransition順"
+    # observation_boundary = "component-behavior"
+    # scope = "deleted-transition-identity"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_same_locator_add_and_delete_have_distinct_packet_ids(self):
+        extracted = extractor_result()
+        current = copy.deepcopy(extracted["tests"][0])
+        extracted["transitions"] = [
+            {"kind": "ADDED", "before": None, "after": current},
+            {"kind": "DELETED", "before": copy.deepcopy(current), "after": None},
+        ]
+
+        records = build_metadata_packet(extracted)["records"]
+
+        self.assertEqual(len(records), 2)
+        self.assertNotEqual(records[0]["record_id"], records[1]["record_id"])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "削除前recordはmetadata review結果とsource本文を同じrecord_idでPhase 2へ対応付ける"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # fault = "削除前recordのmetadata審査は通るがalignment packetからsource本文だけが欠落する"
+    # observable = "alignment packetの削除record sourceとsource hash"
+    # observation_boundary = "component-behavior"
+    # scope = "deleted-transition-alignment"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_alignment_packet_includes_deleted_source(self):
+        extracted = extractor_result()
+        deleted = copy.deepcopy(extracted["tests"][0])
+        extracted["tests"] = []
+        extracted["transitions"] = [
+            {"kind": "DELETED", "before": deleted, "after": None}
+        ]
+        metadata_packet = build_metadata_packet(extracted)
+        metadata_reviews = metadata_result(metadata_packet)
+
+        packet = build_alignment_packet(extracted, metadata_reviews)
+
+        self.assertEqual(packet["records"][0]["source"], deleted["source"])
+        self.assertEqual(packet["records"][0]["source_text"], deleted["source_text"])
+        self.assertEqual(packet["records"][0]["source_hash"], deleted["source_hash"])
 
     # @test-value v2
     # kind = "security"
