@@ -12,9 +12,9 @@ liveの標準入口は単一審査のままである。このfeature候補はmet
 
 保持根拠や除去・checkのreceiptは、信頼するhostが実際に取得・確認したものから作る。modelの自由出力をhost判断として転送しない。このcomponent単独では、入力内容の取得元や現在のfilesystemとの一致を証明しない。
 
-2026-09-06、非機密canaryだけを対象とした独立`codex exec`試行では、通常権限のWindows sandboxがsplit filesystem read restrictionを強制できず、CLIがunsandboxed実行を拒否した。昇格版もsetup helperの起動がWin32 error `1223`で失敗した。CLI stdinへsynthetic promptを書き込む処理は実行したが、thread開始、model request/output、canary commandは観測していない。実モデル隔離の成功証拠ではない。
+2026-09-06、Codex Appによる管理者setup後に、非機密canaryだけを対象とした独立`codex exec`試行を再実行した。Windows native CLI `0.153.4`の`elevated` sandboxで、Luna/mediumとSol/xhighをそれぞれ新規threadとして起動した。両試行とも合成canaryへの`Get-Content`は`Access denied`、command exit `1`となり、threadとturnは完了した。CLI process exit `0`はturnの完了を表し、canary読取りの成功を表さない。
 
-次の環境操作は、管理者承認のある対話端末での`codex.exe sandbox setup --elevated --current-user`である。これはsandbox用users/group、ACL、firewall、logon rights/local policyとlive Codex設定を変更するため、実行には当該操作への承認が必要になる。setup後も、候補workerの同じ設定でcanary拒否、managed inputの非混入、両modelの実効設定、lifecycleを確認する。読取拒否試験には実認証情報や実機密ファイルを使わず、合成した非機密canaryを使う。
+試行では`--ignore-user-config`と`--ignore-rules`を指定し、MCP、web、hooks、apps、multi-agent、view imageを無効化した。shellは拒否試験の一回だけ明示的に公開した。native executableのSHA-256は`444A3F0008050605CAE73CD9B7A2DCAC61294062DFAAB56DD20430FD6498518B`である。この結果は指定pathに対するfilesystem denyの実効性を示すが、CLI `0.153.4`がJSONLへ実効model、effort、tool一覧、managed input一覧を出力しない制約は残る。候補workerの本実行、timeout/cancel/process tree cleanup、全phaseとrequired Solのaggregate、managed input非混入を確認するまで標準入口を切り替えない。読取拒否試験には引き続き合成した非機密canaryだけを使う。
 
 2026-09-05にWindows nativeのCLI `0.153.4`を調査した。同版の公開sourceでは、[execのJSONL出力](https://github.com/openai/codex/blob/3d2ee51ca2d5db578f328aa75e20aa22c0197c9a/codex-rs/exec/src/event_processor_with_jsonl_output.rs#L396)がsession設定からthread IDだけを通知し、実効tool一覧を出さない。[prompt debug](https://github.com/openai/codex/blob/3d2ee51ca2d5db578f328aa75e20aa22c0197c9a/codex-rs/core/src/prompt_debug.rs#L101)もinputだけを返す。[設定loader](https://github.com/openai/codex/blob/3d2ee51ca2d5db578f328aa75e20aa22c0197c9a/codex-rs/config/src/loader/mod.rs#L528)のuser設定除外はmanaged層の除外を意味しない。このsource調査と現物のversion確認は、現物binaryの実効dispatchやsourceとのビット単位の同値性を証明しない。
 
