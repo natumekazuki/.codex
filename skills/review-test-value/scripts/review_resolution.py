@@ -147,6 +147,11 @@ def _derive_retention(
         raise ResolutionStateError(
             "RETENTION_INPUT_INVALID", "metadata is invalid: " + "; ".join(metadata_errors)
         )
+    if result_hash(metadata) != record["metadata_hash"]:
+        raise ResolutionStateError(
+            "RETENTION_IDENTITY_MISMATCH",
+            "metadata content does not match the record metadata hash",
+        )
     if disposition not in {
         "KEEP_PERMANENT",
         "KEEP_TEMPORARY",
@@ -497,6 +502,16 @@ def _validate_obligation(
         or packet_record["source_hash"] != record["source_hash"]
     ):
         raise ResolutionStateError("MANIFEST_INVALID", "origin record hashes do not match canonical aggregation")
+    source = packet_record["source"]
+    canonical_locator = {
+        "path": source["path"],
+        "symbol": source["symbol"],
+        "declaration_start_line": source["declaration_start_line"],
+    }
+    if record["locator"] != canonical_locator:
+        raise ResolutionStateError(
+            "MANIFEST_INVALID", "origin record locator does not match canonical aggregation"
+        )
     if retention_record_projection(retention) != retention_by_id.get(record_id):
         raise ResolutionStateError("MANIFEST_INVALID", "origin retention does not match canonical aggregation")
     frozen = final_by_id.get(record_id)

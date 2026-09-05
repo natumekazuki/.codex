@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import sys
 import tempfile
 import unittest
@@ -21,6 +22,7 @@ from review_resolution import (  # noqa: E402
     initialize_resolution_state,
     load_resolution_state,
     retention_record_projection,
+    validate_initial_manifest,
 )
 from test_review_result_schema import aggregation_input  # noqa: E402
 from validate_review_result import aggregate_results, result_hash  # noqa: E402
@@ -33,7 +35,7 @@ def digest(label: str) -> str:
 def record_identity() -> dict:
     return {
         "record_id": "record-1",
-        "metadata_hash": digest("metadata"),
+        "metadata_hash": result_hash(metadata()),
         "source_hash": digest("source"),
         "snapshot_hash": digest("initial-snapshot"),
         "locator": {
@@ -99,13 +101,20 @@ def source_observation(
 
 def retention(*, action: str, supported: bool) -> dict:
     evidence, determination = bounded_evidence(supported=supported)
+    record_metadata = metadata(
+        boundary="declaration" if action == "MOVE_TO_POLICY_CHECK" else "implementation"
+    )
+    identity = record_identity()
+    identity["metadata_hash"] = result_hash(record_metadata)
+    observed = source_observation(determination="PRESENT")
+    observed["metadata_hash"] = identity["metadata_hash"]
     return build_retention_evidence(
-        identity=record_identity(),
-        metadata=metadata(boundary="declaration" if action == "MOVE_TO_POLICY_CHECK" else "implementation"),
+        identity=identity,
+        metadata=record_metadata,
         disposition=action,
         evidence=evidence,
         determination=determination,
-        source_observation=source_observation(determination="PRESENT"),
+        source_observation=observed,
     )
 
 
@@ -116,6 +125,11 @@ def obligation(*, action: str, supported: bool, aggregate_input: dict) -> dict:
         record_id=packet_record["record_id"],
         metadata_hash=packet_record["metadata_hash"],
         source_hash=packet_record["source_hash"],
+        locator={
+            "path": packet_record["source"]["path"],
+            "symbol": packet_record["source"]["symbol"],
+            "declaration_start_line": packet_record["source"]["declaration_start_line"],
+        },
     )
     evidence, determination = bounded_evidence(supported=supported)
     observed = source_observation(
@@ -271,13 +285,30 @@ class ReviewResolutionTests(unittest.TestCase):
                 source_observation=wrong_record,
             )
 
+        changed_metadata = metadata()
+        changed_metadata["claim"] = "A different valid claim with the old identity hash"
+        with self.assertRaisesRegex(ResolutionStateError, "metadata hash"):
+            build_retention_evidence(
+                identity=record_identity(),
+                metadata=changed_metadata,
+                disposition="KEEP_PERMANENT",
+                evidence=evidence,
+                determination=determination,
+                source_observation=source_observation(determination="PRESENT"),
+            )
+
+        temporary_metadata = metadata(lifecycle="characterization")
+        temporary_identity = record_identity()
+        temporary_identity["metadata_hash"] = result_hash(temporary_metadata)
+        temporary_observation = source_observation(determination="PRESENT")
+        temporary_observation["metadata_hash"] = temporary_identity["metadata_hash"]
         temporary = build_retention_evidence(
-            identity=record_identity(),
-            metadata=metadata(lifecycle="characterization"),
+            identity=temporary_identity,
+            metadata=temporary_metadata,
             disposition="KEEP_TEMPORARY",
             evidence=evidence,
             determination=determination,
-            source_observation=source_observation(determination="PRESENT"),
+            source_observation=temporary_observation,
         )
         with self.assertRaisesRegex(ResolutionStateError, "artifact state is unresolved"):
             retention_record_projection(temporary)
@@ -475,6 +506,18 @@ class ReviewResolutionTests(unittest.TestCase):
             pending = obligation(
                 action="DROP", supported=False, aggregate_input=pending_input
             )
+            mismatched_locator = copy.deepcopy(pending)
+            mismatched_locator["origin"]["record"]["locator"]["path"] = "tests/other.py"
+            mismatched_locator["origin"]["retention"]["identity"]["locator"]["path"] = (
+                "tests/other.py"
+            )
+            with self.assertRaisesRegex(ResolutionStateError, "locator"):
+                validate_initial_manifest(
+                    manifest(
+                        aggregate_input=pending_input,
+                        obligations=[mismatched_locator],
+                    )
+                )
             initialize_resolution_state(
                 pending_dir,
                 manifest(aggregate_input=pending_input, obligations=[pending]),
