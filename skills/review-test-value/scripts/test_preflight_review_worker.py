@@ -1,4 +1,5 @@
 import subprocess
+import os
 from unittest.mock import patch
 import tempfile
 import unittest
@@ -84,21 +85,28 @@ class PreflightReviewWorkerTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "security"
-    # claim = "native executableでない入力はversion query前にBLOCKEDになる"
+    # claim = "native executableでない入力と相対pathはversion query前にBLOCKEDになる"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # fault = "native executable以外の入力をversion照会へ渡す"
+    # fault = "非native入力またはcheckout相対のexecutableをversion照会へ渡す"
     # observable = "RUNTIME_UNSUPPORTEDのreason codeとversion runnerへの未dispatch"
     # observation_boundary = "component-behavior"
     # scope = "review-worker-preflight"
     # lifecycle = "permanent"
     # @end-test-value
     def test_invalid_executable_is_blocked_without_query(self):
-        called = []
-        result = run_preflight(
-            str(self.role), str(self.role), runner=lambda executable, timeout: called.append(executable)
-        )
-        self.assertIn("RUNTIME_UNSUPPORTED", result["reason_codes"])
-        self.assertEqual(called, [])
+        for cli in (str(self.role), os.path.relpath(self.cli)):
+            with self.subTest(cli=cli):
+                called = []
+
+                def query(executable, timeout):
+                    called.append(executable)
+                    return 0, "codex-cli 0.153.4", ""
+
+                result = run_preflight(
+                    cli, str(self.role), runner=query
+                )
+                self.assertIn("RUNTIME_UNSUPPORTED", result["reason_codes"])
+                self.assertEqual(called, [])
 
     # @test-value v2
     # kind = "security"

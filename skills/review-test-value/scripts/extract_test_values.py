@@ -352,13 +352,9 @@ def validate_metadata(value: Any, metadata_format_version: int) -> list[str]:
     if lifecycle == "characterization":
         if expires_on is None and review_when is None:
             errors.append("characterization requires expires_on or review_when")
-        if remove_when is not None:
-            errors.append("remove_when requires ephemeral lifecycle")
     elif lifecycle == "ephemeral" and metadata_format_version == 2:
         if not nonempty_string(remove_when):
             errors.append("ephemeral requires remove_when")
-        if expires_on is not None or review_when is not None:
-            errors.append("expires_on and review_when require characterization lifecycle")
     elif expires_on is not None or review_when is not None or remove_when is not None:
         if metadata_format_version == 2 and lifecycle == "permanent":
             errors.append(

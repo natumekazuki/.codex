@@ -442,9 +442,9 @@ def test_oracle_table_with_decoy():
 
     # @test-value v2
     # kind = "contract"
-    # claim = "ephemeralはremove_whenを必須とし、permanentとcharacterizationへ混在させない"
+    # claim = "lifecycle固有の必須条件を要求し、permanent以外の追加終了条件を拒否しない"
     # oracle = { type = "issue", ref = "#43" }
-    # fault = "lifecycleと終了条件の不正な組を審査可能なmetadataとして通す"
+    # fault = "必須終了条件の欠落を受理するか、必須条件が揃った追加条件を拒否する"
     # observable = "lifecycle別の抽出exit status、diagnostics、metadata"
     # observation_boundary = "component-behavior"
     # scope = "test-value-schema"
@@ -471,6 +471,12 @@ def test_oracle_table_with_decoy():
         )
         cases = {
             "tests/test_ephemeral.py": valid_ephemeral,
+            "tests/test_ephemeral_extra.py": valid_ephemeral.replace(
+                "# @end-test-value", '# expires_on = "2030-01-01"\n# review_when = "契約変更時"\n# @end-test-value'
+            ),
+            "tests/test_characterization_extra.py": characterization_with_only_remove.replace(
+                "# @end-test-value", '# review_when = "契約変更時"\n# @end-test-value'
+            ),
             "tests/test_missing_remove.py": missing_remove,
             "tests/test_permanent_review.py": permanent_with_review,
             "tests/test_characterization_remove.py": characterization_with_only_remove,
@@ -481,7 +487,9 @@ def test_oracle_table_with_decoy():
                 metadata + f"def {Path(relative).stem}():\n    assert True\n",
             )
 
-        valid_result, valid_status = self.extract("tests/test_ephemeral.py")
+        valid_result, valid_status = self.extract(
+            "tests/test_ephemeral.py", "tests/test_ephemeral_extra.py", "tests/test_characterization_extra.py"
+        )
         invalid_result, invalid_status = self.extract(
             "tests/test_missing_remove.py",
             "tests/test_permanent_review.py",
@@ -491,7 +499,7 @@ def test_oracle_table_with_decoy():
         self.assertEqual(valid_status, 0)
         self.assertEqual(valid_result["diagnostics"], [])
         self.assertEqual(
-            valid_result["tests"][0]["metadata"]["remove_when"],
+            next(record for record in valid_result["tests"] if record["source"]["path"] == "tests/test_ephemeral.py")["metadata"]["remove_when"],
             "修正後の回帰checkへ置換したとき",
         )
         self.assertEqual(invalid_status, 1)

@@ -143,7 +143,7 @@ def run_preflight(cli: str, role_file: str, *, runner: VersionRunner = _run_vers
     executable_hash = role_hash = None
     version = requested_model = requested_effort = None
     try:
-        executable, executable_realpath = _safe_path(Path(cli), "--cli")
+        executable, executable_realpath = _safe_path(Path(cli), "--cli", require_absolute=True)
         if executable.suffix.lower() != ".exe":
             raise PreflightError("RUNTIME_UNSUPPORTED", "--cli must point to a native .exe")
         before_hash = _sha256(executable)
