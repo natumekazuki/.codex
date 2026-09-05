@@ -236,7 +236,7 @@ try {
         turn_id = 'turn-3'
         tool_name = 'followup_task'
         tool_use_id = 'tool-followup-after-stop'
-        tool_input = @{ target = 'agent-astra'; message = 'Continue again.' }
+        tool_input = @{ target = '/root/task-astra_consultant'; message = 'Continue again.' }
     }
     if ($null -ne $followupAfterStop) {
         throw 'SubagentStop did not release a follow-up reservation when no SubagentStart event occurred.'

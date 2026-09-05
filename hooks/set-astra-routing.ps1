@@ -17,7 +17,7 @@ param(
     [string[]]$Role = @('astra_consultant', 'astra_reviewer'),
 
     [Parameter(ParameterSetName = 'Grant')]
-    [ValidateRange(1, 16)]
+    [ValidateRange(1, 2147483647)]
     [int]$Count = 1,
 
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'astra-routing.local.json'),

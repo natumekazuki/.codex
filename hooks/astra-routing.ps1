@@ -202,7 +202,9 @@ function Get-AstraRequest {
     if ($ToolName -eq 'followup_task' -and $null -ne $State -and $State -ne $false) {
         $target = [string]$ToolInput.target
         foreach ($known in @($State.knownAstraAgents)) {
-            if ($target -eq [string]$known.agentId -or $target -eq [string]$known.taskName) {
+            $taskName = [string]$known.taskName
+            $matchesTaskName = $target -eq $taskName -or (-not [string]::IsNullOrWhiteSpace($taskName) -and $target.EndsWith("/$taskName", [System.StringComparison]::Ordinal))
+            if ($target -eq [string]$known.agentId -or $matchesTaskName) {
                 return [ordered]@{
                     action = 'followup'
                     role = [string]$known.role
@@ -396,7 +398,9 @@ if ($eventName -eq 'SubagentStop' -and $astraRoles -contains [string]$payload.ag
         if ($null -ne $state.pendingAstra -and [string]$state.pendingAstra.action -eq 'followup') {
             $pendingTarget = [string]$state.pendingAstra.taskName
             $known = @($state.knownAstraAgents | Where-Object { [string]$_.agentId -eq [string]$payload.agent_id }) | Select-Object -First 1
-            if ($pendingTarget -eq [string]$payload.agent_id -or ($null -ne $known -and $pendingTarget -eq [string]$known.taskName)) {
+            $knownTaskName = if ($null -ne $known) { [string]$known.taskName } else { '' }
+            $matchesTaskName = $pendingTarget -eq $knownTaskName -or (-not [string]::IsNullOrWhiteSpace($knownTaskName) -and $pendingTarget.EndsWith("/$knownTaskName", [System.StringComparison]::Ordinal))
+            if ($pendingTarget -eq [string]$payload.agent_id -or $matchesTaskName) {
                 $state.pendingAstra = $null
             }
         }
