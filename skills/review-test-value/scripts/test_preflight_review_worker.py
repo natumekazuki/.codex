@@ -1,5 +1,4 @@
 import subprocess
-import os
 from unittest.mock import patch
 import tempfile
 import unittest
@@ -94,7 +93,7 @@ class PreflightReviewWorkerTests(unittest.TestCase):
     # lifecycle = "permanent"
     # @end-test-value
     def test_invalid_executable_is_blocked_without_query(self):
-        for cli in (str(self.role), os.path.relpath(self.cli)):
+        for cli in (str(self.role), self.cli.name):
             with self.subTest(cli=cli):
                 called = []
 
