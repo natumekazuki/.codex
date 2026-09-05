@@ -114,18 +114,18 @@ try {
     $repositoryRoot = Split-Path -Parent $PSScriptRoot
     foreach ($roleName in @('designer', 'reviewer', 'targeted_reviewer')) {
         $roleText = Get-Content -LiteralPath (Join-Path $repositoryRoot "agents/$roleName.toml") -Raw
-        if ($roleText -notmatch '(?m)^model = "gpt-5\.6-sol"$') {
+        if ($roleText -notmatch '(?m)^model = "gpt-5\.6-sol"\r?$') {
             throw "$roleName is not pinned to gpt-5.6-sol."
         }
     }
     foreach ($roleName in @('astra_consultant', 'astra_reviewer')) {
         $roleText = Get-Content -LiteralPath (Join-Path $repositoryRoot "agents/$roleName.toml") -Raw
         foreach ($required in @(
-            '(?m)^model = "gpt-6-astra"$',
-            '(?m)^model_reasoning_effort = "medium"$',
-            '(?m)^service_tier = "default"$',
-            '(?m)^sandbox_mode = "read-only"$',
-            '(?m)^fast_mode = false$'
+            '(?m)^model = "gpt-6-astra"\r?$',
+            '(?m)^model_reasoning_effort = "medium"\r?$',
+            '(?m)^service_tier = "default"\r?$',
+            '(?m)^sandbox_mode = "read-only"\r?$',
+            '(?m)^fast_mode = false\r?$'
         )) {
             if ($roleText -notmatch $required) {
                 throw "$roleName does not satisfy its pinned model, effort, service tier, or sandbox contract."
@@ -133,12 +133,12 @@ try {
         }
     }
     $astraProfile = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config/astra.config.toml') -Raw
-    if ($astraProfile -notmatch '(?m)^model = "gpt-6-astra"$' -or $astraProfile -notmatch '(?m)^default_subagent_model = "gpt-5\.6-sol"$') {
+    if ($astraProfile -notmatch '(?m)^model = "gpt-6-astra"\r?$' -or $astraProfile -notmatch '(?m)^default_subagent_model = "gpt-5\.6-sol"\r?$') {
         throw 'The Astra root profile does not keep default children on gpt-5.6-sol.'
     }
     $registry = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config/agents.example.toml') -Raw
     foreach ($roleName in @('astra_consultant', 'astra_reviewer')) {
-        if ($registry -notmatch "(?m)^\[agents\.$roleName\]$") {
+        if ($registry -notmatch "(?m)^\[agents\.$roleName\]\r?$") {
             throw "$roleName is missing from the example agent registry."
         }
     }
