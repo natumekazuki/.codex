@@ -25,7 +25,7 @@ runtime activationの同一child二turn、follow-up fallback、native registry�
 - Canonical owner:
   - 抽出、schema validation、packet構築、output validation、deterministic aggregationは`skills/review-test-value/scripts/`が所有する。
   - Phaseごとの意味論は`skills/review-test-value/references/`が所有する。
-  - model、reasoning effort、sandbox、role固有の禁止事項は`agents/*.toml`が所有する。
+  - model、reasoning effort、role固有の禁止事項は`agents/*.toml`が所有する。独立workerの限定read権限はrunnerが所有し、旧sandbox設定を重ねない。
   - Skillの呼び出し順とfail-closed workflowは`skills/review-test-value/SKILL.md`が所有する。
   - task共通の完了条件は、activation時に`AGENTS.md`へ反映する。
 - Authority:
@@ -42,18 +42,18 @@ runtime activationの同一child二turn、follow-up fallback、native registry�
 - Failure mode / consumer impact: test sourceやassertion summaryがPhase 1へ漏れ、自己完結していないmetadataが`VALID`になる。
 - State transitions / failure timing: extractor成功後、Phase 1 agent起動前のpacket構築時に拒否する。
 - Direct verification: Phase 1 packetに`source_text`、source line、assertion summary、oracle本文を混入させるfixtureを拒否し、agent outputのsource evidenceもschema違反にする。
-- Independent review trigger: activation前にcustom agent manual smokeで実際の二turn境界を確認する。
+- Independent review trigger: activation前に新規の独立`codex exec`でmetadata-only隔離と実効設定を確認する。
 - Gate: ready。
 
 ### RTV-202: Phase 1結果を固定したまま全recordのPhase 2を完了する
 
 - Accepted anchor: ADR-0022のPhase 2必須化とfrozen result契約。
 - Scope / owner: Phase 2 packet builder、alignment review contract、review result validator。
-- Siblings in scope: Phase 1の`VALID`、`REDESIGN`、`NEEDS_CONTEXT`、Luna follow-up対応runtime、非対応runtime。
+- Siblings in scope: Phase 1の`VALID`、`REDESIGN`、`NEEDS_CONTEXT`、各phaseの新規独立workerとその失敗経路。
 - Failure mode / consumer impact: Phase 1の不合格が本文閲覧後に書き換えられる、または明白なPhase 1不合格を理由にPhase 2が省略され、actual boundaryと保持先を判断できない。
 - State transitions / failure timing: Phase 1 validation完了時にhash付きresultを固定し、Phase 2 output validation時に同一性を確認する。
 - Direct verification: 全Phase 1 verdictでPhase 2 packetが生成されること、改変したPhase 1 resultとrecord集合、locator、hashの不一致が拒否されることを検証する。
-- Independent review trigger: RTV-201と同じmanual smokeで同じchildへのfollow-upと二child fallbackを確認する。
+- Independent review trigger: RTV-201と同じsmokeで、独立したPhase 2へのfrozen結果の明示入力と改変拒否を確認する。
 - Gate: ready。
 
 ### RTV-203: routingはriskの申告漏れでdowngradeされない
@@ -103,11 +103,11 @@ runtime activationの同一child二turn、follow-up fallback、native registry�
 ### RTV-207: required agentを利用できないとき親agentが代行しない
 
 - Accepted anchor: ADR-0022のfail-closedとbootstrap契約。
-- Scope / owner: agent TOML、Skill orchestration、result validator、live config導入手順。
-- Siblings in scope: Luna unavailable、Sol不要、Sol requiredかつunavailable、follow-up非対応runtime、Spark routing mode。
+- Scope / owner: agent TOML、独立worker runner、result validator、明示承認された認証と設定の導入手順。
+- Siblings in scope: Luna unavailable、Sol不要、Sol requiredかつunavailable、未検証runtime、親のrouting modeが異なる構成。
 - Failure mode / consumer impact: required modelを起動できない環境で別modelまたは親agentが審査し、同じ品質契約を満たしたように報告する。
 - State transitions / failure timing: required agentの起動失敗時に`NEEDS_CONTEXT / BLOCKED`へ確定し、review packetを別roleへ送らない。
-- Direct verification: agent unavailable fixture、agent TOMLのmodel / effort / sandbox static check、各routing modeのmanual smokeを行う。
+- Direct verification: unavailable fixture、roleのmodel/effortとworkerの実効権限の照合、各親構成の独立worker smokeを行う。
 - Independent review trigger: bootstrap changeとactivation changeをそれぞれcommit-bound reviewする。
 - Gate: ready。
 
@@ -154,9 +154,9 @@ runtime activationの同一child二turn、follow-up fallback、native registry�
 
 ### Runtime activation
 
-- [ ] live configへ二roleを登録するauthorityをユーザーへ確認する。
-- [ ] 許可後にlive configを更新し、登録結果をread-backする。
-- [ ] 新しいCodex sessionでLuna Phase 1、同じchildへのPhase 2、二child fallbackをsmoke testする。
+- [ ] 同じ独立worker実行に結合された実効model/effort、toolとcontextの検証経路を用意する。
+- [ ] 必要な認証やlive設定の変更だけを明示承認後に適用し、結果をread-backする。native registry登録を必須にしない。
+- [ ] 新規の独立`codex exec`を各Luna phaseとSolに使い、隔離とfrozen結果の照合をsmoke testする。
 - [ ] Sol不要recordでSolを起動しないことを確認する。
 - [ ] `RECHECK`、high-risk、audit recordでSolを起動することを確認する。
 - [ ] required agent unavailable時に親agentが代行しないことを確認する。
@@ -253,8 +253,8 @@ python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-valu
 Runtime activationでは次をmanual smokeする。
 
 - `test_value_luna`のPhase 1がmetadata-only schemaを返す。
-- frozen Phase 1 resultを同じchildへ渡したPhase 2がalignment schemaを返す。
-- follow-up非対応時の二child fallbackでもPhase 1へtest sourceを渡さない。
+- frozen Phase 1 resultを別の新規独立workerへ明示入力したPhase 2がalignment schemaを返す。
+- Phase 1にはtest source、親履歴、他phaseのartifactを渡さず、直接読取要求も強制拒否する。
 - `NEEDS_CONTEXT`、`RECHECK`、high-risk、audit対象、またはbounded contextが必要なrecordだけが`test_value_sol`へ昇格する。
 - balanced、spark-first、standard-onlyの各modeでagent TOMLのmodelが維持される。
 - required agent unavailable時に親agentが代行せず`BLOCKED`になる。
@@ -273,5 +273,5 @@ Runtime activationでは次をmanual smokeする。
 - 同じLuna threadがPhase 2でPhase 1を補正する可能性がある。親側でresultを固定し、Phase 2 schemaへPhase 1 verdictの再出力を持たせない。
 - Solがself-containedでないmetadataを追加contextから救済する可能性がある。high-riskまたはaudit対象のPhase 1 `REDESIGN`はSolへ送るが、frozen verdictを変更させずfinal `REDESIGN / CHANGES_REQUIRED`を維持する。それ以外の明白なPhase 1 `REDESIGN`はSolへ送らない。
 - declaration checkの移行先が存在しない場合がある。`MOVE_TO_POLICY_CHECK`を`PASS`にせず、移行先とdirect checkをresolution ledgerで要求する。
-- custom agentが現在のsessionで利用できない。bootstrap changeとactivationを分け、live config反映後の新sessionでsmokeを完了する。
+- 現在のreadiness実装にはworker起動経路がない。bootstrapとactivationを分け、実効境界の検証経路とworkerを実装した後、新規sessionでsmokeを完了する。
 - metadataだけではhigh-riskを完全に分類できない。親workflowのrisk contextを和集合にし、metadataからdowngradeできないようにする。

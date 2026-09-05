@@ -96,20 +96,23 @@ class PreflightReviewWorkerTests(unittest.TestCase):
 
     # @test-value v1
     # kind = "security"
-    # claim = "対象外roleはversion照会前に拒否され、実行構成として採用されない"
+    # claim = "対象外roleや文字コードが壊れたroleはversion照会前に構造化した失敗として拒否される"
     # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/42" }
-    # failure_mode = "対象外roleを専用審査roleとして受理して誤った要求値を記録する"
+    # failure_mode = "対象外roleを採用するか、decode失敗が構造化receiptを返さずpreflight consumerへ漏れる"
     # scope = "review-worker-preflight"
     # lifecycle = "permanent"
     # @end-test-value
     def test_invalid_role_is_rejected_before_query(self):
-        self.role.write_text(ROLE.replace('test_value_luna', 'unknown_role'), encoding="utf-8")
-        called = []
-        result = run_preflight(
-            str(self.cli), str(self.role), runner=lambda executable, timeout: called.append(executable)
-        )
-        self.assertIn("RUNTIME_UNSUPPORTED", result["reason_codes"])
-        self.assertEqual(called, [])
+        for invalid in (ROLE.replace("test_value_luna", "unknown_role").encode("utf-8"), b"\xff"):
+            with self.subTest(role_bytes=invalid):
+                self.role.write_bytes(invalid)
+                called = []
+                result = run_preflight(
+                    str(self.cli), str(self.role), runner=lambda executable, timeout: called.append(executable)
+                )
+                self.assertEqual(result["status"], "BLOCKED")
+                self.assertIn("RUNTIME_UNSUPPORTED", result["reason_codes"])
+                self.assertEqual(called, [])
 
     # @test-value v1
     # kind = "invariant"

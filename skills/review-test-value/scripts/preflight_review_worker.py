@@ -86,7 +86,7 @@ def _load_role(role_path: Path) -> tuple[dict[str, Any], str]:
     try:
         role_bytes = role_path.read_bytes()
         role = tomllib.loads(role_bytes.decode("utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise PreflightError("RUNTIME_UNSUPPORTED", "role TOML could not be read") from exc
     required = {"name", "model", "model_reasoning_effort", "developer_instructions"}
     optional = {"description", "sandbox_mode"}
