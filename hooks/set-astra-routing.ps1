@@ -26,6 +26,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$stateVersion = 2
 
 function Get-Sha256Text {
     param([string]$Text)
@@ -89,7 +90,7 @@ if (-not (Test-Path -LiteralPath $statePath)) {
 
 Invoke-WithStateLock -StatePath $statePath -Action {
     $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -ErrorAction Stop
-    if ([int]$state.version -ne 1 -or [string]$state.sessionId -ne $SessionId) {
+    if ([int]$state.version -ne $stateVersion -or [string]$state.sessionId -ne $SessionId) {
         throw 'Astra routing state identity is invalid.'
     }
     if ([string]$state.currentTurnId -ne $TurnId) {

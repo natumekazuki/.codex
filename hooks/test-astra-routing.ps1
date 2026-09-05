@@ -152,6 +152,10 @@ try {
             throw "hooks.json does not register astra-routing.ps1 for $eventName."
         }
     }
+    $ordinaryStartCommands = @($hooksConfig.hooks.SubagentStart[0].hooks.command)
+    if (-not ($ordinaryStartCommands | Where-Object { $_ -match 'astra-routing\.ps1' })) {
+        throw 'hooks.json does not register non-Astra SubagentStart events with Astra routing state.'
+    }
 
     $candidateHome = Join-Path $testRoot 'candidate-home'
     $profileHome = Join-Path $testRoot 'profile-home'
@@ -205,6 +209,36 @@ try {
     if ($null -ne $ordinary) {
         throw 'A non-Astra role was unexpectedly controlled by the Astra guard.'
     }
+    Invoke-Hook -Event @{
+        hook_event_name = 'SubagentStart'
+        session_id = $session
+        turn_id = $turn1
+        agent_id = 'agent-researcher'
+        agent_type = 'researcher'
+    } | Out-Null
+    foreach ($ordinaryTarget in @('agent-researcher', '/root/task-researcher')) {
+        $ordinaryFollowup = Invoke-Hook -Event @{
+            hook_event_name = 'PreToolUse'
+            session_id = $session
+            turn_id = $turn1
+            tool_name = 'followup_task'
+            tool_use_id = "tool-ordinary-$([guid]::NewGuid().ToString('N'))"
+            tool_input = @{ target = $ordinaryTarget; message = 'Continue.' }
+        }
+        if ($null -ne $ordinaryFollowup) {
+            throw "A known non-Astra follow-up was unexpectedly denied: $ordinaryTarget"
+        }
+    }
+    $unknownFollowup = Invoke-Hook -Event @{
+        hook_event_name = 'PreToolUse'
+        session_id = $session
+        turn_id = $turn1
+        tool_name = 'followup_task'
+        tool_use_id = 'tool-unknown-followup'
+        tool_input = @{ target = 'agent-unknown'; message = 'Continue.' }
+    }
+    Assert-Denied -Output $unknownFollowup -Pattern 'target is not registered'
+    Write-Host 'OK: known non-Astra follow-ups remain available while unknown targets are denied'
 
     $first = Invoke-Hook -Event (New-SpawnEvent -SessionId $session -TurnId $turn1 -Role 'astra_consultant')
     if ($null -ne $first) {
@@ -427,6 +461,45 @@ try {
     $stillCorrupt = Invoke-Hook -Event (New-SpawnEvent -SessionId $corruptSession -TurnId 'turn-c' -Role 'astra_consultant')
     Assert-Denied -Output $stillCorrupt -Pattern 'requires recovery'
     Write-Host 'OK: corrupt state blocks unverifiable follow-up and Astra spawn across turns while ordinary roles stay available'
+
+    foreach ($recoveryMode in @('conditional', 'manual', 'off')) {
+        $recoverySession = "session-regenerated-$recoveryMode"
+        Invoke-Hook -Event (New-PromptEvent -SessionId $recoverySession -TurnId 'turn-before-delete') | Out-Null
+        $recoverySpawn = Invoke-Hook -Event (New-SpawnEvent -SessionId $recoverySession -TurnId 'turn-before-delete' -Role 'astra_consultant')
+        if ($null -ne $recoverySpawn) {
+            throw "The Astra agent used by the $recoveryMode regeneration scenario was unexpectedly denied."
+        }
+        Invoke-Hook -Event @{
+            hook_event_name = 'SubagentStart'
+            session_id = $recoverySession
+            turn_id = 'turn-before-delete'
+            agent_id = "agent-old-astra-$recoveryMode"
+            agent_type = 'astra_consultant'
+        } | Out-Null
+        Invoke-Hook -Event @{
+            hook_event_name = 'SubagentStop'
+            session_id = $recoverySession
+            turn_id = 'turn-before-delete'
+            agent_id = "agent-old-astra-$recoveryMode"
+            agent_type = 'astra_consultant'
+        } | Out-Null
+        $recoveryStateFile = Get-ChildItem -LiteralPath $stateDirectory -Filter '*.json' | Where-Object {
+            try { (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).sessionId -eq $recoverySession } catch { $false }
+        } | Select-Object -First 1
+        Remove-Item -LiteralPath $recoveryStateFile.FullName
+
+        Invoke-Hook -Event (New-PromptEvent -SessionId $recoverySession -TurnId 'turn-after-delete') -Mode $recoveryMode | Out-Null
+        $oldAstraFollowup = Invoke-Hook -Event @{
+            hook_event_name = 'PreToolUse'
+            session_id = $recoverySession
+            turn_id = 'turn-after-delete'
+            tool_name = 'followup_task'
+            tool_use_id = "tool-old-astra-$recoveryMode"
+            tool_input = @{ target = "agent-old-astra-$recoveryMode"; message = 'Continue.' }
+        } -Mode $recoveryMode
+        Assert-Denied -Output $oldAstraFollowup -Pattern 'target is not registered'
+    }
+    Write-Host 'OK: regenerated state denies follow-up to pre-deletion Astra agents in every mode'
 
 } finally {
     if (Test-Path -LiteralPath $testRoot) {

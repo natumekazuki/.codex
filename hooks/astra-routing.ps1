@@ -11,6 +11,12 @@ try {
 
 $astraRoles = @('astra_consultant', 'astra_reviewer')
 $astraModel = 'gpt-6-astra'
+$stateVersion = 2
+$knownNonAstraRoles = @(
+    'fast_researcher', 'fast_planner', 'fast_implementer', 'fast_validator', 'fast_reviewer',
+    'researcher', 'planner', 'designer', 'implementer', 'focused_implementer', 'validator',
+    'reviewer', 'targeted_reviewer', 'slice_reviewer', 'test_value_luna', 'test_value_sol'
+)
 
 function New-ContextOutput {
     param([string]$EventName, [string]$Context)
@@ -88,7 +94,7 @@ function New-State {
     param([string]$SessionId, [string]$TurnId, [string]$Mode, [bool]$Healthy = $true)
 
     [ordered]@{
-        version = 1
+        version = $stateVersion
         sessionId = $SessionId
         currentTurnId = $TurnId
         automaticRemaining = $(if ($Healthy -and $Mode -eq 'conditional') { 1 } else { 0 })
@@ -96,6 +102,7 @@ function New-State {
         pendingAstra = $null
         activeAstra = $null
         knownAstraAgents = @()
+        knownNonAstraAgents = @()
         manualGrant = $null
         updatedAt = (Get-Date).ToUniversalTime().ToString('o')
     }
@@ -109,7 +116,7 @@ function Read-State {
     }
     try {
         $state = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -ErrorAction Stop
-        if ([int]$state.version -ne 1 -or [string]$state.sessionId -ne $SessionId) {
+        if ([int]$state.version -ne $stateVersion -or [string]$state.sessionId -ne $SessionId) {
             throw 'State identity mismatch.'
         }
         return $state
@@ -189,6 +196,18 @@ function Get-PolicyContext {
     return ($lines -join "`n")
 }
 
+function Test-AgentTargetMatch {
+    param([string]$Target, $Agent)
+
+    if ($null -eq $Agent) {
+        return $false
+    }
+    $taskName = [string]$Agent.taskName
+    return $Target -eq [string]$Agent.agentId -or
+        $Target -eq $taskName -or
+        (-not [string]::IsNullOrWhiteSpace($taskName) -and $Target.EndsWith("/$taskName", [System.StringComparison]::Ordinal))
+}
+
 function Get-AstraRequest {
     param([string]$ToolName, $ToolInput, $State)
 
@@ -210,9 +229,7 @@ function Get-AstraRequest {
     if ($ToolName -eq 'followup_task' -and $null -ne $State -and $State -ne $false) {
         $target = [string]$ToolInput.target
         foreach ($known in @($State.knownAstraAgents)) {
-            $taskName = [string]$known.taskName
-            $matchesTaskName = $target -eq $taskName -or (-not [string]::IsNullOrWhiteSpace($taskName) -and $target.EndsWith("/$taskName", [System.StringComparison]::Ordinal))
-            if ($target -eq [string]$known.agentId -or $matchesTaskName) {
+            if (Test-AgentTargetMatch -Target $target -Agent $known) {
                 return [ordered]@{
                     action = 'followup'
                     role = [string]$known.role
@@ -338,6 +355,28 @@ if ($eventName -eq 'PreToolUse') {
             return
         }
         $request = Get-AstraRequest -ToolName $toolName -ToolInput $payload.tool_input -State $state
+        if ($toolName -eq 'followup_task' -and $null -eq $request) {
+            $target = [string]$payload.tool_input.target
+            $knownNonAstra = @($state.knownNonAstraAgents | Where-Object { Test-AgentTargetMatch -Target $target -Agent $_ }) | Select-Object -First 1
+            if ($null -eq $knownNonAstra) {
+                $script:dispatchDecision = 'Agent follow-up denied because its target is not registered in the current Astra routing state.'
+            }
+            return
+        }
+        if ($toolName -eq 'spawn_agent' -and $null -eq $request) {
+            $role = [string]$payload.tool_input.agent_type
+            if ($null -ne $state -and $state -ne $false -and -not [bool]$state.recoveryRequired -and $knownNonAstraRoles -contains $role) {
+                $known = @($state.knownNonAstraAgents | Where-Object { [string]$_.taskName -ne [string]$payload.tool_input.task_name })
+                $known += [ordered]@{
+                    agentId = ''
+                    taskName = [string]$payload.tool_input.task_name
+                    role = $role
+                }
+                $state.knownNonAstraAgents = $known
+                Write-State -Path $statePath -State $state
+            }
+            return
+        }
         if ($null -eq $request) {
             return
         }
@@ -376,6 +415,27 @@ if ($eventName -eq 'PreToolUse') {
     }
     if ($null -ne $script:dispatchDecision) {
         New-DenyOutput -Reason $script:dispatchDecision
+    }
+    exit 0
+}
+
+if ($eventName -eq 'SubagentStart' -and $astraRoles -notcontains [string]$payload.agent_type) {
+    Invoke-WithStateLock -StatePath $statePath -Action {
+        $state = Read-State -Path $statePath -SessionId $sessionId
+        if ($state -eq $false -or $null -eq $state -or [bool]$state.recoveryRequired) {
+            return
+        }
+        if ($knownNonAstraRoles -notcontains [string]$payload.agent_type) {
+            return
+        }
+        $known = @($state.knownNonAstraAgents | Where-Object { [string]$_.agentId -ne [string]$payload.agent_id })
+        $known += [ordered]@{
+            agentId = [string]$payload.agent_id
+            taskName = ''
+            role = [string]$payload.agent_type
+        }
+        $state.knownNonAstraAgents = $known
+        Write-State -Path $statePath -State $state
     }
     exit 0
 }
@@ -430,9 +490,7 @@ if ($eventName -eq 'SubagentStop' -and $astraRoles -contains [string]$payload.ag
         if ($null -ne $state.pendingAstra -and [string]$state.pendingAstra.action -eq 'followup') {
             $pendingTarget = [string]$state.pendingAstra.taskName
             $known = @($state.knownAstraAgents | Where-Object { [string]$_.agentId -eq [string]$payload.agent_id }) | Select-Object -First 1
-            $knownTaskName = if ($null -ne $known) { [string]$known.taskName } else { '' }
-            $matchesTaskName = $pendingTarget -eq $knownTaskName -or (-not [string]::IsNullOrWhiteSpace($knownTaskName) -and $pendingTarget.EndsWith("/$knownTaskName", [System.StringComparison]::Ordinal))
-            if ($pendingTarget -eq [string]$payload.agent_id -or $matchesTaskName) {
+            if (Test-AgentTargetMatch -Target $pendingTarget -Agent $known) {
                 $state.pendingAstra = $null
             }
         }

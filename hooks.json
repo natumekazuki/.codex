@@ -29,7 +29,7 @@
     ],
     "SubagentStart": [
       {
-        "matcher": "^(fast_researcher|fast_planner|fast_implementer|fast_validator|fast_reviewer|researcher|planner|designer|implementer|focused_implementer|validator|reviewer|targeted_reviewer|slice_reviewer)$",
+        "matcher": "^(fast_researcher|fast_planner|fast_implementer|fast_validator|fast_reviewer|researcher|planner|designer|implementer|focused_implementer|validator|reviewer|targeted_reviewer|slice_reviewer|test_value_luna|test_value_sol)$",
         "hooks": [
           {
             "type": "command",
@@ -44,6 +44,13 @@
             "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Applying implementation restraint"
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/astra-routing.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/astra-routing.ps1')\"",
+            "timeout": 10,
+            "statusMessage": "Recording non-Astra subagent start"
           }
         ]
       },

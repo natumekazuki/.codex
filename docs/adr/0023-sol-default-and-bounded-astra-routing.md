@@ -17,15 +17,15 @@ Astraをroot profileと通常のdesigner / reviewerへ広く適用する案は�
 - Astra専用のread-only roleとして`astra_consultant`と`astra_reviewer`だけを追加する。両roleはAstra / medium / Standardとし、実装、commit、外部write、再委譲を禁止する。
 - `astra_consultant`は具体的な調査後も残る重要な設計判断または矛盾、`astra_reviewer`は既に必要と判定されたreview内の難しい反例だけを扱う。既存のdesigner、reviewer、targeted_reviewerのreview kindとcommit-bound契約は維持する。
 - runtime modeを`conditional`、`manual`、`off`に分け、既定は`manual`とする。自動投入は親user turnにつき2 role合計1回、同一root sessionで同時1件までとする。spawn、follow-up、retryは枠を消費し、wait、status、結果取得、terminationは消費しない。
-- `hooks/astra-routing.ps1`がmode、turn、予約、実行中agent、manual grantをGit管理外のstateで所有する。`PreToolUse`で投入前に予約し、`SubagentStart` / `SubagentStop`で実行状態を更新し、`UserPromptSubmit` / `SessionStart`で短い条件を再注入する。
-- state破損時はAstra自動投入と、対象modelを判定できない既存agentへのfollow-upを継続して拒否する。新しいSol / Luna作業は止めない。Astraが動作中でないことを確認して対象stateを削除した後に再生成する。hook未実行、特殊tool経路、専用role以外のaliasでmodel指定が省略された呼出しまで完全に封鎖したとは扱わず、実runtimeの確認を導入条件に残す。
+- `hooks/astra-routing.ps1`がmode、turn、予約、実行中agent、manual grant、既知の通常agentをGit管理外のstateで所有する。`PreToolUse`で投入前に予約し、`SubagentStart` / `SubagentStop`で実行状態とagent種別を更新し、`UserPromptSubmit` / `SessionStart`で短い条件を再注入する。follow-upは既知のAstraまたは通常agentだけに許可する。
+- state破損時はAstra自動投入と、対象modelを判定できない既存agentへのfollow-upを継続して拒否する。新しいSol / Luna作業は止めない。Astraが動作中でないことを確認して対象stateを削除した後に再生成する。削除前のagent識別情報は復元せず、そのagentへのfollow-upを拒否する。hook未実行、特殊tool経路、専用role以外のaliasでmodel指定が省略された呼出しまで完全に封鎖したとは扱わず、実runtimeの確認を導入条件に残す。
 
 ## Consequences
 
 - 通常作業のmodel選択とAstra利用目的が静的roleで明確になり、profile継承による意図しないAstra起動を避けられる。
 - 一つの難問へAstraを一度だけ投入し、その後の実装と検証をSol / Lunaへ戻せる。
 - runtime stateとhook trustが増える。portable sourceとPowerShell状態遷移の検証だけでは、実hostのhook到達、model read-back、compaction / resume経路を証明できない。
-- follow-up先を既知のAstra agentとして識別するには、正常なspawn予約と`SubagentStart`のstateが必要になる。特殊経路やstate消失は完全遮断の対象外として明示する。
+- follow-up先を既知のAstraまたは通常agentとして識別するには、正常なspawnまたは`SubagentStart`のstateが必要になる。state消失後は既存agentへ継続できず、新しい通常agentを起動する必要がある。
 
 ## Policy Anchors
 
