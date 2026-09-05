@@ -11,7 +11,7 @@ Goal:
 - Protect correctness, maintainability, safety, and long-term project coherence.
 
 Use for:
-- Architecture and responsibility boundaries.
+- Unresolved, concrete questions about architecture and responsibility boundaries.
 - Public APIs, contracts, data models, persistence, migrations, or schema changes.
 - Authentication, authorization, security, privacy, payments, secrets, or data loss risk.
 - Complex state machines, concurrency, async workflows, or performance-sensitive algorithms.
@@ -26,6 +26,7 @@ Rules:
 - State trade-offs and rejected alternatives.
 - Define invariants and validation expectations.
 - Treat design as a reasoning activity, not a requirement to create a permanent design document.
+- Do not make yourself a mandatory step for a design-settled, independently verifiable slice. Rephrase already settled root decisions only when needed to resolve a remaining concrete design question.
 - Place observable behavior and invariants in tests, types, schemas, or static checks; place local rationale in code comments.
 - Require an ADR for consequential decisions with alternatives, high reversal cost, external constraints, or long-term trade-offs.
 - Recommend an architecture document only for non-local responsibilities or constraints spanning multiple subsystems, processes, repositories, or external services that cannot be recovered from code and executable contracts.

@@ -9,6 +9,8 @@ description: Python、TypeScript、C#の新規・変更testに隣接する`@test
 
 二段階審査のartifactはbootstrap中であり、runtime activationと新session smokeが完了するまでこのSkillの実行経路には使用しない。`test_value_luna`と`test_value_sol`を必須roleとして起動せず、以下の現行workflowを使う。
 
+activation条件を満たした後に別途有効化する運用を妨げない。切替条件、隔離実行、aggregate gateは#42〜#45のscopeで扱い、このSkillでは変更しない。
+
 抽出CLIには`tomllib`を含むPython 3.11以降を使う。TypeScriptにはNode.jsと固定済みnpm依存、C#には.NET 8 SDKと固定済みNuGet依存を追加で使う。
 
 ## Workflow
@@ -81,27 +83,27 @@ python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-valu
 ### Git差分選択
 
 ```powershell
-python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/git_diff_selection.py
 ```
 
-Git modeのbase commit、対象path、line rangeの選択やroutingを変更した場合に実行する。Git modeでは手作業で対象pathを差し替えない。
+Git modeのbase commit、対象path、line rangeの選択を変更した場合に実行する。`test_extract_test_values.py`がGit差分選択を直接検証し、Git modeでは手作業で対象pathを差し替えない。
 
 ### 言語adapter・抽出
 
 ```powershell
-python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values_multilang.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_values.py
 ```
 
-Python、TypeScript、C#のadapter、コメント形式、抽出CLIを変更した場合に実行する。初めて使う言語の依存準備はWorkflowの既存手順に従い、変更していないadapterのlocal restoreは必須にしない。CIのWindows/Linux多言語検証は維持する。
+変更した言語のadapter、コメント形式、抽出CLIに対応するcheckだけを実行する。Python adapterとGit modeは上記の`test_extract_test_values.py`、TypeScriptまたはC# adapterは`test_extract_test_values_multilang.py`で検証する。初めて使う言語の依存準備はWorkflowの既存手順に従い、変更していないadapterのlocal restoreは必須にしない。CIのWindows/Linux多言語検証は維持する。
 
 ### review packet・schema・routing
 
 ```powershell
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py

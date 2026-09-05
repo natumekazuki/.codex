@@ -8,6 +8,9 @@
 - ユーザーの未コミット変更を保護し、巻き戻し、上書き、無断のstage、clean、無関係な変更の混入をしない。
 - 差分量より、根本原因、既存の責務境界、整合した最終状態を優先する。仕様、API、依存関係、不明な事実を捏造しない。
 - 暫定対応を採る場合は、理由、残るリスク、恒久対応へ進む条件を追跡可能に残す。
+- 現在の会話で操作・対象・scopeが明示承認済みなら、同じ承認を文言やSkillの書式の違いだけで取り直さない。人の依頼は意味で判断し、APIのauthorization、署名、revision、型、必須statusは推測しない。「できる？」も文脈で作業依頼か仕様質問かを判定する。
+- 承認済みの依頼は実行と結果確認まで進める。結果・契約・権限・不可逆な影響を変える不明点だけ確認し、scope内の実装詳細や任意書式は合理的に決める。終端に未承認操作がある場合は、安全な承認済みのlocal作業・検証・差分や本文の準備を完了し、その操作の直前で具体的な対象と影響を示す。未確定の根本要件を推測して実装しない。
+- Skill由来で確認・停止・未完了が必要なら、実際に読んだ`SKILL.md`へのリンクと該当節を示し、必要箇所を引用して、明示された必須条件とagentの解釈を区別する。止まる操作、続けられる作業、解消に必要な判断を短く説明する。一般的な推奨を現在の依頼より強い義務へ昇格させず、上位の安全・runtime権限は維持する。
 
 ## 2. Sources of Truth and Knowledge Placement
 
@@ -33,6 +36,7 @@
 - bug fixは費用対効果が合う範囲で修正前の失敗と修正後の解消を確認する。
 - scope、contract、canonical owner、外部consumer、責務境界が変わった場合は、関連sourceと契約の確認へ戻る。
 - failing test、type constraint、schema、static checkを、現在のsourceへ合わせるためだけに削除、弱体化、skipしない。
+- 必要check、適用されるCI、test価値審査、必要な独立reviewが揃い、未解決blockingがなければ完了へ進む。同じsnapshot・条件で成功済みのcheckを繰り返すのは、source・契約・依存・環境の変更、失敗やflaky、具体的な未解決リスク、必須check・commit-bound evidence・ユーザー指定がある場合だけとする。未実行を成功扱いせず、別commitへ証拠を付け替えない。経過時間やtokenだけで必要gateを打ち切らない。
 - 後方互換性、旧実装の経路、互換性維持を目的とするshim、adapter、二重read / write、fallbackは原則として追加または維持しない。
 - 現在の要求が互換性対応なしでは成立せず、互換性を明示的に要求するaccepted contract、具体的な外部consumer、またはmigration要件を確認できる場合だけ、必要性、対象範囲、trade-off、撤去条件を示し、その作業に対するユーザーの明示承認を得てから実装する。
 - 既存codeやtestが存在すること、過去の挙動、互換性が有益という推測だけでは、必要性または承認の根拠にしない。承認がなく、互換性対応なしではaccepted contractを満たせない場合は、部分的に実装せずblockedとして報告する。互換性を要求しないcontractでは、旧入力や旧経路を暗黙に救済せず明示的に失敗させる。無関係なcleanup、rename、format、refactorを混ぜない。
@@ -66,15 +70,18 @@
 
 - 独立した調査、計画、実装slice、検証、別視点reviewで品質または速度が明確に上がる場合だけsubagentを使う。小さく直接検証できる単一責務へ不要なdelegationやreviewを足さない。
 - researcherは根拠収集、validatorは機械的検証、reviewer rolesは反例探索へ使い、相互に代用しない。
-- 構造、責務、public API、永続化、migration、auth、security、data loss、concurrencyの設計はdesignerへ渡す。designとcheckが確定したbounded sliceは`focused_implementer`、cross-owner整合、複雑なdebug、責務移動、未知経路を横断する実装は`implementer`へ渡す。
+- 独立に解ける問いや編集範囲が分かった時点でdelegationの効果を判断する。未解決の高リスク設計、複数ownerの不変条件など具体的な設計課題は`designer`へ渡す。設計・契約・checkが確定しrootで直接閉じる小変更に形式的なhandoffを加えない。designとcheckが確定した独立sliceは`focused_implementer`、cross-owner整合、複雑なdebug、責務移動、未知経路を横断する実装は`implementer`を使う。実装childは未解決の重要設計をrootへ返す。
 - 並列化は互いに依存せず編集範囲が重ならない作業だけに使う。同じfileや生成物を複数のwrite-capable childへ同時に割り当てない。
 - child outputは採用候補とし、root sessionがscope、統合、knowledge placement、最終検証、commit、user-facing finalを所有する。`agents/*.toml`はrole固有の静的契約、hookはruntime deltaだけを所有する。
+- handoffには対象と非対象、期待結果、契約、必要check、編集権限を渡し、該当しない空欄は要求しない。runtimeの並列数・深さ・role利用可否を尊重し、必要な独立reviewをrootの自己確認で代替したことを隠さない。childの主張をroot自身の実行証拠にしない。
 
 ## 8. Language, Reporting, and Git
 
 - ユーザーへの回答、生成ドキュメント、commit messageは日本語で書く。code commentは既存の言語と流儀に合わせる。
 - 回答は結論から始める。answer / explain / diagnoseは結論、根拠、未確定事項、次のaction、planはscope、依存関係、検証、open question、reviewはblocking、分類根拠、accepted risk、validation gap、残リスクを必要な範囲で示す。
+- 通常は一段落一論点の文章を使い、並列項目・手順・比較にはリストや表を使う。空の定型欄、意味のない前置き、結論の反復、求められていない対比、独自の複合語、不要な英語jargonを避ける。短さのために根拠やgapを隠さず、技術文書やIssueには自立して読める情報を残す。短いchat・進捗・コマンド結果は文書Skillやlintの対象にしない。ユーザーの文体・Character指定は自然言語に反映し、機械が読む文字列は変えない。
 - change / build / fixの完了報告は、変更、実行済み検証、未実行、残リスクを短く示す。external actionは対象、結果、read-backしたpostcondition、部分成功またはvalidation gapを区別する。
+- external writeは得られたID/URLと可能なread-backを確認する。通信失敗で成功済みか不明なwriteは無条件再送せず、対象APIの既存契約で確認する。
 - 生成物ではrepo内pathをrepo root相対で示し、logは必要な行だけを抜き出す。low-riskで暗黙にskipしたgateや作らなかったartifactは列挙しない。
 - task / feature branchへの通常の追加commitはchange / build / fixのauthorityに含む。default / main / protected branchへのcommit、amend、rebase、reset、pushは明示依頼がある場合だけ行う。
 - commit前にstatusと対象diffを確認し、対象pathまたはhunkだけをstageする。既存のstaged変更へ混ぜない。commit messageはconventional commits形式とし、commitした場合はhash、要約、検証結果を報告する。
