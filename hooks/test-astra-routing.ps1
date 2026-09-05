@@ -383,6 +383,23 @@ try {
     Assert-Denied -Output $offDenied -Pattern 'disabled'
     Write-Host 'OK: off mode denies Astra without affecting ordinary roles'
 
+    $semanticCorruptSession = 'session-semantic-corrupt'
+    $semanticCorruptTurn = 'turn-semantic-corrupt'
+    Invoke-Hook -Event (New-PromptEvent -SessionId $semanticCorruptSession -TurnId $semanticCorruptTurn) | Out-Null
+    $semanticStateFile = Get-ChildItem -LiteralPath $stateDirectory -Filter '*.json' | Where-Object {
+        try { (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).sessionId -eq $semanticCorruptSession } catch { $false }
+    } | Select-Object -First 1
+    $semanticState = Get-Content -LiteralPath $semanticStateFile.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
+    $semanticState.automaticRemaining = 2
+    $semanticState | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $semanticStateFile.FullName -Encoding UTF8
+
+    $semanticCorruptDenied = Invoke-Hook -Event (New-SpawnEvent -SessionId $semanticCorruptSession -TurnId $semanticCorruptTurn -Role 'astra_consultant')
+    Assert-Denied -Output $semanticCorruptDenied -Pattern 'missing or invalid'
+    Invoke-Hook -Event (New-PromptEvent -SessionId $semanticCorruptSession -TurnId 'turn-after-semantic-corruption') | Out-Null
+    $semanticRecoveryDenied = Invoke-Hook -Event (New-SpawnEvent -SessionId $semanticCorruptSession -TurnId 'turn-after-semantic-corruption' -Role 'astra_reviewer')
+    Assert-Denied -Output $semanticRecoveryDenied -Pattern 'requires recovery'
+    Write-Host 'OK: semantically invalid state cannot create additional Astra allowance and enters recovery'
+
     $corruptSession = 'session-corrupt'
     Invoke-Hook -Event (New-PromptEvent -SessionId $corruptSession -TurnId 'turn-a') | Out-Null
     $corruptSpawn = Invoke-Hook -Event (New-SpawnEvent -SessionId $corruptSession -TurnId 'turn-a' -Role 'astra_consultant')
