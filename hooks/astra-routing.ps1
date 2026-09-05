@@ -281,6 +281,11 @@ if ($eventName -eq 'UserPromptSubmit') {
     if ([string]::IsNullOrWhiteSpace($turnId)) {
         exit 0
     }
+    if (-not [string]::IsNullOrWhiteSpace([string]$payload.agent_id)) {
+        $state = Read-State -Path $statePath -SessionId $sessionId
+        New-ContextOutput -EventName 'UserPromptSubmit' -Context (Get-PolicyContext -Mode $mode -State $state -SessionId $sessionId -TurnId '')
+        exit 0
+    }
     $script:eventState = $null
     Invoke-WithStateLock -StatePath $statePath -Action {
         $loaded = Read-State -Path $statePath -SessionId $sessionId
@@ -332,6 +337,11 @@ if ($eventName -eq 'PreToolUse') {
         }
         if (-not [string]::IsNullOrWhiteSpace([string]$request.model) -and [string]$request.model -ne $astraModel) {
             $script:dispatchDecision = 'Astra role dispatch denied because the explicit model does not match gpt-6-astra.'
+            return
+        }
+        $requestedEffort = [string]$payload.tool_input.reasoning_effort
+        if (-not [string]::IsNullOrWhiteSpace($requestedEffort) -and $requestedEffort -ne 'medium') {
+            $script:dispatchDecision = 'Astra role dispatch denied because its reasoning effort is fixed to medium.'
             return
         }
         $script:dispatchDecision = Test-AndConsumeAllowance -State $state -Mode $mode -TurnId $turnId -Role ([string]$request.role)

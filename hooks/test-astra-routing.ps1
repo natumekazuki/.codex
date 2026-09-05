@@ -93,10 +93,13 @@ function New-PromptEvent {
 }
 
 function New-SpawnEvent {
-    param([string]$SessionId, [string]$TurnId, [string]$Role, [string]$Model = '')
+    param([string]$SessionId, [string]$TurnId, [string]$Role, [string]$Model = '', [string]$ReasoningEffort = '')
     $input = @{ agent_type = $Role; task_name = "task-$Role"; message = 'Bounded task.' }
     if (-not [string]::IsNullOrWhiteSpace($Model)) {
         $input.model = $Model
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ReasoningEffort)) {
+        $input.reasoning_effort = $ReasoningEffort
     }
     return @{
         hook_event_name = 'PreToolUse'
@@ -178,6 +181,15 @@ try {
     if ([string]$start.hookSpecificOutput.additionalContext -match 'not matched to a guard reservation') {
         throw 'A reserved Astra start was reported as unreserved.'
     }
+
+    Invoke-Hook -Event @{
+        hook_event_name = 'UserPromptSubmit'
+        session_id = $session
+        turn_id = 'child-turn-1'
+        agent_id = 'agent-astra'
+        agent_type = 'astra_consultant'
+        prompt = 'Child continuation.'
+    } | Out-Null
 
     $parallel = Invoke-Hook -Event (New-SpawnEvent -SessionId $session -TurnId $turn1 -Role 'astra_reviewer')
     Assert-Denied -Output $parallel -Pattern 'active or reserved'
@@ -269,7 +281,10 @@ try {
     Invoke-Hook -Event (New-PromptEvent -SessionId 'session-explicit' -TurnId 'turn-1') | Out-Null
     $explicitModel = Invoke-Hook -Event (New-SpawnEvent -SessionId 'session-explicit' -TurnId 'turn-1' -Role 'researcher' -Model 'gpt-6-astra')
     Assert-Denied -Output $explicitModel -Pattern 'only astra_consultant and astra_reviewer'
-    Write-Host 'OK: explicit Astra model cannot bypass dedicated roles'
+    Invoke-Hook -Event (New-PromptEvent -SessionId 'session-effort' -TurnId 'turn-1') | Out-Null
+    $highEffort = Invoke-Hook -Event (New-SpawnEvent -SessionId 'session-effort' -TurnId 'turn-1' -Role 'astra_consultant' -ReasoningEffort 'high')
+    Assert-Denied -Output $highEffort -Pattern 'reasoning effort is fixed to medium'
+    Write-Host 'OK: explicit Astra model and effort overrides cannot bypass dedicated role settings'
 
     $manualSession = 'session-manual'
     $manualTurn = 'turn-manual'
