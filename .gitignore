@@ -26,6 +26,8 @@ config.toml
 /shell_snapshots
 /runtime
 hooks/subagent-routing.local.json
+hooks/astra-routing.local.json
+hooks/.astra-routing-state/
 /browser
 /computer-use
 /process_manager

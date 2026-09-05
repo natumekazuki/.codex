@@ -6,16 +6,16 @@
 
 比較を始める前に、base source、taskの入力、期待するobservable outcome、semantic owner、targeted check、禁止する副作用を固定する。各条件は同じbaseから新規sessionで開始し、片方の解答、review、ログをもう片方へ渡さない。実行順は固定せず、順序と中断を記録する。
 
-基本の比較系列は、次の4条件を同じtask classで複数run実行する。
+通常作業はSol rootと明示されたSol / Luna childを基準にする。Astraは次の系列を混ぜず、対象task classごとに複数run実行する。
 
-| 条件 | 指示 | root model | child model / effort |
+| 系列 | root | child | 確認する差分 |
 | --- | --- | --- | --- |
-| A | 現行 | Astra | 現行値を固定 |
-| B | 変更後 | Astra | 現行値を固定 |
-| C | 現行 | 継続する具体的なGPT-5.6 model ID | 現行値を固定 |
-| D | 変更後 | 継続する具体的なGPT-5.6 model ID | 現行値を固定 |
+| 通常基準 | Sol / medium | 現行のSol / Luna role | 通常作業の品質、再作業、検証、消費量 |
+| consultant限定 | Sol / medium | 通常roleに加えて`astra_consultant`を1回 | 調査後も残る重要な設計判断または矛盾が解消するか |
+| reviewer限定 | Sol / medium | 必要なreview gate内で`astra_reviewer`を1回 | 難しい反例の検出と親の再作業への効果 |
+| root例外 | Astra / medium | 現行のSol / Luna role | 明示選択したroot Astraの効果。通常系列へ混ぜない |
 
-「GPT-5.6」は系列名として扱い、実効model IDを省略しない。利用できない条件は「未実行：利用不可」と記録し、別条件の結果で補わない。Astraのrootだけを変更する系列と、childのmodelまたはeffortも変更する系列は分ける。reasoning effort、reviewer model、role構成、tool / Skill構成を変えるときも別系列にし、複数の差分を一つの効果として判定しない。
+modelは実効IDを省略しない。利用できない条件は「未実行：利用不可」と記録し、別条件の結果で補わない。Astra root、Astra専用child、通常childのmodelまたはeffortを変える系列は分ける。reasoning effort、service tier、role構成、tool / Skill構成を変えるときも別系列にし、複数の差分を一つの効果として判定しない。
 
 各runでは、CLI版、model ID、reasoning effort、routing mode、role構成、child数、review trigger、tool / Skill構成を記録する。比較途中でこれらを変更したrunは同じ集計へ混ぜない。
 
@@ -44,7 +44,7 @@ runごとの記録は、session logをraw sourceとし、比較用の集計だ�
 
 ```text
 Task class / case / run ID:
-Condition (A/B/C/D or separate series):
+Series (normal / consultant / reviewer / root exception):
 Base source identity / task input identity:
 CLI version:
 Routing mode / selected role / child count / review trigger:
@@ -77,7 +77,7 @@ Evidence reference (redacted session log or aggregate record):
 3. 親の追加turn、修正量、不要な確認、不要な変更や成果物、重複検証が減ったか。
 4. そのうえでwall-clockとtokenを比較する。
 
-品質低下、blocking findingの増加、または親の再作業増加がtoken差を相殺するtask classでは、既存のroleを維持する。複数runで同じ傾向が確認できたtask classだけを継続候補とする。未確認のAstra / GPT-5.6互換性や既定切替を、比較結果から推測して記録しない。
+品質低下、blocking findingの増加、または親の再作業増加がtoken差を相殺するtask classでは、通常のSol / Luna roleを維持する。複数runで同じ傾向が確認できた難問classだけをAstra専用roleの継続候補とする。Astraを通常roleやrootの既定へ広げる根拠として推測しない。
 
 ## 段階導入
 
@@ -86,12 +86,12 @@ Evidence reference (redacted session log or aggregate record):
 1. **準備**：このrunbookの条件、ケース、記録様式、判定基準を固定する。ここで全モデルの比較完了を待つ必要はない。
 2. **限定試行**：対象task classと明示したrole / modelにだけ新設定を選び、基本系列と必要な代表ケースを複数run実行する。実効modelとeffortをread-backする。
 3. **拡大判断**：安全境界と必須検証に回帰がなく、未解決blockingがなく、品質と再作業の傾向が受入条件を満たす場合だけ対象範囲を広げる。未実行のケースは合格扱いにしない。
-4. **既定切替の判断**：変更後の優位性がtask classごとに再現し、継続するGPT-5.6系列も必要なケースで確認できた場合に限る。単一run、文字数削減、token差だけでは切り替えない。
+4. **継続判断**：Astra専用roleの優位性が対象となる難問classで再現し、通常のSol / Luna系列に安全性と品質の回帰がない場合だけ、その限定用途を継続する。単一run、文字数削減、token差だけでは対象を広げない。
 
 ## 切戻し
 
-導入後に安全境界の回帰、必須検証の欠落、blocking finding、再作業の増加、実効modelの不一致が確認された場合は、対象範囲を直ちに旧profile / roleへ戻す。切戻し先は、比較時に確認した旧profile / role設定を明示選択し、切戻し後のmodel ID、effort、routing modeをread-backする。
+導入後に安全境界の回帰、必須検証の欠落、blocking finding、再作業の増加、実効modelの不一致が確認された場合は、Astra modeを`off`または`manual`へ戻し、通常のSol / Luna roleを明示選択する。切戻し後のmodel ID、effort、service tier、routing modeをread-backする。
 
 指示変更は対応commitをレビュー可能な変更として戻す。未コミット変更を`reset --hard`や`clean`で破棄しない。切戻しの理由、検出したcase、影響範囲、旧設定のread-back、再導入条件を比較記録へ残す。原因が未確定なら、切戻しと原因調査を分け、確認できるまで既定切替を保留する。
 
-実装が完了していても、実環境での新規session読込、Astraと継続する具体的なGPT-5.6の比較、child開始時やcompaction後の確認が未実行なら、運用検証は未完了と記録する。mainへの反映や新しい実環境が必要な検証は、元Issue、実装commit、未確認項目、実施できない理由、前提、実行手順、合格条件、保留する切替、切戻し方法を含む継続Issue案へ検証のまとまりごとにまとめる。未解決blockingは運用検証へ移して完了扱いにしない。
+実装が完了していても、実環境での新規session読込、Sol / Luna通常系列と限定Astra系列の比較、child開始、spawn / follow-up拒否、compaction、resume後の確認が未実行なら、運用検証は未完了と記録する。mainへの反映や新しい実環境が必要な検証は、元Issue、実装commit、未確認項目、実施できない理由、前提、実行手順、合格条件、保留する切替、切戻し方法を含む継続Issue案へ検証のまとまりごとにまとめる。未解決blockingは運用検証へ移して完了扱いにしない。

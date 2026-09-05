@@ -47,8 +47,8 @@
 - Git 管理する正本は `AGENTS.md`、`README.md`、`agents/`、`docs/adr/`、`docs/architecture/`、`docs/runbooks/`、`hooks/`、`hooks.json`、runtime-managedな`skills/withmate-glossary/`を除く`skills/`、`templates/`、`config.example.toml`、`config/agents.example.toml` とする
 - `config.toml` は端末固有の local file として Git 管理しない。`projects.*`、`hooks.state`、runtime/plugin の `source`、MCP server の `command` / `env`、通知コマンド、Chrome native host 設定は端末ごとに生成または調整する
 - 新しい端末ではこの repo を `$HOME/.codex` に配置し、既存の `config.toml` に `config.example.toml` と `config/agents.example.toml` の必要 section だけを移す
-- hook は `hooks.json` から `$HOME/.codex/hooks/implementation-restraint.ps1` と `$HOME/.codex/hooks/subagent-routing.ps1` を呼び出す。Windows では `commandWindows` が `%USERPROFILE%\.codex` を使う
-- `CODEX_HOME`を別directoryへ変える端末では、上記hook commandの既定pathもその配置へ調整してからtrustと到達を確認する。profileだけを配置してhookの参照先も移動したとは扱わない
+- hookは`hooks.json`から有効な`CODEX_HOME`配下の`hooks/implementation-restraint.ps1`、`hooks/subagent-routing.ps1`、`hooks/astra-routing.ps1`を呼び出す。`CODEX_HOME`が未指定の場合は`$HOME/.codex`、Windowsでは`%USERPROFILE%\.codex`を使う
+- 候補版を別の`CODEX_HOME`で起動する場合も、hook scriptとGit管理外のrouting stateは同じ配置へ解決される。導入時は`/hooks`でtrustと到達を確認する
 - Spark routing の現在 mode は `hooks/subagent-routing.local.json` に保存される。このファイルは端末ごとの一時状態なので Git 管理しない
 - WithMateを使う端末では、起動後に`withmate-memory` commandと`skills/withmate-glossary/`が配置され、Glossary Skillのmanaged markerにある`bundleVersion`とSkill一覧への認識を確認する
 - Character context MCPを使う端末では、`config.example.toml`の`withmate-character-context`設定をlocal `config.toml`へ反映し、WithMate起動後の新しいCodex sessionで`codex mcp list`と公開toolを確認する。詳細は`docs/runbooks/withmate-character-context.md`を参照する
@@ -73,10 +73,11 @@
 ## Model and Routing
 
 - role の選択基準と risk gate は `AGENTS.md` を正本とする。具体的な未解決設計がない小変更にdesignerのhandoffを加えず、必要な独立reviewの条件は維持する
-- 各 role の明示model、reasoning effort、sandbox、静的契約は `agents/*.toml`、model未指定roleの選択差分は設定例とprofileを正本とする
+- 各 role の明示model、reasoning effort、service tier、sandbox、静的契約は `agents/*.toml`、default childのmodelは設定例とprofileを正本とする
 - `review-test-value`の二段階審査artifactとcustom agent例はbootstrap中である。runtime activationと新session smokeが完了するまでは、現行の単一審査workflowを利用する
 - 独立workerの準備状況、候補版preflight、未実装の境界、標準切替と切戻しは[有効化runbook](docs/runbooks/activate-test-value-review.md)を参照する。preflightはworkerを起動せず`BLOCKED`を返す
 - Spark の利用状態は `hooks/set-spark-routing.ps1` で切り替え、操作方法は `hooks/subagent-routing-modes.md` を参照する
+- Astra の利用状態は `hooks/set-astra-routing.ps1` で切り替え、操作方法は `hooks/astra-routing-modes.md` を参照する
 - model変更の比較方法は `docs/runbooks/compare-subagent-roles.md` を参照し、単一runのtoken差だけで既定roleを置き換えない
 
 ## Astra / GPT-5.6 profileの選択
@@ -92,12 +93,12 @@ codex --profile gpt56
 
 [設定の優先順位](https://learn.chatgpt.com/docs/config-file/config-advanced#profiles)はbase user config、選択profile、project config、CLI overrideの順に上書きされる（managed policyの制約は別途適用される）。旧`[profiles.<name>]`やtop-levelの`profile` selectorは使わない。`model_instructions_file`で組込み指示を置換する方法も使わない。
 
-| 対象 | gpt56 / base | astra | effort | sandbox |
+| 対象 | 通常model | astra profile | effort | sandbox |
 | --- | --- | --- | --- | --- |
 | root | Sol | Astra | medium | 利用端末の設定。profileは変更しない |
-| designer | Sol | Astra | xhigh | read-only |
-| reviewer | Sol | Astra | xhigh | read-only |
-| targeted_reviewer | Sol | Astra | xhigh | read-only |
+| designer | Sol | Sol | xhigh | read-only |
+| reviewer | Sol | Sol | xhigh | read-only |
+| targeted_reviewer | Sol | Sol | xhigh | read-only |
 | implementer | Sol | Sol | high | workspace-write |
 | planner | Sol | Sol | high | read-only |
 | focused_implementer | Luna | Luna | medium | workspace-write |
@@ -106,15 +107,17 @@ codex --profile gpt56
 | slice_reviewer | Luna | Luna | high | read-only |
 | test_value_luna | Luna | Luna | medium | read-only |
 | test_value_sol | Sol | Sol | xhigh | read-only |
+| astra_consultant | Astra | Astra | medium / Standard | read-only |
+| astra_reviewer | Astra | Astra | medium / Standard | read-only |
 | fast_* | 既存Spark | 既存Spark | 各role定義を維持 | 各role定義を維持 |
 
-ここでAstraは`gpt-6-astra`、Solは`gpt-5.6-sol`、Lunaは`gpt-5.6-luna`を指す。3 roleだけmodel指定を外し、`[agents].default_subagent_model`をprofileで選ぶ。他の明示modelを持つroleはそのmodelを保つ。role全文をprofileごとに複製しない。
+ここでAstraは`gpt-6-astra`、Solは`gpt-5.6-sol`、Lunaは`gpt-5.6-luna`を指す。通常roleはmodelを明示し、profileからAstraを継承しない。`config/astra.config.toml`はrootだけをAstraへ切り替える手動の例外で、default childはSolを維持する。
 
-このdefaultは3 roleに限定されず、**model未指定のdefault childなどにも適用される**。意図しない無指定roleがないか導入時に確認する。明示spawn model、roleのmodel、`agents.default_subagent_model`、parentからの継承を区別する。rootへの`--model`だけでchildも切り替わるとは限らず、profile名や説明文を実効値の証拠にしない。
+`astra_consultant`は具体的な調査後も残る重要な設計判断または矛盾、`astra_reviewer`は既に必要と判定されたreview内の難しい反例に限定する。既存のdesigner、reviewer、targeted_reviewerをAstraへ置き換えず、実装、commit、外部write、再委譲もAstra roleへ渡さない。
 
-3 roleはまずSol/xhigh対Astra/xhighを個別に比較し、Astra/highやmediumは別系列にする。通常の実装・調査・検証はSol/Lunaを継続し、未解決の複雑な不整合は調査済みsource、失敗仮説、checkとともにrootへ返す。モデル強化をdesignerやreviewの起動回数を増やす理由にしない。
+Astra専用2 roleは`medium`と`service_tier = "default"`、`fast_mode = false`を明示する。Fast modeは別の速度設定であり、role選択と混同しない。通常の実装、調査、検証はSol / Lunaを継続し、モデル強化をreviewやchildの起動回数を増やす理由にしない。
 
-新規sessionと代表childでhost側のmodel、effort、sandbox、読込元を確認する。利用不可は明示的に未実行とし、別modelへ自動downgradeしない。全GPT-5.6構成への切戻しは`--profile gpt56`でrootと無指定childのSol選択をread-backし、3 roleのxhighと他roleの固定値を確認する。端末のproject/CLI overrideがある場合も同様に確認する。比較完了前の既定切替は保留する。
+新規sessionと代表childでhost側のmodel、effort、service tier、sandbox、読込元を確認する。利用不可は未実行とし、別modelへ自動downgradeしない。通常構成への切戻しはbaseまたは`--profile gpt56`でrootとdefault childのSol選択、各roleの固定値をread-backする。端末のproject / CLI overrideがある場合も同様に確認する。
 
 ## Hook 方針
 
@@ -123,10 +126,12 @@ codex --profile gpt56
 - `hooks/subagent-routing.ps1` は `UserPromptSubmit` と `SubagentStart` で、現在の Spark mode と 手動の優先方針など実行時差分だけを追加する
 - hook の切替状態は ignored な `hooks/subagent-routing.local.json` に保存する。環境変数 `CODEX_SUBAGENT_SPARK_MODE` がある場合はそれを優先する
 - mode は `balanced`、`spark-first`、`standard-only` を使う。既定は `balanced`
+- `hooks/astra-routing.ps1`はAstra専用2 roleの`conditional` / `manual` / `off`、親user turnごとの共有枠、同時実行状態、manual grantを所有し、`PreToolUse`で認識できた不正な投入を拒否する
+- Astraの既定modeは`manual`とし、操作と制約は`hooks/astra-routing-modes.md`を参照する。状態はignoredな`hooks/astra-routing.local.json`と`hooks/.astra-routing-state/`に保存する
 - standing authorization、role 選択、risk gate、成果返却、統合責務は `AGENTS.md` を正本とし、hook へ複製しない
 - JSONを解釈するhookの検証は PowerShell pipeline ではなく、子 `pwsh -File` に JSON stdin を渡して本番の `Console.In` に近い形で行う。固定文面だけを返すhookは、子 `pwsh -File` の標準出力を直接確認する
 
-restraintの詳細な注入文面は`hooks/implementation-restraint.ps1`を正本とし、共通の意味とauthorityは`AGENTS.md`、test設計の手順は`design-tests`が所有する。prompt、対象child、compact後の各登録は再注入経路であり、同一eventの二重登録とは区別する。今回の候補では経路を削除しない。別config layerやinline hooksと`hooks.json`の両方に同じcommandがある場合は導入前に重複を確認する。hookはadvisoryで、sandbox、tool permission、WithMate bindingを置き換えない。
+restraintの詳細な注入文面は`hooks/implementation-restraint.ps1`を正本とし、共通の意味とauthorityは`AGENTS.md`、test設計の手順は`design-tests`が所有する。prompt、対象child、compact後の各登録は再注入経路であり、同一eventの二重登録とは区別する。別config layerやinline hooksと`hooks.json`の両方に同じcommandがある場合は導入前に重複を確認する。Astraの`PreToolUse`拒否は対応するlocal function toolへのguardrailであり、特殊経路やhook未実行まで完全に封鎖するsecurity boundaryではない。sandbox、tool permission、WithMate bindingも置き換えない。
 
 ## Skillの読込元と文書mode
 
@@ -146,4 +151,4 @@ restraintの詳細な注入文面は`hooks/implementation-restraint.ps1`を正�
 
 テスト価値審査の二段階有効化は#42〜#45の別scopeである。この移行では既存gateと専用Luna/medium・Sol/xhighを維持するが、別作業で隔離・新規session・候補自身の審査などの条件を満たしたactivationを禁止しない。worktree分離だけをworkerの強制隔離の証拠にしない。
 
-比較条件と切戻しは[比較runbook](docs/runbooks/compare-subagent-roles.md)を使う。portableな実装と構文検証の完了は、実モデル比較、child開始、手動・自動compaction後の適用完了と区別する。必要な再注入を未確認のまま削除せず、旧設定の選択経路を保つ。統括#41は必要な全体確認が残る間Openを維持する。
+比較条件と切戻しは[比較runbook](docs/runbooks/compare-subagent-roles.md)を使う。portableな実装と構文検証の完了は、実モデル比較、child開始、spawn / follow-up拒否、手動・自動compaction、resume後の適用完了と区別する。統括#41は必要な全体確認が残る間Openを維持する。

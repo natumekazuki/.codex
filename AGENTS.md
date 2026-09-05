@@ -73,6 +73,8 @@
 - 独立に解ける問いや編集範囲が分かった時点でdelegationの効果を判断する。未解決の高リスク設計、複数ownerの不変条件など具体的な設計課題は`designer`へ渡す。設計・契約・checkが確定しrootで直接閉じる小変更に形式的なhandoffを加えない。designとcheckが確定した独立sliceは`focused_implementer`、cross-owner整合、複雑なdebug、責務移動、未知経路を横断する実装は`implementer`を使う。実装childは未解決の重要設計をrootへ返す。
 - 並列化は互いに依存せず編集範囲が重ならない作業だけに使う。同じfileや生成物を複数のwrite-capable childへ同時に割り当てない。
 - child outputは採用候補とし、root sessionがscope、統合、knowledge placement、最終検証、commit、user-facing finalを所有する。`agents/*.toml`はrole固有の静的契約、hookはruntime deltaだけを所有する。
+- 通常のrootとsubagentはSol / Lunaの明示modelを使う。Astraは`astra_consultant`と`astra_reviewer`だけに限定し、通常のdesigner、reviewer、targeted_reviewer、planner、implementerの代替として自動選択しない。
+- Astraの自動選択は、具体的な調査後も残る重要な設計判断または矛盾、既に必要と判定されたreview内の難しい反例に限る。現在mode、親user turnごとの共有枠、同時実行制限、明示許可は`hooks/astra-routing.ps1`をruntime ownerとする。
 - handoffには対象と非対象、期待結果、契約、必要check、編集権限を渡し、該当しない空欄は要求しない。runtimeの並列数・深さ・role利用可否を尊重し、必要な独立reviewをrootの自己確認で代替したことを隠さない。childの主張をroot自身の実行証拠にしない。
 
 ## 8. Language, Reporting, and Git
