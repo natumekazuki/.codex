@@ -47,7 +47,7 @@ reviewの独立性にはexact sourceとcheckの実行対象を固定する必要
 
 ## Policy Anchors
 
-- Standard workflow, review lifecycle, and authority: `AGENTS.md`
-- Contract reasoning and finding promotion: `skills/contract-closure/SKILL.md`
+- Standard workflow and authority: `AGENTS.md`
+- Contract reasoning, review lifecycle, and finding promotion: `skills/contract-closure/SKILL.md`（#33で手順の所有を集約。上記Decisionのcommit固定と安全境界は維持）
 - Review role contracts: `agents/reviewer.toml`、`agents/targeted_reviewer.toml`、`agents/slice_reviewer.toml`
 - Workspace boundary: `docs/architecture/subagent-workspace.md`

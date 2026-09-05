@@ -17,7 +17,6 @@
 - 局所的な理由や制約はcode commentへ置き、codeから分かる処理内容は繰り返さない。複数案から選んだ長期的または後戻り困難な判断はADRへ置く。
 - ADR以外の恒久設計文書は、複数subsystem、process、repo、外部serviceへ波及し、sourceとexecutable contractから全体を復元できない場合だけ作る。現行class構成や通常のAPI仕様を複製しない。README、user guide、runbook、setup、運用手順は利用方法や運用が変わるときに更新する。
 - `SessionFolder`は、repositoryへ入れないユーザー入力と成果物の受け渡し、およびexact-source reviewの一時worktreeに使う。恒久契約、実装、検証根拠の正本にはしない。Folder Contextはpathを通知するだけでfilesystem authorityを拡張しない。
-- review worktreeは`<SessionFolder>/review-worktrees/<repositoryId>/<reviewCommitOid>`を第一候補とする。SessionFolderがない場合だけ、repository内でgitignore済みの`.agent-worktrees/reviews/<reviewCommitOid>`を使う。Codex設定directoryやOS TEMPを代替の共有場所またはreview rootにしない。
 - 意図を確定できず、選択が結果を実質的に変える場合は、根拠、選択肢、consumer影響、推奨案を示して確認を求める。
 
 ## 3. Standard Task Workflow
@@ -53,11 +52,7 @@
 - 局所的な単一責務をtargeted checkで直接検証できる場合は独立reviewを起動しない。直接検証できないinteractionは`slice_reviewer`、高リスク境界またはSkillが要求するlensは`targeted_reviewer`へ渡す。
 - `Full-review gate`の既定は`skip`とする。高リスクまたはnon-localな境界、複数subsystem間の未確認interaction、targeted checkで直接検証できないcross-cutting contractがある場合だけ`run`とし、一つの論理変更につきcomplete-diff reviewを一度だけ`reviewer`へ渡す。
 - exact-source reviewは、固定した`baseCommitOid`と`reviewCommitOid`、`reviewCommitOid`をcheckoutしたcleanなdetached worktreeだけを対象にする。review中の実装branchを止めず、review用branchや未commit sourceのsnapshot fallbackを作らない。
-- review task、commit-bound evidence、finding修正後のtargeted closure、review worktreeの安全な後始末は`contract-closure` Skillへ従う。path、HEAD、cleanlinessが一致しないworktreeを`--force`で削除しない。
-- findingはaccepted contract、到達条件、consumer影響、Invariant familyの根拠から`blocking`、`risk-candidate`、`non-material`、`invalid`へ分類する。証拠不足は`investigation-pending`とし、source scopeを先に広げない。
-- current-scope repairは同じInvariant familyへ限定する。別semantic ownerまたはsubsystemの変更は`boundary prerequisite`として分ける。auth bypass、secretやpersonal dataの露出、現実的なinjection、不可逆なdata lossは自動でrisk acceptanceしない。
-- `risk-candidate`は、発生可能性が低く、影響が限定され、自動検知と復旧ができ、機密性侵害または不可逆なdata lossを伴わない場合だけaccepted riskにできる。必要なfollow-upはrepositoryの既存管理表へ残す。
-- 完了条件はfinding数0ではなく、未解決blockingがなく、sourceとcontractが整合し、現行差分へのdirect checkと必要なreviewが揃い、validation gapと残リスクが分類されていることである。
+- reviewの準備、finding分類、risk acceptance、修正後のclosureと安全な後始末は`contract-closure`に従う。完了には現行差分のdirect check、必要な独立review、未解決blockingがないこと、validation gapと残リスクの分類を要する。
 
 ## 6. WithMate-managed Context and Repository Metadata
 
@@ -83,3 +78,22 @@
 - 生成物ではrepo内pathをrepo root相対で示し、logは必要な行だけを抜き出す。low-riskで暗黙にskipしたgateや作らなかったartifactは列挙しない。
 - task / feature branchへの通常の追加commitはchange / build / fixのauthorityに含む。default / main / protected branchへのcommit、amend、rebase、reset、pushは明示依頼がある場合だけ行う。
 - commit前にstatusと対象diffを確認し、対象pathまたはhunkだけをstageする。既存のstaged変更へ混ぜない。commit messageはconventional commits形式とし、commitした場合はhash、要約、検証結果を報告する。
+
+## 条件付きの参照
+
+リンクは自動読込を意味しない。該当する手順だけを読む。Skillは現在のruntime一覧に通知された実際の`SKILL.md`を解決元とし、相対参照はそのSkill directoryから辿る。同名Skillを自動mergeせず、利用する版とpathを確認する。
+
+| 作業条件 | 読む正本 |
+| --- | --- |
+| testの新規追加・意味変更・削除、回帰check選定 | `design-tests`。新規・意味変更のPython/TypeScript/C# testは`review-test-value`も使う |
+| 高リスク境界・複合不変条件、必要な独立reviewの準備とclosure | `contract-closure` |
+| 通常のcode review findingを新たに提示 | `present-review-results` |
+| 日本語技術文書の作成・推敲 | `japanese-tech-writing-review` |
+| 一般文書の執筆・自然さの推敲・採点 | `natural-japanese` |
+| UI設計・実装・review | `design-ui-information` |
+| 固定区間のCodex作業監査 | `audit-codex-work-quality` |
+| RelayGraph宣言を持つrepositoryの関係調査 | `relaygraph` |
+| 通常の追加commit | `commit-note` |
+| WithMate Memory / Character、Repository Glossary | Memory / Characterは設定正本の`docs/runbooks/withmate-character-context.md`、Glossaryはruntime-managedな`withmate-glossary` |
+
+この共通規則の`docs/`、`agents/`、`hooks/`は配布元のCodex設定repositoryを指し、作業対象repositoryの同名directoryではない。global配置は有効な`CODEX_HOME`（未指定時はユーザーhomeの`.codex`）から解決する。worktreeの候補版を扱う場合は明示された候補rootを使い、live版と混同しない。参照先がない場合はその手順の不足を報告し、無関係な全SkillやADRを読み込むことで補わない。ADRは判断履歴であり、supersededな手順を現行の義務に戻さない。system/admin、tool permission、sandboxの境界はこの配置規則で変更しない。

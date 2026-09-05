@@ -24,11 +24,7 @@ root session と child agent が同じ task を扱うときの、成果返却、
 
 同じファイルを複数の write-capable child に同時に割り当てない。root は同じ生成物や lockfile に触れる validator と implementer を並行実行しない。shared working tree の既存変更はユーザーまたは他の slice の所有物として保護する。
 
-detached review worktreeでは、`baseCommitOid`と`reviewCommitOid`をimmutableなsource identityとする。reviewerは明示された`reviewTarget`だけを読み、HEAD一致、cleanliness、commit object、base ancestryを確認する。実装branchはreview中も進めてよい。
-
-`reviewTarget`は、System PromptにSessionFolderがありfilesystem authority内で利用できる場合、`<SessionFolder>/review-worktrees/<repositoryId>/<reviewCommitOid>`へ作る。SessionFolderがない場合だけ、repository内でgitignore済みの`.agent-worktrees/reviews/<reviewCommitOid>`へfallbackする。Codex設定ディレクトリやOSのTEMPへ別のfallbackを作らない。どちらも利用できなければvalidation gapとする。
-
-review worktreeの作成と後始末はrootまたはruntimeが所有する。review用branchは作らない。全reviewerがapprove、finding、validation gap、deadline、interruptのいずれかで終了してから、正規化済みpathが選択したroot配下にあること、HEADが`reviewCommitOid`であること、tracked / untrackedともcleanであることを確認し、`git worktree remove`で削除する。不一致やdirty stateでは`--force`を使わず、残ったworktreeをvalidation gapとして報告する。実装branchとreview対象commitは削除しない。Git未管理または未commitのsourceにはreview用workspace fallbackを作らない。
+detached review worktreeは固定したcommitを読む独立review専用であり、通常のshared working treeと分ける。配置、OID、preflight、全終了経路のcleanupは`contract-closure` Skillの「必要な独立reviewを閉じる」を正本とする。rootまたはruntimeが準備と後始末を所有する。
 
 ## Durable Artifacts
 

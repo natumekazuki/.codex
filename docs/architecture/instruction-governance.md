@@ -10,7 +10,7 @@ Codex の共通規則、role 契約、再利用手順、runtime delta を異な�
 |---|---|---|
 | 共通のtask lifecycle、authority、planning、knowledge placement、delegation、validation、WithMate-managed operationのstanding authorization、Git規則 | `AGENTS.md` | taskやroleに依存しない恒久規則と適用順序 |
 | 静的な role 責務、禁止事項、出力契約、model、sandbox | `agents/*.toml` | agent type ごとの契約 |
-| 特定用途で呼び出す再利用手順とruntime-managed operationの正確な契約 | `skills/*/SKILL.md` | schema、target、idempotency、effect、retry、fallbackを含むSkill固有workflow |
+| 特定用途で呼び出す再利用手順とruntime-managed operationの正確な契約 | `skills/*/SKILL.md` | `contract-closure`のreview lifecycleとfinding closure、その他schema、target、idempotency、effect、retry、fallbackを含むSkill固有workflow |
 | WithMate MCPの端末設定、運用、障害切り分け | `docs/runbooks/withmate-*.md` | `AGENTS.md`の正本境界とstanding authorizationを具体化する手順。tool schemaはMCPの`tools/list`を参照する |
 | 現在の Spark mode、quota fallback など runtime delta | `hooks/subagent-routing.ps1` | 実行時にしか決まらない追加情報 |
 | 責務を分離した理由と長期的 trade-off | `docs/adr/0002-subagent-execution-and-routing-ownership.md` | 現行 role 一覧や局所手順を複製しない |
