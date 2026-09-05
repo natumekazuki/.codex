@@ -1,6 +1,6 @@
 ---
 name: review-test-value
-description: Python、TypeScript、C#のtest sourceへ隣接する構造化された`@test-value`コメントとtest declarationを決定論的に抽出し、コメントの検証価値とtest本文の整合を審査する。pytest・unittest、Jest・Vitest・Playwright、xUnit・NUnit・MSTest形式の新規・変更テストの価値レビュー、価値コメントの追加・修正、曖昧・重複・実装詳細へ結合したテストの見直し、AIレビュー入力の生成で使う。runtime test collection、動的生成caseの展開、CI gateの構築には使わない。
+description: Python、TypeScript、C#の新規・変更testに隣接する`@test-value`を抽出し、コメントとtest本文が同じfailure modeを検出するか審査する。pytest・unittest、Jest・Vitest・Playwright、xUnit・NUnit・MSTestの価値レビューとreview packet生成に使う。runtime test collection、動的case展開、CI gate構築には使わない。
 ---
 
 # Review Test Value
@@ -68,18 +68,44 @@ phase判定には`evidence`、`unverified`、必要なら`next_action`を添え�
 
 ## Validation
 
-Skillまたはscriptを変更したら次を実行する。
+変更した影響に直接対応するcheckを実行する。説明・metadataだけの変更でも、発火条件や相対参照の意味が変わる場合は、対象Skillのquick validationと参照確認を行う。同じsnapshotで成功済みのcheckは、source・contract・依存・実行環境の変更、失敗やflaky、具体的な未確認リスク、必須checkまたはユーザー指定がある場合に限って再実行する。CIの全環境検証と、localで無関係なadapterをrestoreすることは同じ要件ではない。
+
+### 説明・metadata
+
+```powershell
+python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-value
+```
+
+相対参照、対象範囲、起動条件の意味を読み合わせ、必要なreferencesへ到達できることを確認する。descriptionだけでなくWorkflowや参照先を変更した場合は、影響する下記のcheckも実行する。
+
+### Git差分選択
+
+```powershell
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/git_diff_selection.py
+```
+
+Git modeのbase commit、対象path、line rangeの選択やroutingを変更した場合に実行する。Git modeでは手作業で対象pathを差し替えない。
+
+### 言語adapter・抽出
 
 ```powershell
 python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values_multilang.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_values.py
+```
+
+Python、TypeScript、C#のadapter、コメント形式、抽出CLIを変更した場合に実行する。初めて使う言語の依存準備はWorkflowの既存手順に従い、変更していないadapterのlocal restoreは必須にしない。CIのWindows/Linux多言語検証は維持する。
+
+### review packet・schema・routing
+
+```powershell
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
-python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_values.py
-python -X utf8 -m py_compile skills/review-test-value/scripts/git_diff_selection.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py
-python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-value
 ```
+
+packet、result schema、routing、判定検証の実装や公開CLI契約を変更した場合に実行する。exit `0`の`tests`だけを審査し、exit `1`/`2`や`NEEDS_CONTEXT`を完了扱いにしない。現在のtest価値審査gateと`test_value_luna`/`test_value_sol`の役割は、このSkill変更で有効化・変更しない。
