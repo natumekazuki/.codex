@@ -893,6 +893,7 @@ def extract_repository(
         "coverage": profile.coverage,
         "repository_root": ".",
         "tests": records,
+        "transitions": None,
         "diagnostics": [public_diagnostic(item) for item in diagnostics],
         "warnings": [],
     }

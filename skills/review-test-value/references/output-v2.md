@@ -9,6 +9,7 @@ stdoutへUTF-8 JSON objectを一つ返す。
   "coverage": "python-source-declarations-v1",
   "repository_root": ".",
   "tests": [],
+  "transitions": null,
   "diagnostics": [],
   "warnings": []
 }
@@ -17,6 +18,14 @@ stdoutへUTF-8 JSON objectを一つ返す。
 宣言抽出能力を変更していないため、言語ごとのadapterとcoverage名は[source adapter契約](source-adapters-v1.md)を維持する。Git modeの選択条件は[Git selection契約](git-selection-v1.md)に従う。
 
 各recordは`source`、`metadata_format_version`、`metadata`、`source_text`、`source_hash`、`metadata_hash`を持つ。metadata formatは結合したmarkerから確定する。metadataとhashが取得できても、diagnosticsがある結果は審査へ渡せない。v1 recordは移行入力であり、v2への自動変換結果ではない。
+
+`transitions`は明示path modeでは`null`、Git modeでは配列である。Git modeの各要素は`kind`、`before`、`after`を持ち、shapeは次のいずれかとする。
+
+- `ADDED`: `before`は`null`、`after`は現snapshotのrecord
+- `SURVIVED`: `before`はbase snapshotのrecord、`after`は現snapshotのrecord
+- `DELETED`: `before`はbase snapshotのrecord、`after`は`null`
+
+Git modeの`tests`は`ADDED`と`SURVIVED`の`after`を同じ決定論的順序で並べたものと一致する。`DELETED.before`は削除前のmetadata、source locator、本文、hashを保持し、削除によって元の審査義務を失わせない。対応が一意に確定しない場合は`RECORD_TRANSITION_UNRESOLVED`を返し、exit `1`とする。
 
 source locator、LF正規化、canonical JSONとSHA-256、決定論的な順序はv1の規則を維持する。locatorは編集をまたぐ永続IDではない。`warnings`と`diagnostics`はそれぞれ`code`、`path`、`line`、`message`を持つ配列とし、errorをwarningへ弱めない。
 

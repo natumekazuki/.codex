@@ -726,6 +726,28 @@ def test_oracle_table_with_decoy():
         self.assertEqual(result["tests"][0]["source"]["symbol"], "test_cli")
         self.assertEqual(result["diagnostics"], [])
 
+    # @test-value v2
+    # kind = "contract"
+    # claim = "明示path modeはGit snapshot間の対応を推測せずtransitionsをnullとして返す"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#43" }
+    # fault = "単一snapshotの全file抽出から架空のADDEDまたはSURVIVED transitionを生成する"
+    # observable = "path mode抽出結果のtransitions field"
+    # observation_boundary = "public-boundary"
+    # scope = "test-value-output-v2"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_path_mode_marks_transitions_not_applicable(self) -> None:
+        self.write(
+            "tests/test_path_mode.py",
+            VALID_METADATA + "def test_path_mode():\n    assert True\n",
+        )
+
+        result, exit_status = self.extract("tests/test_path_mode.py")
+
+        self.assertEqual(exit_status, 0)
+        self.assertIsNone(result["transitions"])
+        self.assertEqual(len(result["tests"]), 1)
+
     # @test-value v1
     # kind = "regression"
     # claim = "Git modeは変更testだけを選び未変更legacy testを移行対象にしない"
@@ -755,6 +777,160 @@ def test_oracle_table_with_decoy():
             ["test_changed"],
         )
         self.assertIn("observed() == 2", result["tests"][0]["source_text"])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "Git modeは追加・生存・完全削除testをtyped transitionとして返し、現snapshotのrecord集合をtestsへ一度だけ投影する"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#44" }
+    # fault = "完全削除testを空selectionとして失うか、transitionのafterとtestsが異なるrecord集合になる"
+    # observable = "Git抽出結果のtransitions、tests、削除前record"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_preserves_added_survived_and_deleted_transitions(self) -> None:
+        survived_source = (
+            VALID_METADATA
+            + "def test_survived():\n"
+            + "    assert observed() == 1\n"
+        )
+        deleted_source = (
+            VALID_METADATA
+            + "def test_deleted():\n"
+            + "    assert retained_obligation()\n"
+        )
+        survived = self.write("tests/test_survived.py", survived_source)
+        deleted = self.write("tests/test_deleted.py", deleted_source)
+        base = self.initialize_git()
+        survived.write_text(
+            survived_source.replace("observed() == 1", "observed() == 2"),
+            encoding="utf-8",
+        )
+        deleted.unlink()
+        self.write(
+            "tests/test_added.py",
+            VALID_METADATA + "def test_added():\n    assert new_obligation()\n",
+        )
+
+        result, exit_status, stderr = self.extract_git(base)
+
+        self.assertEqual(exit_status, 0, stderr)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [transition["kind"] for transition in result["transitions"]],
+            ["ADDED", "DELETED", "SURVIVED"],
+        )
+        current_records = [
+            transition["after"]
+            for transition in result["transitions"]
+            if transition["after"] is not None
+        ]
+        self.assertEqual(current_records, result["tests"])
+        deleted_transition = result["transitions"][1]
+        self.assertIsNone(deleted_transition["after"])
+        self.assertEqual(
+            deleted_transition["before"]["source"]["path"],
+            "tests/test_deleted.py",
+        )
+        self.assertIn(
+            "retained_obligation()",
+            deleted_transition["before"]["source_text"],
+        )
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "add/deleteとして分かれたfile pair間では同じtest symbolでも別recordとして保持する"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#44" }
+    # fault = "削除recordと追加recordをsymbol名だけでSURVIVEDへ誤対応して元の削除義務を消す"
+    # observable = "同名recordに対するDELETEDとADDEDの独立transition"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_does_not_match_symbol_across_add_delete_pairs(self) -> None:
+        deleted_source = (
+            VALID_METADATA
+            + "def test_same_symbol():\n"
+            + "".join(f"    assert old_observation_{index}()\n" for index in range(20))
+        )
+        added_metadata = '''# @test-value v2
+# kind = "security"
+# claim = "新しい境界では権限外の入力を拒否する"
+# oracle = { type = "contract", ref = "AUTH-NEW-009" }
+# fault = "権限外の入力を処理して外部状態を変更する"
+# observable = "拒否responseと外部状態の件数"
+# observation_boundary = "public-boundary"
+# scope = "replacement-boundary"
+# lifecycle = "permanent"
+# @end-test-value
+'''
+        added_source = (
+            added_metadata
+            + "def test_same_symbol():\n"
+            + "".join(f"    assert new_boundary_{index}()\n" for index in range(20))
+        )
+        deleted = self.write("tests/test_deleted_pair.py", deleted_source)
+        base = self.initialize_git()
+        deleted.unlink()
+        self.write("tests/test_added_pair.py", added_source)
+
+        name_status = self.git("diff", "--find-renames", "--name-status", base)
+        self.assertIn("D\ttests/test_deleted_pair.py", name_status)
+        self.assertEqual(
+            self.git("ls-files", "--others", "--exclude-standard"),
+            "tests/test_added_pair.py",
+        )
+
+        result, exit_status, stderr = self.extract_git(base)
+
+        self.assertEqual(exit_status, 0, stderr)
+        self.assertEqual(
+            [transition["kind"] for transition in result["transitions"]],
+            ["ADDED", "DELETED"],
+        )
+        self.assertEqual(
+            [
+                (transition["before"] or transition["after"])["source"]["symbol"]
+                for transition in result["transitions"]
+            ],
+            ["test_same_symbol", "test_same_symbol"],
+        )
+
+    # @test-value v2
+    # kind = "compatibility"
+    # claim = "完全削除されたv1 testも移行要求を保持し、v1のまま審査へ進めない"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#43" }
+    # fault = "削除されたv1 recordのTEST_VALUE_V2_REQUIREDを失い、DELETED transitionだけを成功結果として返す"
+    # observable = "Git抽出結果のDELETED.before、diagnostic、exit status"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "ephemeral"
+    # remove_when = "v1読取り対応を撤去した時"
+    # @end-test-value
+    def test_git_mode_keeps_v1_migration_error_for_deleted_test(self) -> None:
+        deleted = self.write(
+            "tests/test_deleted_v1.py",
+            V1_METADATA + "def test_deleted_v1():\n    assert legacy_observation()\n",
+        )
+        base = self.initialize_git()
+        deleted.unlink()
+
+        result, exit_status, stderr = self.extract_git(base)
+
+        self.assertEqual(exit_status, 1, stderr)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [transition["kind"] for transition in result["transitions"]],
+            ["DELETED"],
+        )
+        self.assertEqual(
+            result["transitions"][0]["before"]["metadata_format_version"],
+            1,
+        )
+        self.assertEqual(
+            [value["code"] for value in result["diagnostics"]],
+            ["TEST_VALUE_V2_REQUIRED"],
+        )
 
     # @test-value v2
     # kind = "contract"
@@ -985,11 +1161,13 @@ def test_oracle_table_with_decoy():
         self.assertIn("observed() == 2", result["tests"][0]["source_text"])
         self.assertNotIn("observed() == 3", result["tests"][0]["source_text"])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "内容を変えないrenameはtest価値の再審査対象にしない"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "pure renameを新規testと誤認して不要な審査を要求する"
+    # fault = "pure renameを新規testと誤認して不要な審査を要求する"
+    # observable = "Git抽出結果のtests、transitions、diagnostics"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1003,6 +1181,7 @@ def test_oracle_table_with_decoy():
 
         self.assertEqual(exit_status, 0, stderr)
         self.assertEqual(result["tests"], [])
+        self.assertEqual(result["transitions"], [])
         self.assertEqual(result["diagnostics"], [])
 
     # @test-value v1
@@ -1058,11 +1237,13 @@ def test_oracle_table_with_decoy():
         )
         self.assertNotIn("test_external_secret", json.dumps(result))
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
-    # claim = "部分削除はsurviving testを選びtest全体の削除は隣接testを選ばない"
-    # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "部分削除を見落とすか全削除を隣接testの変更と誤認する"
+    # claim = "部分削除はSURVIVEDとして選び、test全体の削除は隣接testへ誤対応せずDELETEDとして保持する"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#44" }
+    # fault = "部分削除を見落とすか、完全削除を隣接testへSURVIVEDとして結合して元recordを失う"
+    # observable = "Git抽出結果のtestsとSURVIVED、DELETED transition"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1140,6 +1321,16 @@ def test_oracle_table_with_decoy():
                     [item["code"] for item in result["diagnostics"]],
                     ["TEST_VALUE_MISSING"],
                 )
+                self.assertEqual(
+                    [transition["kind"] for transition in result["transitions"]],
+                    ["SURVIVED", "SURVIVED", "DELETED", "ADDED"],
+                )
+                deleted_transition = result["transitions"][2]
+                self.assertEqual(
+                    deleted_transition["before"]["source"]["symbol"],
+                    "test_removed",
+                )
+                self.assertIsNone(deleted_transition["after"])
 
     # @test-value v1
     # kind = "regression"

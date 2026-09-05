@@ -31,6 +31,7 @@ EXTRACTOR_RESULT_KEYS = {
     "coverage",
     "repository_root",
     "tests",
+    "transitions",
     "diagnostics",
     "warnings",
 }
@@ -219,10 +220,7 @@ def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(records, list):
         raise PacketError("extractor tests must be an array")
     for record in records:
-        if not isinstance(record, dict) or set(record) != EXTRACTOR_RECORD_KEYS:
-            raise PacketError("extractor test record has unexpected keys")
-        if record["metadata_format_version"] != 2:
-            raise PacketError("metadata_format_version must be 2")
+        _validate_extractor_record(record, "extractor test record")
     locators = []
     for record in records:
         source = _object(record.get("source"), "record.source")
@@ -239,7 +237,85 @@ def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
         )
     if len(locators) != len(set(locators)):
         raise PacketError("extractor result contains duplicate record locator")
+    transitions = extractor_result.get("transitions")
+    if transitions is None:
+        return records
+    if not isinstance(transitions, list):
+        raise PacketError("extractor transitions must be null or an array")
+    before_locators = []
+    after_locators = []
+    transition_values = []
+    after_records = []
+    for transition in transitions:
+        if not isinstance(transition, dict) or set(transition) != {"kind", "before", "after"}:
+            raise PacketError("extractor transition has unexpected keys")
+        kind = transition["kind"]
+        if kind not in {"ADDED", "SURVIVED", "DELETED"}:
+            raise PacketError("extractor transition kind is invalid")
+        before = transition["before"]
+        after = transition["after"]
+        if kind == "ADDED":
+            if before is not None:
+                raise PacketError("ADDED transition before must be null")
+            _validate_extractor_record(after, "ADDED transition after")
+            after_records.append(after)
+        elif kind == "SURVIVED":
+            _validate_extractor_record(before, "SURVIVED transition before")
+            _validate_extractor_record(after, "SURVIVED transition after")
+            after_records.append(after)
+        else:
+            _validate_extractor_record(before, "DELETED transition before")
+            if after is not None:
+                raise PacketError("DELETED transition after must be null")
+        if before is not None:
+            before_locators.append(_record_locator(before, "transition.before"))
+        if after is not None:
+            after_locators.append(_record_locator(after, "transition.after"))
+        transition_values.append(canonical_json(transition))
+    if len(before_locators) != len(set(before_locators)):
+        raise PacketError("extractor transitions contain duplicate before locator")
+    if len(after_locators) != len(set(after_locators)):
+        raise PacketError("extractor transitions contain duplicate after locator")
+    if len(transition_values) != len(set(transition_values)):
+        raise PacketError("extractor transitions contain a duplicate transition")
+    if after_records != records:
+        raise PacketError("transition after records do not match extractor tests")
     return records
+
+
+def _validate_extractor_record(record: Any, name: str) -> None:
+    if not isinstance(record, dict) or set(record) != EXTRACTOR_RECORD_KEYS:
+        raise PacketError(f"{name} has unexpected keys")
+    if record["metadata_format_version"] != 2:
+        raise PacketError(f"{name} metadata_format_version must be 2")
+    source = _object(record.get("source"), f"{name}.source")
+    if set(source) != SOURCE_KEYS:
+        raise PacketError(f"{name}.source has unexpected keys")
+    _string(source.get("path"), f"{name}.source.path")
+    _positive_int(source.get("declaration_start_line"), f"{name}.source.declaration_start_line")
+    _positive_int(source.get("declaration_end_line"), f"{name}.source.declaration_end_line")
+    source_text = _string(record.get("source_text"), f"{name}.source_text")
+    source_hash = _hash(record.get("source_hash"), f"{name}.source_hash")
+    if sha256_text(source_text) != source_hash:
+        raise PacketError(f"{name}.source_hash does not match source_text")
+    metadata = _object(record.get("metadata"), f"{name}.metadata")
+    metadata_errors = validate_metadata(metadata, 2)
+    if metadata_errors:
+        raise PacketError(f"{name}.metadata is invalid: " + "; ".join(metadata_errors))
+    metadata_hash = _hash(record.get("metadata_hash"), f"{name}.metadata_hash")
+    if sha256_text(canonical_json(metadata)) != metadata_hash:
+        raise PacketError(f"{name}.metadata_hash does not match canonical metadata")
+
+
+def _record_locator(record: dict[str, Any], name: str) -> tuple[str, int]:
+    source = _object(record.get("source"), f"{name}.source")
+    return (
+        _string(source.get("path"), f"{name}.source.path"),
+        _positive_int(
+            source.get("declaration_start_line"),
+            f"{name}.source.declaration_start_line",
+        ),
+    )
 
 
 def _validate_context(item: dict[str, Any]) -> dict[str, Any]:

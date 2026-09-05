@@ -53,6 +53,7 @@ def extractor_result():
                 "metadata_hash": sha256_text(canonical_json(metadata)),
             }
         ],
+        "transitions": None,
         "diagnostics": [],
         "warnings": [],
     }
@@ -98,6 +99,60 @@ def extractor_result_with_two_records():
 
 class ReviewPacketTests(unittest.TestCase):
     # @test-value v2
+    # kind = "invariant"
+    # claim = "packet builderはGit transitionのafter recordsを現在のtestsと同一順序でのみ信頼する"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # fault = "削除、重複、未解決のtransitionを現在testのmetadataとして黙って審査へ渡す"
+    # observable = "build_metadata_packetが返すPacketErrorまたはcurrent record集合"
+    # observation_boundary = "component-behavior"
+    # scope = "extractor-transition-envelope"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_metadata_packet_validates_transition_envelope_and_current_records(self):
+        extracted = extractor_result()
+        current = copy.deepcopy(extracted["tests"][0])
+        extracted["transitions"] = [
+            {"kind": "ADDED", "before": None, "after": current}
+        ]
+        self.assertEqual(len(build_metadata_packet(extracted)["records"]), 1)
+
+        extracted["transitions"] = [
+            {"kind": "ADDED", "before": None, "after": current},
+            {"kind": "DELETED", "before": copy.deepcopy(current), "after": None},
+        ]
+        self.assertEqual(len(build_metadata_packet(extracted)["records"]), 1)
+
+        deleted = copy.deepcopy(current)
+        deleted["source"]["path"] = "tests/test_packet_deleted.py"
+        deleted["source"]["declaration_start_line"] = 40
+        deleted["source"]["declaration_end_line"] = 41
+        extracted["transitions"] = [
+            {"kind": "SURVIVED", "before": current, "after": current},
+            {"kind": "DELETED", "before": deleted, "after": None},
+        ]
+        self.assertEqual(len(build_metadata_packet(extracted)["records"]), 1)
+
+        invalid_cases = []
+        mismatch = copy.deepcopy(extracted)
+        mismatch["transitions"][0]["after"]["source_text"] = "changed"
+        invalid_cases.append(mismatch)
+        duplicate = copy.deepcopy(extracted)
+        duplicate["transitions"].append(copy.deepcopy(duplicate["transitions"][0]))
+        invalid_cases.append(duplicate)
+        deleted_with_after = copy.deepcopy(extracted)
+        deleted_with_after["transitions"] = [
+            {"kind": "DELETED", "before": current, "after": current}
+        ]
+        invalid_cases.append(deleted_with_after)
+        unresolved = copy.deepcopy(extracted)
+        unresolved["transitions"] = [{"kind": "UNKNOWN", "before": None, "after": current}]
+        invalid_cases.append(unresolved)
+
+        for candidate in invalid_cases:
+            with self.assertRaises(PacketError):
+                build_metadata_packet(candidate)
+
+    # @test-value v2
     # kind = "security"
     # claim = "packet builderはv1 extractor結果を審査入力へ変換せずv2を要求する"
     # oracle = { type = "adr", ref = "ADR-0022" }
@@ -136,11 +191,13 @@ class ReviewPacketTests(unittest.TestCase):
         self.assertRegex(packet["records"][0]["record_id"], r"^sha256:[0-9a-f]{64}$")
         self.assertNotIn("tests/test_packet.py", canonical_json(packet))
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "metadata packetはv1 schema外fieldをhashが一致していてもAI審査前に拒否する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "source_textなどの未知fieldをmetadataへ埋め込みPhase 1へsource evidenceを渡す"
+    # fault = "source_textなどの未知fieldをmetadataへ埋め込みPhase 1へsource evidenceを渡す"
+    # observable = "build_metadata_packetが返すPacketError"
+    # observation_boundary = "component-behavior"
     # scope = "metadata-review-schema-boundary"
     # lifecycle = "permanent"
     # @end-test-value
@@ -153,11 +210,13 @@ class ReviewPacketTests(unittest.TestCase):
         with self.assertRaisesRegex(PacketError, "unknown fields: source_text"):
             build_metadata_packet(extracted)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "invariant"
     # claim = "alignment packetは固定したPhase 1のrecord集合と順序を変更せず全recordへsourceを対応付ける"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "Phase 1 resultのrecordを欠落、追加、並べ替えしてもPhase 2 packetを構築し別recordの審査結果を対応付ける"
+    # fault = "Phase 1 resultのrecordを欠落、追加、並べ替えしてもPhase 2 packetを構築し別recordの審査結果を対応付ける"
+    # observable = "build_alignment_packetが返すPacketError"
+    # observation_boundary = "component-behavior"
     # scope = "alignment-review-packet"
     # lifecycle = "permanent"
     # @end-test-value
@@ -181,11 +240,13 @@ class ReviewPacketTests(unittest.TestCase):
                 with self.assertRaisesRegex(PacketError, "record set or order"):
                     build_alignment_packet(extracted, result)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "Phase 1がREDESIGNのrecordもPhase 2 packetへ同じmetadata resultとsource hashを保って含める"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "REDESIGN recordをPhase 2から省略してactual boundaryと保持先候補を判定できなくする"
+    # fault = "REDESIGN recordをPhase 2から省略してactual boundaryと保持先候補を判定できなくする"
+    # observable = "alignment packetのrecord集合とfrozen metadata review"
+    # observation_boundary = "component-behavior"
     # scope = "alignment-review-packet"
     # lifecycle = "permanent"
     # @end-test-value
@@ -378,11 +439,13 @@ class ReviewPacketTests(unittest.TestCase):
             ),
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "deep packetはalignment packetへ固定されたPhase 1 result全体のhashと埋め込みreviewを元artifactへ照合する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "Phase 1のREDESIGNをVALIDへ差し替えてroutingを再生成しrequired reviewを迂回する"
+    # fault = "Phase 1のREDESIGNをVALIDへ差し替えてroutingを再生成しrequired reviewを迂回する"
+    # observable = "build_deep_packetが返すPacketError"
+    # observation_boundary = "component-behavior"
     # scope = "deep-review-phase1-result-binding"
     # lifecycle = "permanent"
     # @end-test-value

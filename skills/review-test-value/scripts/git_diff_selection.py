@@ -147,8 +147,6 @@ def changed_files(
             break
         path = tokens[i].decode("utf-8", "surrogateescape")
         i += 1
-        if code == "D":
-            continue
         files.setdefault(path, _ChangedFileBuilder(code, [], [], old_path))
     for path, item in files.items():
         paths = [item.old_path, path] if item.old_path is not None else [path]
@@ -277,27 +275,12 @@ def _hunk_intersects_old_span(hunk: DiffHunk, start: int, end: int) -> bool:
 
 
 def _base_change_projection(
-    root: Path,
-    base: str,
     item: ChangedFile,
-    profile: AdapterProfileLike,
-    extract_source_text: ExtractSourceText,
+    base_records: Sequence[dict[str, Any]],
+    base_diagnostics: Sequence[dict[str, Any]],
 ) -> tuple[tuple[int, ...], tuple[int, ...]]:
     if not item.hunks:
         return (), ()
-    base_snapshot = _base_snapshot(root, base, item)
-    if base_snapshot is None:
-        return (), ()
-    try:
-        base_raw = base_snapshot.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        return (), tuple(hunk.new_start for hunk in item.hunks)
-    base_records, base_diagnostics = extract_source_text(
-        base_raw,
-        item.old_path or item.path,
-        profile,
-        Path(item.old_path or item.path).suffix.lower(),
-    )
     source_incomplete = any(
         diagnostic["code"] == "SOURCE_SYNTAX_ERROR"
         for diagnostic in base_diagnostics
@@ -355,6 +338,159 @@ def _base_change_projection(
     return tuple(sorted(projected_starts)), tuple(sorted(fallback_anchors))
 
 
+def _record_sort_key(record: dict[str, Any]) -> tuple[str, int, str]:
+    source = record["source"]
+    return (
+        source["path"],
+        source["declaration_start_line"],
+        source["symbol"],
+    )
+
+
+def _record_span(record: dict[str, Any]) -> tuple[int, int]:
+    source = record["source"]
+    return (
+        source["metadata_start_line"] or source["declaration_start_line"],
+        source["declaration_end_line"],
+    )
+
+
+def _record_was_fully_replaced(
+    item: ChangedFile,
+    record: dict[str, Any],
+) -> bool:
+    start, end = _record_span(record)
+    return any(
+        hunk.old_count
+        and hunk.old_start <= start
+        and hunk.old_end >= end
+        for hunk in item.hunks
+    )
+
+
+def _transition_diagnostic(
+    diagnostic: DiagnosticFactory,
+    record: dict[str, Any],
+    message: str,
+) -> dict[str, Any]:
+    source = record["source"]
+    return diagnostic(
+        "RECORD_TRANSITION_UNRESOLVED",
+        source["path"],
+        source["declaration_start_line"],
+        message,
+    )
+
+
+def _build_transitions(
+    item: ChangedFile,
+    before_records: Sequence[dict[str, Any]],
+    after_records: Sequence[dict[str, Any]],
+    diagnostic: DiagnosticFactory,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    affected_before = [
+        record
+        for record in before_records
+        if any(
+            _hunk_intersects_old_span(hunk, *_record_span(record))
+            for hunk in item.hunks
+        )
+    ]
+    unmatched_after = list(after_records)
+    transitions: list[dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
+
+    for before in sorted(affected_before, key=_record_sort_key):
+        source = before["source"]
+        fully_replaced = _record_was_fully_replaced(item, before)
+        projected_start = _map_old_declaration_start_to_new(
+            source["declaration_start_line"], item.hunks
+        )
+        hash_candidates = [
+            after
+            for after in unmatched_after
+            if after["source_hash"] == before["source_hash"]
+            and after["metadata_hash"] == before["metadata_hash"]
+        ]
+        position_candidates = [
+            after
+            for after in unmatched_after
+            if not fully_replaced
+            and after["source"]["declaration_start_line"] == projected_start
+        ]
+        candidate_sets = [
+            candidates
+            for candidates in (hash_candidates, position_candidates)
+            if candidates
+        ]
+        ambiguous = any(len(candidates) != 1 for candidates in candidate_sets)
+        if len(candidate_sets) == 2 and candidate_sets[0][0] is not candidate_sets[1][0]:
+            ambiguous = True
+        if ambiguous:
+            diagnostics.append(
+                _transition_diagnostic(
+                    diagnostic,
+                    before,
+                    "record hashes and Git hunk projection do not identify one current record",
+                )
+            )
+            continue
+
+        matched = candidate_sets[0][0] if candidate_sets else None
+        if matched is None and not fully_replaced:
+            diagnostics.append(
+                _transition_diagnostic(
+                    diagnostic,
+                    before,
+                    "a partially changed base record has no reliable current record mapping",
+                )
+            )
+            continue
+        if matched is None:
+            transitions.append({"kind": "DELETED", "before": before, "after": None})
+            continue
+        unmatched_after.remove(matched)
+        transitions.append({"kind": "SURVIVED", "before": before, "after": matched})
+
+    transitions.extend(
+        {"kind": "ADDED", "before": None, "after": after}
+        for after in unmatched_after
+    )
+    transitions.sort(
+        key=lambda transition: (
+            _record_sort_key(transition["after"] or transition["before"]),
+            transition["kind"],
+        )
+    )
+    return transitions, diagnostics
+
+
+def _deleted_base_diagnostics(
+    item: ChangedFile,
+    transitions: Sequence[dict[str, Any]],
+    base_diagnostics: Sequence[dict[str, Any]],
+    project_diagnostic: DiagnosticProjector,
+) -> list[dict[str, Any]]:
+    deleted_spans = [
+        _record_span(transition["before"])
+        for transition in transitions
+        if transition["kind"] == "DELETED"
+    ]
+    if not deleted_spans and item.status != "D":
+        return []
+    return [
+        project_diagnostic(value)
+        for value in base_diagnostics
+        if item.status == "D"
+        or value["code"] == "SOURCE_SYNTAX_ERROR"
+        or any(
+            low <= value.get("_selection_end_line", value["line"])
+            and high >= value.get("_selection_start_line", value["line"])
+            for low, high in deleted_spans
+        )
+    ]
+
+
 def select_git(
     root: Path,
     base: str,
@@ -371,8 +507,49 @@ def select_git(
         if Path(item.path).suffix.lower() in profile.extensions
     ]
     tests: list[dict] = []
+    transitions: list[dict] = []
     diagnostics: list[dict] = []
     for item in files:
+        base_snapshot = _base_snapshot(root, base, item)
+        base_records: list[dict[str, Any]] = []
+        base_diagnostics: list[dict[str, Any]] = []
+        if base_snapshot is not None:
+            try:
+                base_raw = base_snapshot.decode("utf-8-sig")
+            except UnicodeDecodeError as error:
+                diagnostics.append(
+                    diagnostic(
+                        "SOURCE_DECODE_ERROR",
+                        item.old_path or item.path,
+                        0,
+                        f"base source is not valid UTF-8: {error}",
+                    )
+                )
+                continue
+            base_records, base_diagnostics = extract_source_text(
+                base_raw,
+                item.old_path or item.path,
+                profile,
+                Path(item.old_path or item.path).suffix.lower(),
+            )
+        if item.status == "D":
+            file_transitions, transition_diagnostics = _build_transitions(
+                item,
+                base_records,
+                (),
+                diagnostic,
+            )
+            transitions.extend(file_transitions)
+            diagnostics.extend(transition_diagnostics)
+            diagnostics.extend(
+                _deleted_base_diagnostics(
+                    item,
+                    file_transitions,
+                    base_diagnostics,
+                    project_diagnostic,
+                )
+            )
+            continue
         try:
             snapshot = _snapshot(root, item.path, mode, head)
         except SourceOutsideRootError:
@@ -386,7 +563,6 @@ def select_git(
             )
             continue
         if not item.whole_file and not item.hunks:
-            base_snapshot = _base_snapshot(root, base, item)
             if base_snapshot == snapshot or (
                 base_snapshot is not None
                 and _same_normalized_source(base_snapshot, snapshot)
@@ -415,13 +591,12 @@ def select_git(
             Path(item.path).suffix.lower(),
         )
         projected_starts, fallback_anchors = _base_change_projection(
-            root,
-            base,
             item,
-            profile,
-            extract_source_text,
+            base_records,
+            base_diagnostics,
         )
         selected_spans: list[tuple[int, int]] = []
+        selected_records: list[dict[str, Any]] = []
         for rec in recs:
             s = rec["source"]
             start = s["metadata_start_line"] or s["declaration_start_line"]
@@ -433,6 +608,7 @@ def select_git(
                 fallback_anchors,
             ):
                 tests.append(rec)
+                selected_records.append(rec)
                 selected_spans.append((start, end))
         for d in diags:
             if d["code"] in {"SOURCE_SYNTAX_ERROR", "SOURCE_DECODE_ERROR"} or (
@@ -446,11 +622,27 @@ def select_git(
                 or any(low <= d["line"] <= high for low, high in selected_spans)
             ):
                 diagnostics.append(project_diagnostic(d))
-    tests.sort(
-        key=lambda r: (
-            r["source"]["path"],
-            r["source"]["declaration_start_line"],
-            r["source"]["symbol"],
+        file_transitions, transition_diagnostics = _build_transitions(
+            item,
+            base_records,
+            selected_records,
+            diagnostic,
+        )
+        transitions.extend(file_transitions)
+        diagnostics.extend(transition_diagnostics)
+        diagnostics.extend(
+            _deleted_base_diagnostics(
+                item,
+                file_transitions,
+                base_diagnostics,
+                project_diagnostic,
+            )
+        )
+    tests.sort(key=_record_sort_key)
+    transitions.sort(
+        key=lambda transition: (
+            _record_sort_key(transition["after"] or transition["before"]),
+            transition["kind"],
         )
     )
     diagnostics.sort(key=lambda d: (d["path"], d["line"], d["code"]))
@@ -460,6 +652,7 @@ def select_git(
         "coverage": profile.coverage,
         "repository_root": ".",
         "tests": tests,
+        "transitions": transitions,
         "diagnostics": diagnostics,
         "warnings": [],
     }
