@@ -36,9 +36,9 @@ pwsh hooks/set-astra-routing.ps1 `
 
 ## 境界と検証
 
-`PreToolUse`は専用roleまたは明示された`gpt-6-astra`を検出し、mode、turn、共有枠、同時実行、manual grantを満たさない呼出しを拒否する。`SubagentStart`と`SubagentStop`で実行中のAstraを追跡し、`SessionStart`では既存stateを再注入する。state破損時は認識できたAstra投入だけを拒否し、Sol / Lunaの作業は止めない。
+`PreToolUse`は専用roleまたは明示された`gpt-6-astra`を検出し、mode、turn、共有枠、同時実行、manual grantを満たさない呼出しを拒否する。`SubagentStart`と`SubagentStop`で実行中のAstraを追跡し、`SessionStart`では既存stateを再注入する。state破損時は認識できたAstra投入だけを拒否し、Sol / Lunaの作業は止めない。破損状態は次のturnで自動解除しない。該当sessionでAstraが動作中でないことを確認して対象state fileを削除すると、次のuser promptで再生成される。
 
-hookは対応するlocal function toolへのguardrailであり、特殊なtool経路やhook自体の未実行まで完全に封鎖するsecurity boundaryではない。導入時は`/hooks`で内容を確認してtrustし、新規session、spawn、follow-up、compaction、resumeで実効modelと拒否結果を確認する。
+hookは対応するlocal function toolへのguardrailであり、特殊なtool経路やhook自体の未実行まで完全に封鎖するsecurity boundaryではない。導入時は`/hooks`で内容を確認してtrustし、新規session、spawn、follow-up、compaction、resumeで実効modelと拒否結果を確認する。専用role以外のlocal aliasへAstraを設定し、spawn時にmodelを省略するとhookは実効modelを判定できないため、その構成は追加しない。
 
 ```powershell
 pwsh hooks/test-astra-routing.ps1

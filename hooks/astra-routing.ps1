@@ -159,6 +159,13 @@ function Get-PolicyContext {
     param([string]$Mode, $State, [string]$SessionId, [string]$TurnId)
 
     $remaining = if ($null -ne $State -and $State -ne $false) { [int]$State.automaticRemaining } else { 0 }
+    $executionState = if ($null -ne $State -and $State -ne $false -and $null -ne $State.activeAstra) {
+        'active'
+    } elseif ($null -ne $State -and $State -ne $false -and $null -ne $State.pendingAstra) {
+        'reserved'
+    } else {
+        'idle'
+    }
     $lines = @(
         "Current Astra routing mode: $Mode.",
         '- Normal work uses the configured Sol and Luna roles. Astra is limited to astra_consultant and astra_reviewer.',
@@ -167,6 +174,7 @@ function Get-PolicyContext {
         '- One parent user turn has at most one Astra work dispatch across both roles; follow-up and retry consume it, while wait, status, result retrieval, and termination do not.',
         '- After one Astra response, continue with Sol or Luna. Extra Astra work requires explicit scope and count.'
     )
+    $lines += "Current Astra execution state: $executionState."
     if ($Mode -eq 'conditional') {
         $lines += "Automatic Astra dispatches remaining for the recorded parent turn: $remaining."
     } elseif ($Mode -eq 'manual') {
@@ -221,7 +229,7 @@ function Test-AndConsumeAllowance {
     param($State, [string]$Mode, [string]$TurnId, [string]$Role)
 
     if ([bool]$State.recoveryRequired) {
-        return 'Astra routing state requires recovery on a later clean user turn.'
+        return 'Astra routing state requires recovery after confirming that no Astra agent is active.'
     }
     if ([string]$State.currentTurnId -ne $TurnId) {
         return 'Astra dispatch denied because the current parent user turn is not recorded.'
@@ -297,8 +305,7 @@ if ($eventName -eq 'UserPromptSubmit') {
             $script:eventState = $loaded
             if ([string]$script:eventState.currentTurnId -ne $turnId) {
                 $script:eventState.currentTurnId = $turnId
-                $script:eventState.recoveryRequired = $false
-                $script:eventState.automaticRemaining = $(if ($mode -eq 'conditional') { 1 } else { 0 })
+                $script:eventState.automaticRemaining = $(if ([bool]$script:eventState.recoveryRequired) { 0 } elseif ($mode -eq 'conditional') { 1 } else { 0 })
                 $script:eventState.manualGrant = $null
             }
         }
@@ -328,6 +335,10 @@ if ($eventName -eq 'PreToolUse') {
         }
         if ($state -eq $false -or $null -eq $state) {
             $script:dispatchDecision = 'Astra dispatch denied because its per-session routing state is missing or invalid.'
+            return
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$payload.agent_id)) {
+            $script:dispatchDecision = 'Astra dispatch denied because subagents may not start or continue Astra work.'
             return
         }
         if ($astraRoles -notcontains [string]$request.role) {

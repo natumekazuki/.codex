@@ -160,6 +160,18 @@ try {
     if ([string]$prompt.hookSpecificOutput.additionalContext -notmatch 'Current Astra routing mode: conditional') {
         throw 'Conditional policy context was not injected.'
     }
+    if ([string]$prompt.hookSpecificOutput.additionalContext -notmatch 'Current Astra execution state: idle') {
+        throw 'The parent context did not expose the current Astra execution state.'
+    }
+
+    $childBlockedSession = 'session-child-blocked'
+    Invoke-Hook -Event (New-PromptEvent -SessionId $childBlockedSession -TurnId 'turn-child-blocked') | Out-Null
+    $childSpawnEvent = New-SpawnEvent -SessionId $childBlockedSession -TurnId 'turn-child-blocked' -Role 'astra_consultant'
+    $childSpawnEvent.agent_id = 'agent-standard-child'
+    $childSpawnEvent.agent_type = 'researcher'
+    $childBlocked = Invoke-Hook -Event $childSpawnEvent
+    Assert-Denied -Output $childBlocked -Pattern 'subagents may not start or continue Astra work'
+    Write-Host 'OK: child agents cannot dispatch or continue Astra work'
 
     $ordinary = Invoke-Hook -Event (New-SpawnEvent -SessionId $session -TurnId $turn1 -Role 'researcher')
     if ($null -ne $ordinary) {
@@ -357,11 +369,9 @@ try {
         throw 'Corrupt Astra state blocked a non-Astra role.'
     }
     Invoke-Hook -Event (New-PromptEvent -SessionId $corruptSession -TurnId 'turn-c') | Out-Null
-    $recovered = Invoke-Hook -Event (New-SpawnEvent -SessionId $corruptSession -TurnId 'turn-c' -Role 'astra_consultant')
-    if ($null -ne $recovered) {
-        throw 'A clean later user turn did not recover from the fail-closed state.'
-    }
-    Write-Host 'OK: corrupt state fails closed for one turn, leaves ordinary roles available, and recovers on a later turn'
+    $stillCorrupt = Invoke-Hook -Event (New-SpawnEvent -SessionId $corruptSession -TurnId 'turn-c' -Role 'astra_consultant')
+    Assert-Denied -Output $stillCorrupt -Pattern 'requires recovery'
+    Write-Host 'OK: corrupt state remains fail-closed across turns while ordinary roles stay available'
 
     $empty = Invoke-HookRaw -InputText '' -Mode 'conditional'
     $malformed = Invoke-HookRaw -InputText '{broken' -Mode 'conditional'
