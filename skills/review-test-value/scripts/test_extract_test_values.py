@@ -1659,7 +1659,7 @@ def test_oracle_table_with_decoy():
         path.write_text(
             source.replace(
                 "    def test_nested():\n        assert True\n",
-                "",
+                "    replacement = True\n",
             ),
             encoding="utf-8",
         )
@@ -1667,7 +1667,7 @@ def test_oracle_table_with_decoy():
         working = self.extract_git(base)
         self.git("add", "tests/test_unsupported_deletion.py")
         staged = self.extract_git(base, "python", "--staged")
-        self.git("commit", "--quiet", "-m", "delete unsupported test")
+        self.git("commit", "--quiet", "-m", "replace unsupported test")
         head = self.git("rev-parse", "HEAD")
         committed = self.extract_git(base, "python", "--head", head)
 

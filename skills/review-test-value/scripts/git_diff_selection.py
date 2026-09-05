@@ -270,10 +270,9 @@ def _map_old_declaration_start_to_new(
 
 def _hunk_intersects_old_span(hunk: DiffHunk, start: int, end: int) -> bool:
     if hunk.old_count == 0:
-        # An insertion immediately after a declaration still belongs to its
-        # body.  Include the exclusive end boundary, while keeping a blank
-        # line between adjacent declarations outside the preceding span.
-        return start <= hunk.old_start <= end + 1
+        # Git anchors an insertion after the preceding old line.  The
+        # declaration end therefore remains inside the changed span.
+        return start <= hunk.old_start <= end
     return start <= hunk.old_end and end >= hunk.old_start
 
 
@@ -285,7 +284,6 @@ def _base_diagnostic_was_fully_replaced(
     end = diagnostic.get("_selection_end_line", diagnostic["line"])
     return any(
         hunk.old_count
-        and hunk.new_count == 0
         and hunk.old_start <= start
         and hunk.old_end >= end
         for hunk in item.hunks
