@@ -10,9 +10,10 @@ Codex の共通規則、role 契約、再利用手順、runtime delta を異な�
 |---|---|---|
 | 共通のtask lifecycle、authority、planning、knowledge placement、delegation、validation、WithMate-managed operationのstanding authorization、Git規則 | `AGENTS.md` | taskやroleに依存しない恒久規則と適用順序 |
 | 静的な role 責務、禁止事項、出力契約、model、sandbox | `agents/*.toml` | agent type ごとの契約 |
-| 特定用途で呼び出す再利用手順とruntime-managed operationの正確な契約 | `skills/*/SKILL.md` | schema、target、idempotency、effect、retry、fallbackを含むSkill固有workflow |
+| 特定用途で呼び出す再利用手順とruntime-managed operationの正確な契約 | `skills/*/SKILL.md` | `contract-closure`のreview lifecycleとfinding closure、その他schema、target、idempotency、effect、retry、fallbackを含むSkill固有workflow |
 | WithMate MCPの端末設定、運用、障害切り分け | `docs/runbooks/withmate-*.md` | `AGENTS.md`の正本境界とstanding authorizationを具体化する手順。tool schemaはMCPの`tools/list`を参照する |
-| 現在の Spark mode、quota fallback など runtime delta | `hooks/subagent-routing.ps1` | 実行時にしか決まらない追加情報 |
+| 現在の手動 Spark mode | `hooks/subagent-routing.ps1` | 実行時に選択された優先方針。quota実測値や実効modelの証明ではない |
+| Astraの現在mode、親user turnごとの共有枠、同時実行状態、明示許可 | `hooks/astra-routing.ps1` | 専用2 roleのruntime投入制御。role責務やreview gateは所有しない |
 | 責務を分離した理由と長期的 trade-off | `docs/adr/0002-subagent-execution-and-routing-ownership.md` | 現行 role 一覧や局所手順を複製しない |
 
 ## Resolution
@@ -27,3 +28,4 @@ Codex の共通規則、role 契約、再利用手順、runtime delta を異な�
 - subagent の実行境界: `docs/architecture/subagent-workspace.md`
 - 設計情報の配置判断: `AGENTS.md`の「Sources of Truth and Knowledge Placement」
 - routing mode の操作: `hooks/subagent-routing-modes.md`
+- Astra投入modeの操作: `hooks/astra-routing-modes.md`

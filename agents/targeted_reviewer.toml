@@ -1,5 +1,5 @@
 name = "targeted_reviewer"
-description = "GPT-5.6 Sol targeted review agent for high-risk slices, assigned specialist lenses, and finding-family closure."
+description = "Targeted review agent for high-risk slices, assigned specialist lenses, and finding-family closure."
 model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"

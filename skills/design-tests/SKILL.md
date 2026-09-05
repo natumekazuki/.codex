@@ -81,3 +81,9 @@ absence自体が認可、機密性、危険操作、外部protocolなどのaccep
 - 正しい内部変更では失敗せず、対象欠陥では失敗する。
 - 既存checkとの重複または価値のないcoverage追加がない。
 - 実行済みcheck、未実行check、validation gapを区別して報告できる。
+
+## 再実行と完了証拠
+
+同じsnapshot・同じ条件で成功済みのcheckは、source、contract、依存、実行環境の変更、失敗やflaky、具体的な未確認interaction、repository必須check、固定commitに紐づく証拠、またはユーザー指定がある場合に限って再実行する。必要なcheckを実行できない場合は成功扱いにせず、未実行コマンド、影響、残るvalidation gapを記録する。
+
+完了に必要な実行済みcheck、未実行check、validation gapだけを報告する。新規・意味変更testの価値審査の適用条件と、抽出exit `0`・判定`ACCEPT`の扱いは`AGENTS.md` §4および`review-test-value`へ従う。既存testを変更せず実行するだけの作業では、このworkflowや審査を追加しない。

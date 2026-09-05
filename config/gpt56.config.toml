@@ -1,0 +1,7 @@
+# Portable profile layer for Codex 0.134.0 and later.
+# Install as $CODEX_HOME/gpt56.config.toml, then use: codex --profile gpt56
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+
+[agents]
+default_subagent_model = "gpt-5.6-sol"

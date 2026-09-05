@@ -1,4 +1,4 @@
-# Alignment Review Contract v1
+# Alignment Review Contract v2
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Phase 2は、固定済みのPhase 1結果を変更せず、metadataとtest sourc
 
 ## Input
 
-packetは`review_contract_version = "alignment-review-v1"`、固定済みPhase 1 result全体の`metadata_result_hash`、`records`を持つ。各recordは次を持つ。
+packetは`review_contract_version = "alignment-review-v2"`、固定済みPhase 1 result全体の`metadata_result_hash`、`records`を持つ。各recordは次を持つ。
 
 - Phase 1と同じ`record_id`、`metadata_format_version`、`metadata`、`metadata_hash`
 - 固定済みの`metadata_review`
@@ -21,12 +21,12 @@ alignment packet、deep packet、final aggregationは固定済みPhase 1 result 
 - actual boundaryを`consumer`、`public-boundary`、`component-behavior`、`declaration`、`implementation`から選ぶ。
 - metadataが主張する境界とactual boundaryが一致するかを判定する。
 - declarationそのものが正式なpublic artifactなら`public-boundary`として扱う。
-- metadataが本文より広い影響を主張する場合は`overclaim = true`とする。
+- `fault`と`observable`が本文で直接検出できる範囲を超えるときは`overclaim = true`とする。任意の`impact`が間接的な影響を記すことだけではoverclaimにしない。
 - test本文だけで確定できないhelper、fixture、mock、oracle、SUTを`context_requirements`へ具体的に挙げる。
 
 ## Output
 
-`verdict`は`ALIGNED`、`MISMATCH`、`RECHECK`のいずれかとする。`ALIGNED`は`overclaim = false`を必要とし、`declared_boundary`が明示されている場合は`actual_boundary`と一致させる。`ALIGNED`と`MISMATCH`はrecord内のsourceを示す`evidence`を一件以上必要とし、全verdictで`actual_observables`を一件以上返す。`RECHECK`は`context_requirements`を一件以上必要とする。Phase 1 verdictを出力し直さない。
+`verdict`は`ALIGNED`、`MISMATCH`、`RECHECK`のいずれかとする。`ALIGNED`は`overclaim = false`を必要とし、入力metadataの`observation_boundary`と`actual_boundary`を一致させる。`declared_boundary`を重複出力しない。`ALIGNED`と`MISMATCH`はrecord内のsourceを示す`evidence`を一件以上必要とし、確定した判定では`actual_observables`を一件以上返す。`RECHECK`では未確定の`actual_boundary`を`null`、直接観測も不明なら`actual_observables`を空配列にできる。`RECHECK`は`context_requirements`を一件以上必要とする。Phase 1 verdictを出力し直さない。
 
 `disposition_candidate`は`KEEP_PERMANENT`、`KEEP_TEMPORARY`、`MOVE_TO_POLICY_CHECK`、`DROP`、`null`のいずれかであり、final dispositionではない。
 

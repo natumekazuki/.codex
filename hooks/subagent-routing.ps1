@@ -95,8 +95,8 @@ function Get-SparkModeContext {
         'spark-first' {
             $lines = @(
                 'Current Spark routing mode: spark-first.',
-                '- Spark quota is healthy; prefer Spark roles for work their agents/*.toml contracts accept.',
-                '- Use standard GPT-5.6 family roles when the applicable role contract or task risk requires them.'
+                '- Prefer Spark roles for work their agents/*.toml contracts accept; this is a manually selected mode, not a quota measurement.',
+                '- Use configured standard roles when the applicable role contract or task risk requires them.'
             )
             ($lines -join "`n")
             break
@@ -104,7 +104,7 @@ function Get-SparkModeContext {
         'standard-only' {
             $lines = @(
                 'Current Spark routing mode: standard-only.',
-                '- Use standard GPT-5.6 family roles for automatic role selection.',
+                '- Use configured standard roles for automatic role selection.',
                 '- Start a Spark role only when the user explicitly requests that exact fast role.'
             )
             ($lines -join "`n")
@@ -113,7 +113,7 @@ function Get-SparkModeContext {
         default {
             $lines = @(
                 'Current Spark routing mode: balanced.',
-                '- Balance Spark and standard GPT-5.6 family roles according to quota pressure and the applicable agents/*.toml role contract.'
+                '- Balance Spark and configured standard roles according to the applicable agents/*.toml role contract.'
             )
             ($lines -join "`n")
             break
@@ -136,7 +136,7 @@ function Get-SubagentStartContext {
     $sparkRoles = @('fast_researcher', 'fast_planner', 'fast_implementer', 'fast_validator', 'fast_reviewer')
     $modeContext = Get-SparkModeContext -Mode $Mode
     if (($sparkRoles -contains $AgentType) -and $Mode -eq 'standard-only') {
-        $modeContext += "`nSpark exception condition: this fast role may run only when the user explicitly requested this exact role. If it was selected automatically, use the matching standard GPT-5.6 family role instead."
+        $modeContext += "`nSpark exception condition: this fast role may run only when the user explicitly requested this exact role. If it was selected automatically, use the matching configured standard role instead."
     }
 
     return $modeContext

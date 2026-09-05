@@ -15,8 +15,11 @@ from pathlib import Path
 from typing import Any, Sequence
 
 
-SCHEMA_VERSION = 1
-START_MARKER = "@test-value v1"
+SCHEMA_VERSION = 2
+SUPPORTED_MARKERS = {
+    "@test-value v1": 1,
+    "@test-value v2": 2,
+}
 END_MARKER = "@end-test-value"
 
 
@@ -66,9 +69,48 @@ ORACLE_TYPES = {
     "reference-model",
     "characterization",
 }
-REQUIRED_FIELDS = {"kind", "claim", "oracle", "failure_mode", "scope", "lifecycle"}
-OPTIONAL_FIELDS = {"distinction", "expires_on", "review_when"}
-ALLOWED_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS
+OBSERVATION_BOUNDARIES = {
+    "consumer",
+    "public-boundary",
+    "component-behavior",
+    "declaration",
+    "implementation",
+}
+RISK_TAGS = {
+    "security",
+    "authentication",
+    "authorization",
+    "billing",
+    "irreversible-data-loss",
+    "privacy",
+}
+V1_REQUIRED_FIELDS = {
+    "kind",
+    "claim",
+    "oracle",
+    "failure_mode",
+    "scope",
+    "lifecycle",
+}
+V1_OPTIONAL_FIELDS = {"distinction", "expires_on", "review_when"}
+V2_REQUIRED_FIELDS = {
+    "kind",
+    "claim",
+    "oracle",
+    "fault",
+    "observable",
+    "observation_boundary",
+    "scope",
+    "lifecycle",
+}
+V2_OPTIONAL_FIELDS = {
+    "distinction",
+    "impact",
+    "risk_tags",
+    "expires_on",
+    "review_when",
+    "remove_when",
+}
 
 
 @dataclass(frozen=True)
@@ -77,6 +119,7 @@ class CommentBlock:
     end_line: int | None
     indent: str
     payload: tuple[str, ...]
+    metadata_format_version: int
 
 
 @dataclass(frozen=True)
@@ -176,9 +219,20 @@ def scan_comment_blocks(
     index = 1
     while index <= len(lines):
         comment = comments.get(index)
-        if comment is None or comment[1] != START_MARKER:
+        if comment is None:
             index += 1
             continue
+        marker = comment[1]
+        metadata_format_version = SUPPORTED_MARKERS.get(marker)
+        if metadata_format_version is None:
+            if not marker.startswith("@test-value v"):
+                index += 1
+                continue
+            suffix = marker.removeprefix("@test-value v")
+            if not suffix.isdecimal():
+                index += 1
+                continue
+            metadata_format_version = int(suffix)
         indent = comment[0]
         payload: list[str] = []
         cursor = index + 1
@@ -199,6 +253,7 @@ def scan_comment_blocks(
                 end_line=end_line,
                 indent=indent,
                 payload=tuple(payload),
+                metadata_format_version=metadata_format_version,
             )
         )
         index = max(cursor, index + 1)
@@ -209,38 +264,76 @@ def nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def validate_metadata(value: Any) -> list[str]:
+def validate_metadata(value: Any, metadata_format_version: int) -> list[str]:
     errors: list[str] = []
     if not isinstance(value, dict):
         return ["metadata root must be a TOML table"]
 
+    if metadata_format_version == 1:
+        required_fields = V1_REQUIRED_FIELDS
+        optional_fields = V1_OPTIONAL_FIELDS
+    elif metadata_format_version == 2:
+        required_fields = V2_REQUIRED_FIELDS
+        optional_fields = V2_OPTIONAL_FIELDS
+    else:
+        return [f"metadata format version {metadata_format_version} is not supported"]
+
     keys = set(value)
-    missing = sorted(REQUIRED_FIELDS - keys)
-    unknown = sorted(keys - ALLOWED_FIELDS)
+    missing = sorted(required_fields - keys)
+    unknown = sorted(keys - (required_fields | optional_fields))
     if missing:
         errors.append(f"missing fields: {', '.join(missing)}")
     if unknown:
         errors.append(f"unknown fields: {', '.join(unknown)}")
 
     kind = value.get("kind")
-    if kind is not None and (not isinstance(kind, str) or kind not in KINDS):
+    if "kind" in value and (not isinstance(kind, str) or kind not in KINDS):
         errors.append("kind is not supported")
 
     lifecycle = value.get("lifecycle")
-    if lifecycle is not None and (
+    if "lifecycle" in value and (
         not isinstance(lifecycle, str) or lifecycle not in LIFECYCLES
     ):
         errors.append("lifecycle is not supported")
 
-    for field in ("claim", "failure_mode", "scope"):
+    required_strings = ["claim", "scope"]
+    if metadata_format_version == 1:
+        required_strings.append("failure_mode")
+    else:
+        required_strings.extend(("fault", "observable"))
+    for field in required_strings:
         if field in value and not nonempty_string(value[field]):
             errors.append(f"{field} must be a non-blank string")
-    for field in ("distinction", "review_when"):
+    optional_strings = ["distinction", "review_when"]
+    if metadata_format_version == 2:
+        optional_strings.extend(("impact", "remove_when"))
+    for field in optional_strings:
         if field in value and not nonempty_string(value[field]):
             errors.append(f"{field} must be a non-blank string")
 
+    if metadata_format_version == 2:
+        observation_boundary = value.get("observation_boundary")
+        if "observation_boundary" in value and (
+            not isinstance(observation_boundary, str)
+            or observation_boundary not in OBSERVATION_BOUNDARIES
+        ):
+            errors.append("observation_boundary is not supported")
+
+        risk_tags = value.get("risk_tags")
+        if "risk_tags" in value:
+            if not isinstance(risk_tags, list) or any(
+                not isinstance(item, str) for item in risk_tags
+            ):
+                errors.append("risk_tags must be an array of strings")
+            else:
+                unknown_risk_tags = sorted(set(risk_tags) - RISK_TAGS)
+                if unknown_risk_tags:
+                    errors.append(
+                        f"risk_tags contains unknown values: {', '.join(unknown_risk_tags)}"
+                    )
+
     oracle = value.get("oracle")
-    if oracle is not None:
+    if "oracle" in value:
         if not isinstance(oracle, dict):
             errors.append("oracle must be an inline table")
         else:
@@ -255,13 +348,22 @@ def validate_metadata(value: Any) -> list[str]:
 
     expires_on = value.get("expires_on")
     review_when = value.get("review_when")
+    remove_when = value.get("remove_when")
     if lifecycle == "characterization":
         if expires_on is None and review_when is None:
             errors.append("characterization requires expires_on or review_when")
-    elif expires_on is not None or review_when is not None:
-        errors.append("expires_on and review_when require characterization lifecycle")
+    elif lifecycle == "ephemeral" and metadata_format_version == 2:
+        if not nonempty_string(remove_when):
+            errors.append("ephemeral requires remove_when")
+    elif expires_on is not None or review_when is not None or remove_when is not None:
+        if metadata_format_version == 2 and lifecycle == "permanent":
+            errors.append(
+                "permanent forbids expires_on, review_when, and remove_when"
+            )
+        else:
+            errors.append("expires_on and review_when require characterization lifecycle")
 
-    if expires_on is not None:
+    if "expires_on" in value:
         if not isinstance(expires_on, str):
             errors.append("expires_on must be a YYYY-MM-DD string")
         else:
@@ -294,6 +396,12 @@ def has_inline_oracle_source(payload: Sequence[str], oracle: Any) -> bool:
 
 
 def parse_metadata(block: CommentBlock) -> tuple[dict[str, Any] | None, str | None, str | None]:
+    if block.metadata_format_version not in {1, 2}:
+        return (
+            None,
+            "TEST_VALUE_VERSION_UNSUPPORTED",
+            f"metadata format version {block.metadata_format_version} is not supported",
+        )
     try:
         value = tomllib.loads("\n".join(block.payload))
     except tomllib.TOMLDecodeError as error:
@@ -306,7 +414,7 @@ def parse_metadata(block: CommentBlock) -> tuple[dict[str, Any] | None, str | No
             "TEST_VALUE_SCHEMA_ERROR",
             "oracle must use inline table syntax",
         )
-    errors = validate_metadata(value)
+    errors = validate_metadata(value, block.metadata_format_version)
     if errors:
         return None, "TEST_VALUE_SCHEMA_ERROR", "; ".join(errors)
     return value, None, None
@@ -595,6 +703,7 @@ def bind_analysis(
 
         metadata: dict[str, Any] | None = None
         metadata_hash: str | None = None
+        metadata_format_version: int | None = None
         metadata_start: int | None = None
         metadata_end: int | None = None
         if len(chain) > 1:
@@ -613,6 +722,7 @@ def bind_analysis(
             consumed.add(block)
             metadata_start = block.start_line
             metadata_end = block.end_line
+            metadata_format_version = block.metadata_format_version
             metadata, error_code, error_message = parse_metadata(block)
             if error_code:
                 diagnostics.append(
@@ -625,6 +735,15 @@ def bind_analysis(
                 )
             else:
                 metadata_hash = sha256_text(canonical_json(metadata))
+            if block.metadata_format_version == 1:
+                diagnostics.append(
+                    diagnostic(
+                        "TEST_VALUE_V2_REQUIRED",
+                        relative_path,
+                        block.start_line,
+                        "v1 metadata must be migrated to v2 before review",
+                    )
+                )
         else:
             diagnostics.append(
                 diagnostic(
@@ -647,6 +766,7 @@ def bind_analysis(
                     "declaration_start_line": start_line,
                     "declaration_end_line": end_line,
                 },
+                "metadata_format_version": metadata_format_version,
                 "metadata": metadata,
                 "source_text": extracted_source,
                 "source_hash": sha256_text(extracted_source),
@@ -773,7 +893,9 @@ def extract_repository(
         "coverage": profile.coverage,
         "repository_root": ".",
         "tests": records,
+        "transitions": None,
         "diagnostics": [public_diagnostic(item) for item in diagnostics],
+        "warnings": [],
     }
     return result, 1 if diagnostics else 0
 

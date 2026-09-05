@@ -67,11 +67,18 @@ Gate: ready / unresolved
 
 - exact source stateを必要とするreviewは、Git管理されたrepositoryのcommit済みsourceだけで行う。非Gitまたは未commitのsourceへsnapshot fallbackを作らない。review必須ならvalidation gap、任意ならdirect checkのみとして扱う。
 - rootまたはruntimeに、immutableな`baseCommitOid`と`reviewCommitOid`を固定させ、`reviewCommitOid`をcheckoutしたcleanなdetached worktreeを`reviewTarget`として用意させる。実装branchはreview中も進めてよい。
-- `reviewTarget`の配置と後始末は`AGENTS.md`のSessionFolder優先、gitignore済みrepository fallback、全終了経路cleanup契約へ従わせる。review用branchを作らせず、path、HEAD、cleanlinessが一致しないworktreeを`--force`で削除させない。
+- `reviewTarget`はfilesystem authority内の`<SessionFolder>/review-worktrees/<repositoryId>/<reviewCommitOid>`へ配置する。SessionFolderがない場合だけ、repository内でgitignore済みの`.agent-worktrees/reviews/<reviewCommitOid>`を使う。Codex設定directoryやOS TEMPへ代替review rootを作らない。どちらも使えなければvalidation gapとする。
+- review用branchは作らない。rootまたはruntimeが作成と後始末を所有し、全reviewerがapprove、finding、validation gap、deadline、interruptのいずれかで終了してから、正規化済みpathが選択root配下にあり、HEADが`reviewCommitOid`、tracked / untrackedともcleanであることを確認して`git worktree remove`する。不一致では`--force`を使わず残存worktreeをvalidation gapとして報告する。実装branchとreview対象commitは削除しない。
 - review task messageへ`reviewTarget`、両OID、included / excluded scope、accepted contractとInvariant、`executedOnCommitOid`付きの実行済みcheck、割り当てるlensまたはtrigger、有限のdeadlineを含める。
 - reviewerに、明示されたtargetでHEAD一致、tracked / untrackedのcleanliness、commit objectの存在、base ancestryをread-onlyで確認させる。preflightが失敗した場合はsubstantive reviewを行わずvalidation gapを返させる。
 - checkとreview結果を対象commitへ固定する。commit Aのholistic resultを修正commit Bへ付け替えない。B上のdirect checkとA..Bのfinding family / resulting deltaに限定したtargeted closureで閉じ、holistic reviewを再実行しない。
 - 別semantic ownerまたは別subsystemの後続変更を同じreview済みscopeへ混ぜず、別の論理変更へ分ける。
+
+## Findingの分類と受容
+
+- findingはaccepted contract、到達条件、consumer影響、Invariant familyの根拠から`blocking`、`risk-candidate`、`non-material`、`invalid`へ分類する。証拠不足は`investigation-pending`とし、source scopeを先に広げない。
+- `risk-candidate`は、発生可能性が低く、影響が限定され、自動検知と復旧ができ、機密性侵害または不可逆なdata lossを伴わない場合だけaccepted riskにできる。必要なfollow-upはrepositoryの既存管理表へ残す。
+- auth bypass、secretやpersonal dataの露出、現実的なinjection、不可逆なdata lossを自動でrisk acceptanceしない。
 
 ## Finding Promotionを適用する
 
@@ -85,7 +92,7 @@ review findingをseverityだけで処理せず、sourceを広げる前に次を�
 Disposition:
 
 - `investigation-pending`: 契約関係または到達性の証拠が不足している。
-- `accepted risk`: 到達可能な契約違反だが、`AGENTS.md`のrisk acceptance条件を満たす。
+- `accepted risk`: 到達可能な契約違反だが、上記のrisk acceptance条件を満たす。
 - `current-scope repair`: 同じInvariant family、supported scope、semantic ownerに属する。
 - `boundary prerequisite`: 別ownerまたは別subsystemの先行変更が必要である。
 - `hardening follow-up`: 現在のaccepted contract違反ではないが、反証可能な将来仮説と再調査条件がある。

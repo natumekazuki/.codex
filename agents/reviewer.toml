@@ -1,5 +1,5 @@
 name = "reviewer"
-description = "GPT-5.6 Sol holistic review agent for the one complete-diff review allowed by Full-review gate=run."
+description = "Holistic review agent for the one complete-diff review allowed by Full-review gate=run."
 model = "gpt-5.6-sol"
 model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"

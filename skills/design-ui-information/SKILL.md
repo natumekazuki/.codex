@@ -1,6 +1,6 @@
 ---
 name: design-ui-information
-description: UIを少ない視覚語彙と一貫した意味対応でシンプルに設計し、既存実装を盲目的に踏襲せず、cardや常設説明を必要な場合だけ使う。UIの設計・実装・レビューで、design language、token、primitive、card、panel、container、角丸surface、画面端の余白、icon-only control、常設説明、loading表示、spinner、skeleton、progress bar、視覚階層、情報密度、progressive disclosure、基本的なkeyboard・accessibility対応を判断するときに使う。
+description: UIの設計・実装・reviewで、視覚階層、情報密度、tokenとprimitive、loading表示、keyboardとaccessibilityを判断する。cardや常設説明を必要な場合だけ使い、一貫した意味対応で画面を整える。UIに関係しない実装には使わない。
 ---
 
 # Design UI Information
