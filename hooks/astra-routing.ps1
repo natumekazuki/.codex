@@ -299,7 +299,6 @@ if ($eventName -eq 'UserPromptSubmit') {
                 $script:eventState.currentTurnId = $turnId
                 $script:eventState.recoveryRequired = $false
                 $script:eventState.automaticRemaining = $(if ($mode -eq 'conditional') { 1 } else { 0 })
-                $script:eventState.pendingAstra = $null
                 $script:eventState.manualGrant = $null
             }
         }
@@ -385,6 +384,10 @@ if ($eventName -eq 'SubagentStart' -and $astraRoles -contains [string]$payload.a
             role = [string]$payload.agent_type
         }
         $unreserved = ($null -eq $pending -or [string]$pending.role -ne [string]$payload.agent_type)
+        if ($unreserved) {
+            $state.automaticRemaining = 0
+            $state.manualGrant = $null
+        }
         $state.pendingAstra = $null
         Write-State -Path $statePath -State $state
         $script:startContext = Get-PolicyContext -Mode $mode -State $state -SessionId $sessionId -TurnId $turnId

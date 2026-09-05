@@ -278,6 +278,41 @@ try {
     }
     Write-Host 'OK: concurrent reservations share one atomic allowance'
 
+    $pendingSession = 'session-pending'
+    Invoke-Hook -Event (New-PromptEvent -SessionId $pendingSession -TurnId 'turn-pending-1') | Out-Null
+    $pendingFirst = Invoke-Hook -Event (New-SpawnEvent -SessionId $pendingSession -TurnId 'turn-pending-1' -Role 'astra_consultant')
+    if ($null -ne $pendingFirst) {
+        throw 'The first pending reservation was unexpectedly denied.'
+    }
+    Invoke-Hook -Event (New-PromptEvent -SessionId $pendingSession -TurnId 'turn-pending-2') | Out-Null
+    $pendingSecond = Invoke-Hook -Event (New-SpawnEvent -SessionId $pendingSession -TurnId 'turn-pending-2' -Role 'astra_reviewer')
+    Assert-Denied -Output $pendingSecond -Pattern 'active or reserved'
+    Write-Host 'OK: a new parent turn does not erase an unresolved reservation'
+
+    $unreservedSession = 'session-unreserved'
+    $unreservedTurn = 'turn-unreserved'
+    Invoke-Hook -Event (New-PromptEvent -SessionId $unreservedSession -TurnId $unreservedTurn) | Out-Null
+    $unreservedStart = Invoke-Hook -Event @{
+        hook_event_name = 'SubagentStart'
+        session_id = $unreservedSession
+        turn_id = $unreservedTurn
+        agent_id = 'agent-unreserved'
+        agent_type = 'astra_reviewer'
+    }
+    if ([string]$unreservedStart.hookSpecificOutput.additionalContext -notmatch 'not matched to a guard reservation') {
+        throw 'An unreserved Astra start did not report its routing validation gap.'
+    }
+    Invoke-Hook -Event @{
+        hook_event_name = 'SubagentStop'
+        session_id = $unreservedSession
+        turn_id = $unreservedTurn
+        agent_id = 'agent-unreserved'
+        agent_type = 'astra_reviewer'
+    } | Out-Null
+    $afterUnreserved = Invoke-Hook -Event (New-SpawnEvent -SessionId $unreservedSession -TurnId $unreservedTurn -Role 'astra_consultant')
+    Assert-Denied -Output $afterUnreserved -Pattern 'already used'
+    Write-Host 'OK: an unreserved Astra start invalidates the remaining turn allowance'
+
     Invoke-Hook -Event (New-PromptEvent -SessionId 'session-explicit' -TurnId 'turn-1') | Out-Null
     $explicitModel = Invoke-Hook -Event (New-SpawnEvent -SessionId 'session-explicit' -TurnId 'turn-1' -Role 'researcher' -Model 'gpt-6-astra')
     Assert-Denied -Output $explicitModel -Pattern 'only astra_consultant and astra_reviewer'
