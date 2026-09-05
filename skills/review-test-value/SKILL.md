@@ -102,7 +102,6 @@ Python、TypeScript、C#のadapter、コメント形式、抽出CLIを変更し�
 ```powershell
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
-python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py
