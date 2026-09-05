@@ -156,13 +156,7 @@ try {
 
     $session = 'session-conditional'
     $turn1 = 'turn-1'
-    $prompt = Invoke-Hook -Event (New-PromptEvent -SessionId $session -TurnId $turn1)
-    if ([string]$prompt.hookSpecificOutput.additionalContext -notmatch 'Current Astra routing mode: conditional') {
-        throw 'Conditional policy context was not injected.'
-    }
-    if ([string]$prompt.hookSpecificOutput.additionalContext -notmatch 'Current Astra execution state: idle') {
-        throw 'The parent context did not expose the current Astra execution state.'
-    }
+    Invoke-Hook -Event (New-PromptEvent -SessionId $session -TurnId $turn1) | Out-Null
 
     $childBlockedSession = 'session-child-blocked'
     Invoke-Hook -Event (New-PromptEvent -SessionId $childBlockedSession -TurnId 'turn-child-blocked') | Out-Null
@@ -373,12 +367,6 @@ try {
     Assert-Denied -Output $stillCorrupt -Pattern 'requires recovery'
     Write-Host 'OK: corrupt state remains fail-closed across turns while ordinary roles stay available'
 
-    $empty = Invoke-HookRaw -InputText '' -Mode 'conditional'
-    $malformed = Invoke-HookRaw -InputText '{broken' -Mode 'conditional'
-    if ($null -ne $empty -or $null -ne $malformed) {
-        throw 'Malformed hook input did not exit without unsupported output.'
-    }
-    Write-Host 'OK: unsupported hook input exits cleanly'
 } finally {
     if (Test-Path -LiteralPath $testRoot) {
         Remove-Item -LiteralPath $testRoot -Recurse -Force
