@@ -18,7 +18,7 @@ Astraをroot profileと通常のdesigner / reviewerへ広く適用する案は�
 - `astra_consultant`は具体的な調査後も残る重要な設計判断または矛盾、`astra_reviewer`は既に必要と判定されたreview内の難しい反例だけを扱う。既存のdesigner、reviewer、targeted_reviewerのreview kindとcommit-bound契約は維持する。
 - runtime modeを`conditional`、`manual`、`off`に分け、既定は`manual`とする。自動投入は親user turnにつき2 role合計1回、同一root sessionで同時1件までとする。spawn、follow-up、retryは枠を消費し、wait、status、結果取得、terminationは消費しない。
 - `hooks/astra-routing.ps1`がmode、turn、予約、実行中agent、manual grantをGit管理外のstateで所有する。`PreToolUse`で投入前に予約し、`SubagentStart` / `SubagentStop`で実行状態を更新し、`UserPromptSubmit` / `SessionStart`で短い条件を再注入する。
-- state破損時は認識できたAstra自動投入を継続して拒否し、Sol / Lunaは止めない。Astraが動作中でないことを確認して対象stateを削除した後に再生成する。hook未実行、特殊tool経路、専用role以外のaliasでmodel指定が省略された呼出しまで完全に封鎖したとは扱わず、実runtimeの確認を導入条件に残す。
+- state破損時はAstra自動投入と、対象modelを判定できない既存agentへのfollow-upを継続して拒否する。新しいSol / Luna作業は止めない。Astraが動作中でないことを確認して対象stateを削除した後に再生成する。hook未実行、特殊tool経路、専用role以外のaliasでmodel指定が省略された呼出しまで完全に封鎖したとは扱わず、実runtimeの確認を導入条件に残す。
 
 ## Consequences
 

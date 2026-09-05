@@ -152,6 +152,40 @@ try {
             throw "hooks.json does not register astra-routing.ps1 for $eventName."
         }
     }
+
+    $candidateHome = Join-Path $testRoot 'candidate-home'
+    $profileHome = Join-Path $testRoot 'profile-home'
+    New-Item -ItemType Directory -Path (Join-Path $candidateHome 'hooks') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $profileHome '.codex/hooks') -Force | Out-Null
+    $hookScripts = @('subagent-routing.ps1', 'implementation-restraint.ps1', 'astra-routing.ps1')
+    foreach ($scriptName in $hookScripts) {
+        Set-Content -LiteralPath (Join-Path $candidateHome "hooks/$scriptName") -Value "Write-Output 'candidate-$scriptName'" -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $profileHome ".codex/hooks/$scriptName") -Value "Write-Output 'profile-$scriptName'" -Encoding UTF8
+    }
+    $previousCodexHome = $env:CODEX_HOME
+    $previousUserProfile = $env:USERPROFILE
+    try {
+        $env:CODEX_HOME = $candidateHome
+        $env:USERPROFILE = $profileHome
+        foreach ($eventProperty in $hooksConfig.hooks.PSObject.Properties) {
+            foreach ($group in @($eventProperty.Value)) {
+                foreach ($hook in @($group.hooks)) {
+                    $hookCommand = [string]$hook.commandWindows
+                    $scriptName = @($hookScripts | Where-Object { $hookCommand -match [regex]::Escape($_) })[0]
+                    if ([string]::IsNullOrWhiteSpace($scriptName)) {
+                        throw "hooks.json contains an unknown hook command: $hookCommand"
+                    }
+                    $resolvedOutput = (& $env:ComSpec /d /s /c $hookCommand | Out-String).Trim()
+                    if ($resolvedOutput -ne "candidate-$scriptName") {
+                        throw "hooks.json did not execute $scriptName from CODEX_HOME: $resolvedOutput"
+                    }
+                }
+            }
+        }
+    } finally {
+        $env:CODEX_HOME = $previousCodexHome
+        $env:USERPROFILE = $previousUserProfile
+    }
     Write-Host 'OK: Sol defaults, dedicated Astra roles, profile inheritance, and hook registration'
 
     $session = 'session-conditional'
@@ -351,11 +385,38 @@ try {
 
     $corruptSession = 'session-corrupt'
     Invoke-Hook -Event (New-PromptEvent -SessionId $corruptSession -TurnId 'turn-a') | Out-Null
+    $corruptSpawn = Invoke-Hook -Event (New-SpawnEvent -SessionId $corruptSession -TurnId 'turn-a' -Role 'astra_consultant')
+    if ($null -ne $corruptSpawn) {
+        throw 'The Astra agent used by the corruption scenario was unexpectedly denied.'
+    }
+    Invoke-Hook -Event @{
+        hook_event_name = 'SubagentStart'
+        session_id = $corruptSession
+        turn_id = 'turn-a'
+        agent_id = 'agent-corrupt-astra'
+        agent_type = 'astra_consultant'
+    } | Out-Null
+    Invoke-Hook -Event @{
+        hook_event_name = 'SubagentStop'
+        session_id = $corruptSession
+        turn_id = 'turn-a'
+        agent_id = 'agent-corrupt-astra'
+        agent_type = 'astra_consultant'
+    } | Out-Null
     $stateFile = Get-ChildItem -LiteralPath $stateDirectory -Filter '*.json' | Where-Object {
         try { (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).sessionId -eq $corruptSession } catch { $false }
     } | Select-Object -First 1
     Set-Content -LiteralPath $stateFile.FullName -Value '{broken' -Encoding UTF8
     Invoke-Hook -Event (New-PromptEvent -SessionId $corruptSession -TurnId 'turn-b') | Out-Null
+    $corruptFollowup = Invoke-Hook -Event @{
+        hook_event_name = 'PreToolUse'
+        session_id = $corruptSession
+        turn_id = 'turn-b'
+        tool_name = 'followup_task'
+        tool_use_id = 'tool-corrupt-followup'
+        tool_input = @{ target = 'agent-corrupt-astra'; message = 'Continue.' }
+    }
+    Assert-Denied -Output $corruptFollowup -Pattern 'target model cannot be verified'
     $corruptDenied = Invoke-Hook -Event (New-SpawnEvent -SessionId $corruptSession -TurnId 'turn-b' -Role 'astra_consultant')
     Assert-Denied -Output $corruptDenied -Pattern 'requires recovery'
     $ordinaryAfterCorruption = Invoke-Hook -Event (New-SpawnEvent -SessionId $corruptSession -TurnId 'turn-b' -Role 'validator')
@@ -365,7 +426,7 @@ try {
     Invoke-Hook -Event (New-PromptEvent -SessionId $corruptSession -TurnId 'turn-c') | Out-Null
     $stillCorrupt = Invoke-Hook -Event (New-SpawnEvent -SessionId $corruptSession -TurnId 'turn-c' -Role 'astra_consultant')
     Assert-Denied -Output $stillCorrupt -Pattern 'requires recovery'
-    Write-Host 'OK: corrupt state remains fail-closed across turns while ordinary roles stay available'
+    Write-Host 'OK: corrupt state blocks unverifiable follow-up and Astra spawn across turns while ordinary roles stay available'
 
 } finally {
     if (Test-Path -LiteralPath $testRoot) {

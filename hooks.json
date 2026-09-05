@@ -5,22 +5,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/subagent-routing.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/subagent-routing.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/subagent-routing.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/subagent-routing.ps1')\"",
             "timeout": 10,
             "statusMessage": "Applying subagent routing mode"
           },
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/implementation-restraint.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/implementation-restraint.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/implementation-restraint.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Applying implementation restraint"
           },
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/astra-routing.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/astra-routing.ps1')\"",
             "timeout": 10,
             "statusMessage": "Applying Astra routing limits"
           }
@@ -33,15 +33,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/subagent-routing.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/subagent-routing.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/subagent-routing.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/subagent-routing.ps1')\"",
             "timeout": 10,
             "statusMessage": "Applying subagent routing mode"
           },
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/implementation-restraint.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/implementation-restraint.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/implementation-restraint.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Applying implementation restraint"
           }
@@ -52,15 +52,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/astra-routing.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/astra-routing.ps1')\"",
             "timeout": 10,
             "statusMessage": "Recording Astra subagent start"
           },
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/implementation-restraint.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/implementation-restraint.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/implementation-restraint.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Applying implementation restraint"
           }
@@ -73,8 +73,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/implementation-restraint.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/implementation-restraint.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/implementation-restraint.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Restoring implementation restraint"
           }
@@ -85,8 +85,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/astra-routing.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/astra-routing.ps1')\"",
             "timeout": 10,
             "statusMessage": "Restoring Astra routing limits"
           }
@@ -99,8 +99,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/astra-routing.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/astra-routing.ps1')\"",
             "timeout": 10,
             "statusMessage": "Recording Astra subagent stop"
           }
@@ -113,8 +113,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/astra-routing.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/astra-routing.ps1')\"",
             "timeout": 10,
             "statusMessage": "Checking Astra routing limits"
           }

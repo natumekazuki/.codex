@@ -275,6 +275,10 @@ $mode = Get-RoutingMode
 
 if ([string]::IsNullOrWhiteSpace($sessionId)) {
     if ($eventName -eq 'PreToolUse') {
+        if ([string]$payload.tool_name -eq 'followup_task') {
+            New-DenyOutput -Reason 'Agent follow-up denied because its target model cannot be verified without the root session identity.'
+            exit 0
+        }
         $request = Get-AstraRequest -ToolName ([string]$payload.tool_name) -ToolInput $payload.tool_input -State $null
         if ($null -ne $request) {
             New-DenyOutput -Reason 'Astra dispatch denied because the root session identity is missing.'
@@ -329,6 +333,10 @@ if ($eventName -eq 'PreToolUse') {
     $script:dispatchDecision = $null
     Invoke-WithStateLock -StatePath $statePath -Action {
         $state = Read-State -Path $statePath -SessionId $sessionId
+        if ($toolName -eq 'followup_task' -and ($state -eq $false -or $null -eq $state -or [bool]$state.recoveryRequired)) {
+            $script:dispatchDecision = 'Agent follow-up denied because its target model cannot be verified while Astra routing state is missing, invalid, or requires recovery.'
+            return
+        }
         $request = Get-AstraRequest -ToolName $toolName -ToolInput $payload.tool_input -State $state
         if ($null -eq $request) {
             return

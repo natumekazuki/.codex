@@ -47,8 +47,8 @@
 - Git 管理する正本は `AGENTS.md`、`README.md`、`agents/`、`docs/adr/`、`docs/architecture/`、`docs/runbooks/`、`hooks/`、`hooks.json`、runtime-managedな`skills/withmate-glossary/`を除く`skills/`、`templates/`、`config.example.toml`、`config/agents.example.toml` とする
 - `config.toml` は端末固有の local file として Git 管理しない。`projects.*`、`hooks.state`、runtime/plugin の `source`、MCP server の `command` / `env`、通知コマンド、Chrome native host 設定は端末ごとに生成または調整する
 - 新しい端末ではこの repo を `$HOME/.codex` に配置し、既存の `config.toml` に `config.example.toml` と `config/agents.example.toml` の必要 section だけを移す
-- hook は `hooks.json` から `$HOME/.codex/hooks/implementation-restraint.ps1`、`$HOME/.codex/hooks/subagent-routing.ps1`、`$HOME/.codex/hooks/astra-routing.ps1` を呼び出す。Windows では `commandWindows` が `%USERPROFILE%\.codex` を使う
-- `CODEX_HOME`を別directoryへ変える端末では、上記hook commandの既定pathもその配置へ調整してからtrustと到達を確認する。profileだけを配置してhookの参照先も移動したとは扱わない
+- hookは`hooks.json`から有効な`CODEX_HOME`配下の`hooks/implementation-restraint.ps1`、`hooks/subagent-routing.ps1`、`hooks/astra-routing.ps1`を呼び出す。`CODEX_HOME`が未指定の場合は`$HOME/.codex`、Windowsでは`%USERPROFILE%\.codex`を使う
+- 候補版を別の`CODEX_HOME`で起動する場合も、hook scriptとGit管理外のrouting stateは同じ配置へ解決される。導入時は`/hooks`でtrustと到達を確認する
 - Spark routing の現在 mode は `hooks/subagent-routing.local.json` に保存される。このファイルは端末ごとの一時状態なので Git 管理しない
 - WithMateを使う端末では、起動後に`withmate-memory` commandと`skills/withmate-glossary/`が配置され、Glossary Skillのmanaged markerにある`bundleVersion`とSkill一覧への認識を確認する
 - Character context MCPを使う端末では、`config.example.toml`の`withmate-character-context`設定をlocal `config.toml`へ反映し、WithMate起動後の新しいCodex sessionで`codex mcp list`と公開toolを確認する。詳細は`docs/runbooks/withmate-character-context.md`を参照する
