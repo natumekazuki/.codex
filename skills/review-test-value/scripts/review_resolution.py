@@ -24,12 +24,20 @@ check receipts, and unresolved reason.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import errno
 import hashlib
 import json
 import os
 from pathlib import Path
 import tempfile
+import time
 from typing import Any
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from extract_test_values import validate_metadata
 from review_routing import aggregate_gate, canonical_json
@@ -46,6 +54,8 @@ RETENTION_EVIDENCE_KINDS = {
     "reference-model",
 }
 RESOLUTION_ACTIONS = {"MOVE_TO_POLICY_CHECK", "DROP"}
+LEDGER_LOCK_TIMEOUT_SECONDS = 10.0
+LEDGER_LOCK_POLL_SECONDS = 0.05
 
 
 class ResolutionStateError(ValueError):
@@ -256,16 +266,18 @@ def load_resolution_state(
 def append_resolution_attempt(
     state_dir: Path, *, expected_task_id: str, entry: dict[str, Any]
 ) -> dict[str, Any]:
-    """Append one validated attempt and atomically replace only the ledger."""
+    """Append one validated attempt while holding the ledger transaction lock."""
 
-    manifest, ledger = load_resolution_state(state_dir, expected_task_id=expected_task_id)
-    validate_resolution_entry(entry, manifest)
-    if entry["attempt_id"] in {item["attempt_id"] for item in ledger["entries"]}:
-        raise ResolutionStateError("DUPLICATE_ATTEMPT", "attempt_id is already present")
-    updated = {**ledger, "entries": [*ledger["entries"], entry]}
-    validate_ledger(updated, manifest)
-    _atomic_write_json(_state_paths(Path(state_dir))[1], updated)
-    return updated
+    state_dir = Path(state_dir)
+    with _ledger_transaction_lock(state_dir):
+        manifest, ledger = load_resolution_state(state_dir, expected_task_id=expected_task_id)
+        validate_resolution_entry(entry, manifest)
+        if entry["attempt_id"] in {item["attempt_id"] for item in ledger["entries"]}:
+            raise ResolutionStateError("DUPLICATE_ATTEMPT", "attempt_id is already present")
+        updated = {**ledger, "entries": [*ledger["entries"], entry]}
+        validate_ledger(updated, manifest)
+        _atomic_write_json(_state_paths(state_dir)[1], updated)
+        return updated
 
 
 def evaluate_obligation_gate(
@@ -756,6 +768,55 @@ def _require_matching_check(resolution: dict[str, Any]) -> None:
 
 def _state_paths(state_dir: Path) -> tuple[Path, Path]:
     return state_dir / "initial-manifest.json", state_dir / "resolution-ledger.json"
+
+
+@contextmanager
+def _ledger_transaction_lock(state_dir: Path):
+    lock_path = state_dir / ".resolution-ledger.lock"
+    try:
+        stream = lock_path.open("a+b")
+    except OSError as exc:
+        raise ResolutionStateError("LEDGER_LOCK_FAILED", "failed to open resolution ledger lock") from exc
+
+    acquired = False
+    try:
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
+        deadline = time.monotonic() + LEDGER_LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                stream.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+                break
+            except OSError as exc:
+                if exc.errno not in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+                    raise ResolutionStateError(
+                        "LEDGER_LOCK_FAILED", "failed to acquire resolution ledger lock"
+                    ) from exc
+                if time.monotonic() >= deadline:
+                    raise ResolutionStateError(
+                        "LEDGER_LOCK_TIMEOUT", "timed out waiting for resolution ledger lock"
+                    ) from exc
+                time.sleep(LEDGER_LOCK_POLL_SECONDS)
+        yield
+    finally:
+        if acquired:
+            try:
+                stream.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                # Closing the handle releases the OS lock even when explicit unlock reports an error.
+                pass
+        stream.close()
 
 
 def _atomic_write_json(path: Path, value: dict[str, Any]) -> None:

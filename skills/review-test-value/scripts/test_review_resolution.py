@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import copy
+import multiprocessing
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -26,6 +28,31 @@ from review_resolution import (  # noqa: E402
 )
 from test_review_result_schema import aggregation_input  # noqa: E402
 from validate_review_result import aggregate_results, result_hash  # noqa: E402
+
+
+def append_resolution_attempt_in_process(
+    state_dir: str,
+    entry: dict,
+    start_event,
+    result_queue,
+) -> None:
+    import review_resolution
+
+    original_write = review_resolution._atomic_write_json
+
+    def delayed_write(path: Path, value: dict) -> None:
+        time.sleep(0.5)
+        original_write(path, value)
+
+    review_resolution._atomic_write_json = delayed_write
+    start_event.wait()
+    try:
+        append_resolution_attempt(
+            Path(state_dir), expected_task_id="task-42-45", entry=entry
+        )
+        result_queue.put(("ok", entry["attempt_id"]))
+    except Exception as exc:  # pragma: no cover - returned to the parent for a useful failure
+        result_queue.put(("error", repr(exc)))
 
 
 def digest(label: str) -> str:
@@ -579,6 +606,78 @@ class ReviewResolutionTests(unittest.TestCase):
             self.assertEqual(
                 [entry["state"] for entry in ledger["entries"]],
                 ["UNRESOLVED", "RESOLVED"],
+            )
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "並行して成功したresolution attemptはappend-only ledgerへすべて一度ずつ永続化される"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#44" }
+    # fault = "lockなしのread-modify-replaceで後発writerが先行writerの成功済みattemptを消す"
+    # observable = "独立processの成功結果と再読込したledgerのattempt_id集合"
+    # observation_boundary = "component-behavior"
+    # scope = "review-resolution-concurrent-append"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_concurrent_successful_attempts_are_all_retained(self):
+        aggregate_input = review_input("DROP", metadata_verdict="REDESIGN")
+        pending = obligation(action="DROP", supported=False, aggregate_input=aggregate_input)
+        unresolved = {
+            "current_snapshot_hash": digest("concurrent-snapshot"),
+            "removal": None,
+            "target": None,
+            "drop_reason": None,
+            "checks": [],
+            "reason": "resolution evidence is still being collected",
+        }
+        entries = [
+            attempt(
+                pending,
+                state="UNRESOLVED",
+                action="DROP",
+                resolution=unresolved,
+                attempt_id=f"concurrent-attempt-{index}",
+            )
+            for index in range(2)
+        ]
+
+        with tempfile.TemporaryDirectory() as temp:
+            state_dir = Path(temp)
+            initialize_resolution_state(
+                state_dir,
+                manifest(aggregate_input=aggregate_input, obligations=[pending]),
+            )
+            context = multiprocessing.get_context("spawn")
+            start_event = context.Event()
+            result_queue = context.Queue()
+            processes = [
+                context.Process(
+                    target=append_resolution_attempt_in_process,
+                    args=(str(state_dir), entry, start_event, result_queue),
+                )
+                for entry in entries
+            ]
+            try:
+                for process in processes:
+                    process.start()
+                start_event.set()
+                results = [result_queue.get(timeout=15) for _ in processes]
+                for process in processes:
+                    process.join(timeout=15)
+                    self.assertFalse(process.is_alive(), "resolution append process did not finish")
+                    self.assertEqual(process.exitcode, 0)
+            finally:
+                for process in processes:
+                    if process.is_alive():
+                        process.terminate()
+                        process.join(timeout=5)
+                result_queue.close()
+                result_queue.join_thread()
+
+            self.assertEqual({result[0] for result in results}, {"ok"})
+            _, ledger = load_resolution_state(state_dir, expected_task_id="task-42-45")
+            self.assertEqual(
+                {item["attempt_id"] for item in ledger["entries"]},
+                {entry["attempt_id"] for entry in entries},
             )
 
 
