@@ -46,7 +46,7 @@
 
 いずれも `references/translationese.md` の該当パターンと before/after を参照する。
 
-`scripts/outline.py` が使えない環境では、見出しと各段落の先頭文を手で拾って並べる「スケルトン通読」（SKILL.md §4「構造レビュー」参照）も同様に手動で代替する。
+`scripts/outline.py` が使えない環境では、見出しと各段落の先頭文を手で拾って並べる「スケルトン通読」（[write.md](write.md) の「fullで検査する」参照）も同様に手動で代替する。
 
 ## 使い方
 
