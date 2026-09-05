@@ -4,7 +4,7 @@
 
 - 最初に要求、制約、期待結果、完了条件、authority境界を整理し、関連するsourceとexecutable contractを読んでから判断する。調査前の原因は仮説として扱う。
 - answer、explain、review、diagnose、planはread-only調査と報告まで行い、変更依頼がない限り実装しない。change、build、fixは依頼範囲のlocal変更、非破壊的な検証、task / feature branchへの通常の追加commitまで進める。
-- external write、破壊的操作、購入、default / main / protected branchへのcommit、履歴改変、push、または依頼範囲の実質的な拡張には明示確認を求める。ただし、WithMate-managedなMemoryとRepository Glossaryの操作は§6に従う。
+- external write、破壊的操作、購入、default / main / protected branchへのcommit、履歴改変、push、または依頼範囲の実質的な拡張は、操作・対象・scopeへの明示承認がない場合に確認する。現在の依頼が「このrepositoryにIssue作成まで」を含むなら、その作成は承認済みとして結果確認まで進める。「改善案を出すだけ」は作成を含まない。ただし、WithMate-managedなMemoryとRepository Glossaryの操作は§6に従う。
 - ユーザーの未コミット変更を保護し、巻き戻し、上書き、無断のstage、clean、無関係な変更の混入をしない。
 - 差分量より、根本原因、既存の責務境界、整合した最終状態を優先する。仕様、API、依存関係、不明な事実を捏造しない。
 - 暫定対応を採る場合は、理由、残るリスク、恒久対応へ進む条件を追跡可能に残す。
