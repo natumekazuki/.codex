@@ -42,6 +42,12 @@ config_file = "agents/reviewer.toml"
 [agents.targeted_reviewer]
 config_file = "agents/targeted_reviewer.toml"
 
+[agents.astra_consultant]
+config_file = "agents/astra_consultant.toml"
+
+[agents.astra_reviewer]
+config_file = "agents/astra_reviewer.toml"
+
 [agents.slice_reviewer]
 config_file = "agents/slice_reviewer.toml"
 

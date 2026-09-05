@@ -4,4 +4,4 @@ model = "gpt-6-astra"
 model_reasoning_effort = "medium"
 
 [agents]
-default_subagent_model = "gpt-6-astra"
+default_subagent_model = "gpt-5.6-sol"

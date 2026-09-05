@@ -16,6 +16,13 @@
             "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Applying implementation restraint"
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "timeout": 10,
+            "statusMessage": "Applying Astra routing limits"
           }
         ]
       }
@@ -39,6 +46,25 @@
             "statusMessage": "Applying implementation restraint"
           }
         ]
+      },
+      {
+        "matcher": "^(astra_consultant|astra_reviewer)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "timeout": 10,
+            "statusMessage": "Recording Astra subagent start"
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/implementation-restraint.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/implementation-restraint.ps1')\"",
+            "timeout": 5,
+            "statusMessage": "Applying implementation restraint"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -51,6 +77,46 @@
             "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Restoring implementation restraint"
+          }
+        ]
+      },
+      {
+        "matcher": "^(startup|resume|clear|compact)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "timeout": 10,
+            "statusMessage": "Restoring Astra routing limits"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "^(astra_consultant|astra_reviewer)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "timeout": 10,
+            "statusMessage": "Recording Astra subagent stop"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(spawn_agent|Agent|followup_task)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $HOME '.codex/hooks/astra-routing.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path $env:USERPROFILE '.codex/hooks/astra-routing.ps1')\"",
+            "timeout": 10,
+            "statusMessage": "Checking Astra routing limits"
           }
         ]
       }
