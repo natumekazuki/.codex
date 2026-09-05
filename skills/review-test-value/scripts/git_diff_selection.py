@@ -455,10 +455,11 @@ def select_git(
     )
     diagnostics.sort(key=lambda d: (d["path"], d["line"], d["code"]))
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "adapter": profile.adapter,
         "coverage": profile.coverage,
         "repository_root": ".",
         "tests": tests,
         "diagnostics": diagnostics,
+        "warnings": [],
     }

@@ -33,11 +33,13 @@ class PreflightReviewWorkerTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "preflightはstdinを閉じたversion照会だけを行い、receiptへpayload未配信とeffective値未確認を明示する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "隔離や実効設定を確認できないままworker実行済みまたはeffective modelありとして扱う"
+    # fault = "version照会だけのreceiptにpayload配信済みや実効modelを記録する"
+    # observable = "subprocess境界のargv・stdin・timeoutと返却receiptのstatus・payload・effective値"
+    # observation_boundary = "component-behavior"
     # scope = "review-worker-preflight"
     # lifecycle = "permanent"
     # @end-test-value
@@ -55,11 +57,13 @@ class PreflightReviewWorkerTests(unittest.TestCase):
         self.assertIsNone(result["model_available"])
         self.assertIn("EFFECTIVE_TOOL_SURFACE_UNVERIFIED", result["reason_codes"])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "invariant"
     # claim = "requested modelとeffortはrole正本からreceiptへ反映される"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "role正本と異なるmodelまたはeffortをreceiptへ記録してrouting設定を取り違える"
+    # fault = "roleのmodelまたはeffortを別の固定値で上書きする"
+    # observable = "返却receiptのrequested.modelとrequested.effort"
+    # observation_boundary = "component-behavior"
     # scope = "review-worker-preflight"
     # lifecycle = "permanent"
     # @end-test-value
@@ -78,11 +82,13 @@ class PreflightReviewWorkerTests(unittest.TestCase):
                 )
                 self.assertEqual(result["requested"], {"model": model, "effort": effort})
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "native executableでない入力はversion query前にBLOCKEDになる"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "非native executableをworker入口として実行し、隔離境界を証明できないまま進む"
+    # fault = "native executable以外の入力をversion照会へ渡す"
+    # observable = "RUNTIME_UNSUPPORTEDのreason codeとversion runnerへの未dispatch"
+    # observation_boundary = "component-behavior"
     # scope = "review-worker-preflight"
     # lifecycle = "permanent"
     # @end-test-value
@@ -94,11 +100,13 @@ class PreflightReviewWorkerTests(unittest.TestCase):
         self.assertIn("RUNTIME_UNSUPPORTED", result["reason_codes"])
         self.assertEqual(called, [])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "対象外roleや文字コードが壊れたroleはversion照会前に構造化した失敗として拒否される"
     # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/42" }
-    # failure_mode = "対象外roleを採用するか、decode失敗が構造化receiptを返さずpreflight consumerへ漏れる"
+    # fault = "対象外roleやUTF-8不正roleを受理するかdecode例外を外へ漏らす"
+    # observable = "BLOCKED receipt・RUNTIME_UNSUPPORTEDとversion runnerへの未dispatch"
+    # observation_boundary = "component-behavior"
     # scope = "review-worker-preflight"
     # lifecycle = "permanent"
     # @end-test-value
@@ -114,11 +122,13 @@ class PreflightReviewWorkerTests(unittest.TestCase):
                 self.assertIn("RUNTIME_UNSUPPORTED", result["reason_codes"])
                 self.assertEqual(called, [])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "invariant"
     # claim = "native version queryのtimeoutはBLOCKED receiptになり成功扱いされない"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "version query timeout後にpreflightを成功またはworker起動可能として扱う"
+    # fault = "version照会timeoutを構造化した失敗へ変換しない"
+    # observable = "返却receiptのCLI_VERSION_TIMEOUTとBLOCKED"
+    # observation_boundary = "component-behavior"
     # scope = "review-worker-preflight"
     # lifecycle = "permanent"
     # @end-test-value
@@ -131,11 +141,13 @@ class PreflightReviewWorkerTests(unittest.TestCase):
         self.assertIn("CLI_VERSION_TIMEOUT", result["reason_codes"])
         self.assertEqual(result["status"], "BLOCKED")
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "version query中にCLI snapshotが変化した場合はBLOCKEDになる"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "検証前後で異なるCLIを使ったままreceiptを有効な実行証拠として扱う"
+    # fault = "version照会前後で変更されたbinaryのhashを有効な証拠として返す"
+    # observable = "返却receiptのCLI_SNAPSHOT_CHANGEDとnullのcli.sha256"
+    # observation_boundary = "component-behavior"
     # scope = "review-worker-preflight"
     # lifecycle = "permanent"
     # @end-test-value
@@ -148,11 +160,13 @@ class PreflightReviewWorkerTests(unittest.TestCase):
         self.assertIn("CLI_SNAPSHOT_CHANGED", result["reason_codes"])
         self.assertIsNone(result["cli"]["sha256"])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "symlink executableはnative workerとして受け付けない"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "リンク経由の実体が変化しうるexecutableを実行候補として採用する"
+    # fault = "symlink executableをversion照会へdispatchする"
+    # observable = "返却receiptのRUNTIME_UNSUPPORTEDとversion runnerへの未dispatch"
+    # observation_boundary = "component-behavior"
     # scope = "review-worker-preflight"
     # lifecycle = "permanent"
     # @end-test-value

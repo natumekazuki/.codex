@@ -32,8 +32,16 @@ EXTRACTOR_RESULT_KEYS = {
     "repository_root",
     "tests",
     "diagnostics",
+    "warnings",
 }
-EXTRACTOR_RECORD_KEYS = {"source", "metadata", "source_text", "source_hash", "metadata_hash"}
+EXTRACTOR_RECORD_KEYS = {
+    "source",
+    "metadata_format_version",
+    "metadata",
+    "source_text",
+    "source_hash",
+    "metadata_hash",
+}
 def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -60,7 +68,7 @@ def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
     packet_records = []
     for record in records:
         metadata = _object(record.get("metadata"), "record.metadata")
-        metadata_errors = validate_metadata(metadata)
+        metadata_errors = validate_metadata(metadata, 2)
         if metadata_errors:
             raise PacketError("record.metadata is invalid: " + "; ".join(metadata_errors))
         metadata_hash = _hash(record.get("metadata_hash"), "record.metadata_hash")
@@ -69,14 +77,14 @@ def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
         packet_records.append(
             {
                 "record_id": record_id_for(record),
-                "metadata_format_version": 1,
+                "metadata_format_version": 2,
                 "metadata": metadata,
                 "metadata_hash": metadata_hash,
             }
         )
     _require_unique(packet_records, "record_id")
     return {
-        "review_contract_version": "metadata-review-v1",
+        "review_contract_version": "metadata-review-v2",
         "records": packet_records,
     }
 
@@ -114,7 +122,7 @@ def build_alignment_packet(
             }
         )
     packet = {
-        "review_contract_version": "alignment-review-v1",
+        "review_contract_version": "alignment-review-v2",
         "metadata_result_hash": result_hash(metadata_result),
         "records": packet_records,
     }
@@ -190,7 +198,7 @@ def build_deep_packet(
             }
         )
     packet = {
-        "review_contract_version": "deep-review-v1",
+        "review_contract_version": "deep-review-v2",
         "metadata_result_hash": alignment_packet["metadata_result_hash"],
         "records": deep_records,
     }
@@ -200,17 +208,21 @@ def build_deep_packet(
 def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
     if set(extractor_result) != EXTRACTOR_RESULT_KEYS:
         raise PacketError("extractor result has unexpected keys")
-    if extractor_result.get("schema_version") != 1:
-        raise PacketError("extractor schema_version must be 1")
+    if extractor_result.get("schema_version") != 2:
+        raise PacketError("extractor schema_version must be 2")
     diagnostics = extractor_result.get("diagnostics")
     if diagnostics != []:
         raise PacketError("extractor result must have no diagnostics")
+    if not isinstance(extractor_result.get("warnings"), list):
+        raise PacketError("extractor warnings must be an array")
     records = extractor_result.get("tests")
     if not isinstance(records, list):
         raise PacketError("extractor tests must be an array")
     for record in records:
         if not isinstance(record, dict) or set(record) != EXTRACTOR_RECORD_KEYS:
             raise PacketError("extractor test record has unexpected keys")
+        if record["metadata_format_version"] != 2:
+            raise PacketError("metadata_format_version must be 2")
     locators = []
     for record in records:
         source = _object(record.get("source"), "record.source")

@@ -24,13 +24,15 @@ def extractor_result():
         "kind": "contract",
         "claim": "packetがreview phaseの入力境界を保つ",
         "oracle": {"type": "adr", "ref": "ADR-0022"},
-        "failure_mode": "metadata phaseへsourceを混入するかalignment phaseでrecordを欠落させる",
+        "fault": "metadata phaseへsourceを混入するかalignment phaseでrecordを欠落させる",
+        "observable": "phase packetのrecord fieldと順序",
+        "observation_boundary": "component-behavior",
         "scope": "review-test-value-packet",
         "lifecycle": "permanent",
     }
     source_text = "def test_packet_boundary(self):\n    self.assertTrue(packet)\n"
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "adapter": "python-source-v1",
         "coverage": "python-source-declarations-v1",
         "repository_root": ".",
@@ -44,6 +46,7 @@ def extractor_result():
                     "declaration_start_line": 9,
                     "declaration_end_line": 10,
                 },
+                "metadata_format_version": 2,
                 "metadata": metadata,
                 "source_text": source_text,
                 "source_hash": sha256_text(source_text),
@@ -51,12 +54,13 @@ def extractor_result():
             }
         ],
         "diagnostics": [],
+        "warnings": [],
     }
 
 
 def metadata_result(packet, verdict="VALID"):
     return {
-        "review_contract_version": "metadata-review-v1",
+        "review_contract_version": "metadata-review-v2",
         "reviews": [
             {
                 "record_id": record["record_id"],
@@ -64,8 +68,12 @@ def metadata_result(packet, verdict="VALID"):
                 "verdict": verdict,
                 "evidence": [
                     {
-                        "fields": ["claim", "failure_mode", "scope"],
-                        "finding": "COHERENT_BOUNDARY",
+                        "fields": ["claim", "fault", "scope"],
+                        "finding": (
+                            "FAULT_NOT_SPECIFIC"
+                            if verdict == "REDESIGN"
+                            else "COHERENT_BOUNDARY"
+                        ),
                     }
                 ],
                 "unverified": ["ADR-0022本文"],
@@ -89,18 +97,38 @@ def extractor_result_with_two_records():
 
 
 class ReviewPacketTests(unittest.TestCase):
-    # @test-value v1
+    # @test-value v2
+    # kind = "security"
+    # claim = "packet builderはv1 extractor結果を審査入力へ変換せずv2を要求する"
+    # oracle = { type = "adr", ref = "ADR-0022" }
+    # fault = "v1 recordをmetadata-review-v2 packetへ混入して旧形式の評価を続行する"
+    # observable = "build_metadata_packetが返すPacketError"
+    # observation_boundary = "component-behavior"
+    # scope = "metadata-review-packet-version"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_metadata_packet_rejects_v1_extractor_records(self):
+        extracted = extractor_result()
+        extracted["schema_version"] = 1
+        extracted["tests"][0]["metadata_format_version"] = 1
+
+        with self.assertRaisesRegex(PacketError, "schema_version must be 2"):
+            build_metadata_packet(extracted)
+
+    # @test-value v2
     # kind = "security"
     # claim = "metadata packetはopaque record IDとmetadataだけを含みtest sourceのlocatorと本文を含まない"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "Phase 1 packetへsource path、line、symbol、source text、source hashのいずれかが混入しmetadata不足を本文から補完できる"
+    # fault = "Phase 1 packetへsource path、line、symbol、source text、source hashのいずれかが混入しmetadata不足を本文から補完できる"
+    # observable = "metadata packetのfield集合とcanonical JSON"
+    # observation_boundary = "component-behavior"
     # scope = "metadata-review-packet"
     # lifecycle = "permanent"
     # @end-test-value
     def test_metadata_packet_excludes_all_source_material(self):
         packet = build_metadata_packet(extractor_result())
 
-        self.assertEqual(packet["review_contract_version"], "metadata-review-v1")
+        self.assertEqual(packet["review_contract_version"], "metadata-review-v2")
         self.assertEqual(
             set(packet["records"][0]),
             {"record_id", "metadata_format_version", "metadata", "metadata_hash"},
@@ -172,11 +200,13 @@ class ReviewPacketTests(unittest.TestCase):
         self.assertEqual(packet["records"][0]["metadata_review"], frozen["reviews"][0])
         self.assertEqual(packet["records"][0]["source_hash"], extracted["tests"][0]["source_hash"])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "deep packetはallowlist済みalignment record、固定reviewと一致するrouting manifest、hashが一致するbounded contextだけから構築できる"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "未知fieldをSolへ転送するかrequired routingを解除するかcontext contentの改変後も以前のhashを正しい証拠としてSolへ渡す"
+    # fault = "未知fieldをSolへ転送するかrequired routingを解除するかcontext contentの改変後も以前のhashを正しい証拠としてSolへ渡す"
+    # observable = "build_deep_packetが返すPacketErrorとdeep packet input_hash"
+    # observation_boundary = "component-behavior"
     # scope = "deep-review-packet"
     # lifecycle = "permanent"
     # @end-test-value
@@ -187,16 +217,15 @@ class ReviewPacketTests(unittest.TestCase):
         alignment = build_alignment_packet(extracted, fixed_metadata_result)
         record = alignment["records"][0]
         alignment_result = {
-            "review_contract_version": "alignment-review-v1",
+            "review_contract_version": "alignment-review-v2",
             "reviews": [
                 {
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
                     "verdict": "RECHECK",
-                    "declared_boundary": None,
-                    "actual_boundary": "component-behavior",
-                    "actual_observables": ["packet record"],
+                    "actual_boundary": None,
+                    "actual_observables": [],
                     "overclaim": False,
                     "evidence": [],
                     "unverified": [],
@@ -223,7 +252,7 @@ class ReviewPacketTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v1",
+                    "contract_version": "deep-review-v2",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": "RECHECK",
@@ -270,7 +299,7 @@ class ReviewPacketTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v1",
+                    "contract_version": "deep-review-v2",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": "RECHECK",
@@ -296,7 +325,7 @@ class ReviewPacketTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v1",
+                    "contract_version": "deep-review-v2",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": "RECHECK",

@@ -23,25 +23,25 @@ def alignment_record():
         "record_id": "sha256:" + "1" * 64,
         "metadata_hash": "sha256:" + "2" * 64,
         "source_hash": "sha256:" + "3" * 64,
+        "metadata": {"observation_boundary": "component-behavior"},
     }
 
 
 def alignment_result(verdict="ALIGNED"):
     record = alignment_record()
     return {
-        "review_contract_version": "alignment-review-v1",
+        "review_contract_version": "alignment-review-v2",
         "reviews": [
             {
-                **record,
+                **{key: record[key] for key in ("record_id", "metadata_hash", "source_hash")},
                 "verdict": verdict,
-                "declared_boundary": "component-behavior",
                 "actual_boundary": "component-behavior",
                 "actual_observables": ["final record gate"],
                 "overclaim": False,
                 "evidence": ["assertionはfinal record gateを読む"],
                 "unverified": [],
                 "disposition_candidate": "KEEP_PERMANENT",
-                "context_requirements": [],
+                "context_requirements": ["helper.py"] if verdict == "RECHECK" else [],
                 "next_action": None,
             }
         ],
@@ -60,13 +60,17 @@ def aggregation_input(
     parent_risk_tags=None,
     source_path="tests/test_final_result.py",
     actual_boundary="component-behavior",
+    metadata_boundary=None,
     expires_on=None,
 ):
+    declared_boundary = metadata_boundary or actual_boundary or "component-behavior"
     metadata = {
         "kind": kind,
         "claim": "final resultは固定済みreview identityから決まる",
         "oracle": {"type": "adr", "ref": "ADR-0022"},
-        "failure_mode": "required Solを省略してPASSにする",
+        "fault": "required Solを省略してPASSにする",
+        "observable": "final resultのstatus、disposition、gate",
+        "observation_boundary": declared_boundary,
         "scope": "review-result-aggregation",
         "lifecycle": lifecycle,
     }
@@ -101,8 +105,12 @@ def aggregation_input(
         "verdict": metadata_verdict,
         "evidence": [] if metadata_verdict == "NEEDS_CONTEXT" else [
             {
-                "fields": ["claim", "failure_mode", "scope"],
-                "finding": "COHERENT_BOUNDARY",
+                "fields": ["claim", "fault", "scope"],
+                "finding": (
+                    "FAULT_NOT_SPECIFIC"
+                    if metadata_verdict == "REDESIGN"
+                    else "COHERENT_BOUNDARY"
+                ),
             }
         ],
         "unverified": ["oracle.ref"] if metadata_verdict == "NEEDS_CONTEXT" else [],
@@ -111,12 +119,12 @@ def aggregation_input(
         ),
     }
     metadata_result = {
-        "review_contract_version": "metadata-review-v1",
+        "review_contract_version": "metadata-review-v2",
         "reviews": [metadata_review],
     }
     record = {
         **identity,
-        "metadata_format_version": 1,
+        "metadata_format_version": 2,
         "metadata": metadata,
         "metadata_review": copy.deepcopy(metadata_review),
         "source": source,
@@ -129,13 +137,12 @@ def aggregation_input(
         record_id=identity["record_id"],
         metadata_hash=identity["metadata_hash"],
         source_hash=identity["source_hash"],
-        declared_boundary=actual_boundary,
         actual_boundary=actual_boundary,
     )
     routing_records = [
         {
             **identity,
-            "contract_version": "deep-review-v1",
+            "contract_version": "deep-review-v2",
             "metadata": metadata,
             "metadata_verdict": metadata_verdict,
             "alignment_verdict": alignment_verdict,
@@ -155,12 +162,23 @@ def aggregation_input(
     }
     manifest = build_routing_manifest(routing_records, workflow_context)
     alignment_packet = {
-        "review_contract_version": "alignment-review-v1",
+        "review_contract_version": "alignment-review-v2",
         "metadata_result_hash": result_hash(metadata_result),
         "records": [record],
     }
     route = manifest["records"][0]["result"]
     deep_records = []
+    context = []
+    if alignment_verdict == "RECHECK":
+        content = "helper returns the final record gate"
+        context = [
+            {
+                "kind": "helper",
+                "ref": "helper.py",
+                "content": content,
+                "content_hash": sha256_text(content),
+            }
+        ]
     if route["required"]:
         deep_records.append(
             {
@@ -169,13 +187,13 @@ def aggregation_input(
                 "routing_reasons": route["reasons"],
                 "risk_tags": route["risk_tags"],
                 "audit_selected": route["audit_selected"],
-                "context": [],
-                "included_scope": [],
+                "context": context,
+                "included_scope": [item["ref"] for item in context],
                 "excluded_scope": ["packet外のrepository source"],
             }
         )
     deep_packet_content = {
-        "review_contract_version": "deep-review-v1",
+        "review_contract_version": "deep-review-v2",
         "metadata_result_hash": alignment_packet["metadata_result_hash"],
         "records": deep_records,
     }
@@ -187,7 +205,7 @@ def aggregation_input(
     if sol_verdict is not None:
         needs_context = sol_verdict == "NEEDS_CONTEXT"
         sol_result = {
-            "review_contract_version": "deep-review-v1",
+            "review_contract_version": "deep-review-v2",
             "input_hash": deep_packet["input_hash"],
             "reviews": [
                 {
@@ -196,6 +214,20 @@ def aggregation_input(
                     "evidence": [] if needs_context else ["deep review evidence"],
                     "unverified": [],
                     "context_requirements": ["追加context"] if needs_context else [],
+                    "context_resolution": (
+                        {
+                            "actual_boundary": actual_boundary or declared_boundary,
+                            "actual_observables": ["final record gate"],
+                            "context_evidence": [
+                                {
+                                    "ref": context[0]["ref"],
+                                    "content_hash": context[0]["content_hash"],
+                                }
+                            ],
+                        }
+                        if alignment_verdict == "RECHECK" and not needs_context
+                        else None
+                    ),
                     "next_action": "追加contextを確認する" if needs_context else None,
                 }
             ],
@@ -205,7 +237,7 @@ def aggregation_input(
         "metadata_result": metadata_result,
         "deep_packet": deep_packet,
         "alignment_result": {
-            "review_contract_version": "alignment-review-v1",
+            "review_contract_version": "alignment-review-v2",
             "reviews": [alignment_review],
         },
         "workflow_routing_context": workflow_context,
@@ -222,11 +254,101 @@ def aggregation_input(
 
 
 class ReviewResultSchemaTests(unittest.TestCase):
-    # @test-value v1
+    # @test-value v2
+    # kind = "contract"
+    # claim = "Phase 1のVALIDは肯定的findingだけを持ちREDESIGNは具体的な否定的findingを持つ"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/43" }
+    # fault = "findingの意味と逆のverdictを有効なPhase 1結果として受理する"
+    # observable = "validate_phase_resultが返すResultValidationError"
+    # observation_boundary = "component-behavior"
+    # scope = "metadata-review-finding-polarity"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_metadata_verdict_matches_structured_finding_polarity(self):
+        value = aggregation_input()
+        record = value["alignment_packet"]["records"][0]
+        valid_with_defect = copy.deepcopy(value["metadata_result"])
+        valid_with_defect["reviews"][0]["evidence"] = [
+            {"fields": ["claim"], "finding": "CLAIM_NOT_FALSIFIABLE"}
+        ]
+        with self.assertRaisesRegex(ResultValidationError, "VALID.*negative"):
+            validate_phase_result("metadata", valid_with_defect, [record])
+
+        redesign_without_defect = copy.deepcopy(value["metadata_result"])
+        redesign_without_defect["reviews"][0]["verdict"] = "REDESIGN"
+        with self.assertRaisesRegex(ResultValidationError, "REDESIGN.*negative"):
+            validate_phase_result("metadata", redesign_without_defect, [record])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "Phase 2のRECHECKは必要contextを指定した場合だけ未確定boundaryと空observableを表現できる"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/43" }
+    # fault = "不足contextを示さないまま未知の観測境界をRECHECKとして受理する"
+    # observable = "validate_phase_resultの受理結果とResultValidationError"
+    # observation_boundary = "component-behavior"
+    # scope = "alignment-review-unknown-boundary"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_recheck_can_defer_unknown_observables_only_with_requested_context(self):
+        result = alignment_result("RECHECK")
+        result["reviews"][0]["actual_boundary"] = None
+        result["reviews"][0]["actual_observables"] = []
+        validate_phase_result("alignment", result, [alignment_record()])
+
+        result["reviews"][0]["context_requirements"] = []
+        with self.assertRaisesRegex(ResultValidationError, "RECHECK"):
+            validate_phase_result("alignment", result, [alignment_record()])
+
+    # @test-value v2
+    # kind = "security"
+    # claim = "Solのcontext解決は同じdeep recordのrefとcontent hashへ結合され既知のLuna境界をAPPROVEで置換しない"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/43" }
+    # fault = "別contextまたは矛盾する境界でRECHECKを解消してfinalをACCEPTにする"
+    # observable = "aggregate_resultsのfinal recordとResultValidationError"
+    # observation_boundary = "component-behavior"
+    # scope = "deep-review-context-resolution"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_deep_resolution_is_bound_to_the_same_record_context(self):
+        value = aggregation_input(
+            alignment_verdict="RECHECK",
+            sol_verdict="APPROVE",
+            actual_boundary=None,
+        )
+        result = aggregate_results(value)
+        self.assertEqual(result["records"][0]["status"], "ACCEPT")
+        self.assertEqual(result["records"][0]["disposition"], "KEEP_PERMANENT")
+
+        wrong_context = copy.deepcopy(value)
+        wrong_context["sol_result"]["reviews"][0]["context_resolution"][
+            "context_evidence"
+        ][0]["content_hash"] = "sha256:" + "9" * 64
+        with self.assertRaisesRegex(ResultValidationError, "does not match deep context"):
+            aggregate_results(wrong_context)
+
+        contradicted = aggregation_input(
+            alignment_verdict="RECHECK",
+            sol_verdict="APPROVE",
+            actual_boundary="component-behavior",
+        )
+        contradicted["sol_result"]["reviews"][0]["context_resolution"][
+            "actual_boundary"
+        ] = "consumer"
+        with self.assertRaisesRegex(ResultValidationError, "contradicts known Luna boundary"):
+            aggregate_results(contradicted)
+
+        contradicted["sol_result"]["reviews"][0]["verdict"] = "REDESIGN"
+        result = aggregate_results(contradicted)
+        self.assertEqual(result["records"][0]["status"], "REDESIGN")
+        self.assertEqual(result["records"][0]["gate"], "CHANGES_REQUIRED")
+
+    # @test-value v2
     # kind = "security"
     # claim = "metadata phase evidenceはpacket内metadata fieldと定義済みfindingだけを参照する構造を持つ"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "source本文を読んだという自由文をPhase 1のVALID根拠として受理する"
+    # fault = "source本文を読んだという自由文をPhase 1のVALID根拠として受理する"
+    # observable = "validate_phase_resultが返すResultValidationError"
+    # observation_boundary = "component-behavior"
     # scope = "metadata-review-evidence-schema"
     # lifecycle = "permanent"
     # @end-test-value
@@ -240,7 +362,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
         expected = [
             {
                 "record_id": record["record_id"],
-                "metadata_format_version": 1,
+                "metadata_format_version": 2,
                 "metadata": record["metadata"],
                 "metadata_hash": record["metadata_hash"],
             }
@@ -306,11 +428,13 @@ class ReviewResultSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(ResultValidationError, "unexpected keys"):
             aggregate_results(scalar_input)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "final aggregatorはalignment packetの埋め込みPhase 1 reviewを固定済みPhase 1 result全体へ照合する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "REDESIGNをVALIDへ変更してrouting manifestを再生成し最終gateをPASSにする"
+    # fault = "REDESIGNをVALIDへ変更してrouting manifestを再生成し最終gateをPASSにする"
+    # observable = "aggregate_resultsが返すResultValidationError"
+    # observation_boundary = "component-behavior"
     # scope = "review-final-phase1-result-binding"
     # lifecycle = "permanent"
     # @end-test-value
@@ -325,7 +449,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v1",
+                    "contract_version": "deep-review-v2",
                     "metadata": record["metadata"],
                     "metadata_verdict": "VALID",
                     "alignment_verdict": review["verdict"],
@@ -382,11 +506,13 @@ class ReviewResultSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(ResultValidationError, "input_hash"):
             aggregate_results(current)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "NEEDS_CONTEXT resultはmetadata phaseで未確認事項と次のactionを、deep phaseで必要contextを具体的に示す"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "追加sourceを特定できないNEEDS_CONTEXTを受理して同じ入力の再実行しか選べないBLOCKED状態にする"
+    # fault = "追加sourceを特定できないNEEDS_CONTEXTを受理して同じ入力の再実行しか選べないBLOCKED状態にする"
+    # observable = "metadataとdeep resultのvalidate_phase_resultエラー"
+    # observation_boundary = "component-behavior"
     # scope = "review-result-actionable-context"
     # lifecycle = "permanent"
     # @end-test-value
@@ -401,7 +527,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
             next_action=None,
         )
         deep = {
-            "review_contract_version": "deep-review-v1",
+            "review_contract_version": "deep-review-v2",
             "input_hash": "sha256:" + "4" * 64,
             "reviews": [
                 {
@@ -412,6 +538,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
                     "evidence": [],
                     "unverified": [],
                     "context_requirements": [],
+                    "context_resolution": None,
                     "next_action": "追加sourceを確認する",
                 }
             ],
@@ -450,25 +577,27 @@ class ReviewResultSchemaTests(unittest.TestCase):
                 with self.assertRaises(ResultValidationError):
                     validate_phase_result("alignment", result, [alignment_record()])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
-    # claim = "ALIGNED resultはoverclaimがfalseで、明示されたdeclared boundaryとactual boundaryが一致する"
+    # claim = "ALIGNED resultはoverclaimがfalseで、metadataのobservation boundaryとactual boundaryが一致する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "metadataより狭いsource境界またはoverclaimを報告しながらALIGNEDとして最終gateをPASSにする"
+    # fault = "metadataより狭いsource境界またはoverclaimを報告しながらALIGNEDとして最終gateをPASSにする"
+    # observable = "validate_phase_resultが返すResultValidationError"
+    # observation_boundary = "component-behavior"
     # scope = "alignment-review-semantic-tuple"
     # lifecycle = "permanent"
     # @end-test-value
     def test_alignment_result_rejects_contradictory_aligned_tuple(self):
-        mutations = (
-            {"overclaim": True},
-            {"declared_boundary": "consumer", "actual_boundary": "component-behavior"},
-        )
-        for mutation in mutations:
-            with self.subTest(mutation=mutation):
-                result = alignment_result()
-                result["reviews"][0].update(mutation)
-                with self.assertRaisesRegex(ResultValidationError, "ALIGNED"):
-                    validate_phase_result("alignment", result, [alignment_record()])
+        result = alignment_result()
+        result["reviews"][0]["overclaim"] = True
+        with self.assertRaisesRegex(ResultValidationError, "ALIGNED"):
+            validate_phase_result("alignment", result, [alignment_record()])
+
+        result = alignment_result()
+        record = alignment_record()
+        record["metadata"]["observation_boundary"] = "consumer"
+        with self.assertRaisesRegex(ResultValidationError, "ALIGNED"):
+            validate_phase_result("alignment", result, [record])
 
     # @test-value v1
     # kind = "security"
@@ -556,11 +685,13 @@ class ReviewResultSchemaTests(unittest.TestCase):
             },
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "final aggregatorはmanifestとは独立した親workflow risk contextとaudit率へrouting結果を固定し改変を拒否する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "親workflowのauthorization tagまたはaudit率をmanifest生成時だけ変えてrequired Solを迂回しPASSにする"
+    # fault = "親workflowのauthorization tagまたはaudit率をmanifest生成時だけ変えてrequired Solを迂回しPASSにする"
+    # observable = "aggregate_resultsが返すworkflow context hash不一致エラー"
+    # observation_boundary = "component-behavior"
     # scope = "review-final-parent-risk-binding"
     # lifecycle = "permanent"
     # @end-test-value
@@ -574,7 +705,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
             "record_id": record["record_id"],
             "metadata_hash": record["metadata_hash"],
             "source_hash": record["source_hash"],
-            "contract_version": "deep-review-v1",
+            "contract_version": "deep-review-v2",
             "metadata": record["metadata"],
             "metadata_verdict": record["metadata_review"]["verdict"],
             "alignment_verdict": review["verdict"],
@@ -597,7 +728,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v1",
+                    "contract_version": "deep-review-v2",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": review["verdict"],
@@ -609,11 +740,13 @@ class ReviewResultSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(ResultValidationError, "workflow context hash"):
             aggregate_results(value)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "final aggregatorは複数recordの正規alignment、routing、Sol artifactを分割せず同順で一括集約する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # failure_mode = "複数testの正規artifactを拒否してrecordごとの手作業JSON分割を必要にする"
+    # fault = "複数testの正規artifactを拒否してrecordごとの手作業JSON分割を必要にする"
+    # observable = "aggregate_resultsが返すrecord順序とaggregate gate"
+    # observation_boundary = "component-behavior"
     # scope = "review-final-record-set-aggregation"
     # lifecycle = "permanent"
     # @end-test-value
@@ -651,7 +784,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v1",
+                    "contract_version": "deep-review-v2",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": review["verdict"],

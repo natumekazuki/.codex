@@ -7,7 +7,9 @@ description: Python、TypeScript、C#の新規・変更testに隣接する`@test
 
 構造化コメントとtest sourceの対応付けをscriptへ任せ、AIは抽出済みrecordだけを審査する。欠落した値や曖昧な結合を会話内で補完しない。
 
-二段階審査のartifactはbootstrap中であり、runtime activationと新session smokeが完了するまでこのSkillの実行経路には使用しない。`test_value_luna`と`test_value_sol`を必須roleとして起動せず、以下の現行workflowを使う。
+このfeature候補のextractor/packetはv2へ更新中であり、liveへ配布してはならない。下記はliveの旧workflowの記録であり、候補v2出力を旧審査へ渡す手順ではない。候補の直接検証と有効化条件は[runbook](../../docs/runbooks/activate-test-value-review.md)に従う。
+
+二段階審査のruntime activationと新session smokeが完了するまで、この候補を標準実行経路には使用しない。`test_value_luna`と`test_value_sol`を必須roleとして起動せず、以下の現行workflowを使う。
 
 activation条件を満たした後に別途有効化する運用を妨げない。切替条件、隔離実行、aggregate gateは#42〜#45のscopeで扱い、このSkillでは変更しない。
 

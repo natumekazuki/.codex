@@ -1,4 +1,4 @@
-"""Deterministic routing, aggregation, disposition, and Bootstrap gate rules."""
+"""Deterministic routing, aggregation, disposition, and gate rules."""
 
 from __future__ import annotations
 
@@ -9,21 +9,9 @@ from pathlib import Path
 from typing import Any
 
 
-RISK_TAGS = {
-    "security",
-    "authentication",
-    "authorization",
-    "billing",
-    "irreversible-data-loss",
-    "privacy",
-}
-BOUNDARIES = {
-    "consumer",
-    "public-boundary",
-    "component-behavior",
-    "declaration",
-    "implementation",
-}
+from extract_test_values import OBSERVATION_BOUNDARIES as BOUNDARIES, RISK_TAGS
+
+
 ROUTING_MANIFEST_VERSION = "review-routing-v1"
 WORKFLOW_CONTEXT_VERSION = "review-workflow-context-v1"
 ROUTING_INPUT_KEYS = {
@@ -174,7 +162,7 @@ def validate_workflow_context(
         if entry["metadata_hash"] != record.get("metadata_hash"):
             raise RoutingError("workflow metadata_hash does not match record")
         _risk_tag_set(entry["parent_risk_tags"], "parent risk_tags")
-        deterministic_audit(entry["record_id"], "deep-review-v1", entry["audit_percent"])
+        deterministic_audit(entry["record_id"], "deep-review-v2", entry["audit_percent"])
     return entries
 
 
@@ -195,8 +183,8 @@ def build_routing_manifest(
         seen_ids.add(record_id)
         metadata_hash = _hash_string(record["metadata_hash"], "metadata_hash")
         source_hash = _hash_string(record["source_hash"], "source_hash")
-        if record["contract_version"] != "deep-review-v1":
-            raise RoutingError("contract_version must be deep-review-v1")
+        if record["contract_version"] != "deep-review-v2":
+            raise RoutingError("contract_version must be deep-review-v2")
         if not isinstance(record["metadata"], dict):
             raise RoutingError("metadata must be an object")
         result = route_record(
@@ -260,7 +248,7 @@ def validate_routing_manifest(
             raise RoutingError("routing metadata_hash does not match alignment packet")
         if entry["source_hash"] != record.get("source_hash"):
             raise RoutingError("routing source_hash does not match alignment packet")
-        if entry["contract_version"] != "deep-review-v1":
+        if entry["contract_version"] != "deep-review-v2":
             raise RoutingError("routing contract_version is invalid")
         if entry["workflow_context_hash"] != workflow_context_hash(workflow_entry):
             raise RoutingError("routing workflow context hash does not match fixed input")
@@ -325,6 +313,7 @@ def decide_disposition(
     retention_basis: str,
     expires_on: str | None = None,
     review_when: str | None = None,
+    remove_when: str | None = None,
 ) -> str | None:
     if actual_boundary is None:
         return None
@@ -336,11 +325,13 @@ def decide_disposition(
         return None
     if actual_boundary == "declaration":
         return "MOVE_TO_POLICY_CHECK"
-    if lifecycle == "ephemeral":
-        return None
-    temporary = lifecycle == "characterization" and bool(expires_on or review_when)
-    if lifecycle not in {"permanent", "characterization"}:
-        raise RoutingError("lifecycle is invalid for Bootstrap")
+    if lifecycle == "ephemeral" and not remove_when:
+        raise RoutingError("ephemeral lifecycle requires remove_when")
+    temporary = (
+        lifecycle == "characterization" and bool(expires_on or review_when)
+    ) or (lifecycle == "ephemeral" and bool(remove_when))
+    if lifecycle not in {"permanent", "characterization", "ephemeral"}:
+        raise RoutingError("lifecycle is invalid")
     if actual_boundary == "implementation":
         return "KEEP_TEMPORARY" if temporary else "DROP"
     if temporary:

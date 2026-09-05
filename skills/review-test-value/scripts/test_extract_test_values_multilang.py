@@ -18,11 +18,13 @@ SPEC.loader.exec_module(EXTRACTOR)
 
 
 METADATA_PAYLOAD = (
-    "@test-value v1",
+    "@test-value v2",
     'kind = "invariant"',
     'claim = "同じkeyによる再試行で請求件数が1件を超えない"',
     'oracle = { type = "contract", ref = "PAYMENT-004" }',
-    'failure_mode = "応答喪失後の再送で請求を二重に永続化する"',
+    'fault = "応答喪失後の再送で請求を二重に永続化する"',
+    'observable = "永続化された請求recordの件数"',
+    'observation_boundary = "component-behavior"',
     'scope = "payment-api"',
     'lifecycle = "permanent"',
     "@end-test-value",
@@ -97,11 +99,13 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         result = json.loads(completed.stdout) if completed.stdout else {}
         return result, completed.returncode, completed.stderr
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "describe配下のtest.eachをgroup付きの一宣言として抽出する"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "parameterized testを欠落または複数recordへ誤分割する"
+    # fault = "parameterized testを欠落または複数recordへ誤分割する"
+    # observable = "TypeScript抽出結果のrecord数、symbol、source text"
+    # observation_boundary = "component-behavior"
     # scope = "typescript-source-adapter"
     # lifecycle = "permanent"
     # @end-test-value
@@ -120,15 +124,193 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         result, exit_status = self.extract("tests/payment.test.ts")
 
         self.assertEqual(exit_status, 0)
+        self.assertEqual(result["schema_version"], 2)
         self.assertEqual(result["adapter"], "typescript-source-v1")
         self.assertEqual(result["coverage"], "typescript-source-declarations-v1")
         self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(result["warnings"], [])
         self.assertEqual(len(result["tests"]), 1)
         record = result["tests"][0]
+        self.assertEqual(record["metadata_format_version"], 2)
         self.assertEqual(record["source"]["symbol"], "payment > retry %s")
         self.assertTrue(record["source_text"].startswith("  test.each"))
         self.assertIn("namedHandler", record["source_text"])
         self.assertEqual(record["metadata"]["oracle"]["ref"], "PAYMENT-004")
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "Python・TypeScript・C#で未対応metadata markerを同じversion diagnosticにする"
+    # oracle = { type = "issue", ref = "#43" }
+    # fault = "adapterごとに未対応versionをMISSINGまたは有効metadataとして扱う"
+    # observable = "各言語のTEST_VALUE_VERSION_UNSUPPORTEDとmetadata format version"
+    # observation_boundary = "component-behavior"
+    # scope = "metadata-parser"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_all_adapters_reject_unsupported_metadata_marker(self) -> None:
+        def marker_block(prefix: str, indent: str = "") -> str:
+            return metadata_block(prefix, indent).replace(
+                "@test-value v2", "@test-value v3", 1
+            )
+
+        cases = (
+            (
+                "tests/test_version.py",
+                marker_block("#") + "def test_version():\n    assert True\n",
+            ),
+            (
+                "tests/version.test.ts",
+                marker_block("//") + 'test("version", () => {});\n',
+            ),
+            (
+                "tests/VersionTests.cs",
+                "public class VersionTests\n"
+                "{\n"
+                + marker_block("//", "    ")
+                + "    [Fact]\n"
+                + "    public void Version() { }\n"
+                + "}\n",
+            ),
+        )
+
+        for relative, source in cases:
+            with self.subTest(relative=relative):
+                self.write(relative, source)
+                result, exit_status = self.extract(relative)
+                self.assertEqual(exit_status, 1)
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_VALUE_VERSION_UNSUPPORTED"],
+                )
+                self.assertEqual(result["tests"][0]["metadata_format_version"], 3)
+                self.assertIsNone(result["tests"][0]["metadata"])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "Python・TypeScript・C#がv2の全lifecycleを同じ条件で受理する"
+    # oracle = { type = "issue", ref = "#43" }
+    # fault = "native adapterだけcharacterizationまたはephemeralの終了条件を失う"
+    # observable = "各言語の抽出metadataにあるlifecycleと終了条件"
+    # observation_boundary = "component-behavior"
+    # scope = "metadata-parser"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_all_adapters_accept_every_v2_lifecycle(self) -> None:
+        def lifecycle_block(prefix: str, indent: str, lifecycle: str) -> str:
+            block = metadata_block(prefix, indent)
+            current = f'{indent}{prefix} lifecycle = "permanent"\n'
+            if lifecycle == "characterization":
+                replacement = (
+                    f'{indent}{prefix} lifecycle = "characterization"\n'
+                    f'{indent}{prefix} review_when = "外部契約が変わったとき"\n'
+                )
+            elif lifecycle == "ephemeral":
+                replacement = (
+                    f'{indent}{prefix} lifecycle = "ephemeral"\n'
+                    f'{indent}{prefix} remove_when = "回帰checkへ置換したとき"\n'
+                )
+            else:
+                replacement = current
+            return block.replace(current, replacement)
+
+        python_source = ""
+        typescript_source = ""
+        csharp_source = "public class LifecycleTests\n{\n"
+        for lifecycle in ("permanent", "characterization", "ephemeral"):
+            python_source += (
+                lifecycle_block("#", "", lifecycle)
+                + f"def test_{lifecycle}():\n    assert True\n"
+            )
+            typescript_source += (
+                lifecycle_block("//", "", lifecycle)
+                + f'test("{lifecycle}", () => {{}});\n'
+            )
+            csharp_source += (
+                lifecycle_block("//", "    ", lifecycle)
+                + "    [Fact]\n"
+                + f"    public void {lifecycle.title()}() {{ }}\n"
+            )
+        csharp_source += "}\n"
+        cases = (
+            ("tests/test_lifecycles.py", python_source),
+            ("tests/lifecycles.test.ts", typescript_source),
+            ("tests/LifecycleTests.cs", csharp_source),
+        )
+
+        for relative, source in cases:
+            with self.subTest(relative=relative):
+                self.write(relative, source)
+                result, exit_status = self.extract(relative)
+                self.assertEqual(exit_status, 0)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [record["metadata"]["lifecycle"] for record in result["tests"]],
+                    ["permanent", "characterization", "ephemeral"],
+                )
+                self.assertEqual(
+                    result["tests"][1]["metadata"]["review_when"],
+                    "外部契約が変わったとき",
+                )
+                self.assertEqual(
+                    result["tests"][2]["metadata"]["remove_when"],
+                    "回帰checkへ置換したとき",
+                )
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "Python・TypeScript・C#がv2の未知field・未知enum・不正型を同じschema errorにする"
+    # oracle = { type = "issue", ref = "#43" }
+    # fault = "native adapter経路だけ不正metadataを審査可能なrecordとして投影する"
+    # observable = "各言語のTEST_VALUE_SCHEMA_ERRORとmetadata null"
+    # observation_boundary = "component-behavior"
+    # scope = "metadata-parser"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_all_adapters_reject_invalid_v2_fields(self) -> None:
+        def invalid_blocks(prefix: str, indent: str) -> tuple[str, str, str]:
+            block = metadata_block(prefix, indent)
+            lifecycle = f'{indent}{prefix} lifecycle = "permanent"\n'
+            return (
+                block.replace(lifecycle, lifecycle + f'{indent}{prefix} invented = "value"\n'),
+                block.replace(
+                    f'{indent}{prefix} observation_boundary = "component-behavior"',
+                    f'{indent}{prefix} observation_boundary = "database"',
+                ),
+                block.replace(lifecycle, lifecycle + f'{indent}{prefix} risk_tags = "security"\n'),
+            )
+
+        python_source = ""
+        typescript_source = ""
+        csharp_source = "public class InvalidMetadataTests\n{\n"
+        for index, block in enumerate(invalid_blocks("#", "")):
+            python_source += block + f"def test_invalid_{index}():\n    assert True\n"
+        for index, block in enumerate(invalid_blocks("//", "")):
+            typescript_source += block + f'test("invalid {index}", () => {{}});\n'
+        for index, block in enumerate(invalid_blocks("//", "    ")):
+            csharp_source += (
+                block
+                + "    [Fact]\n"
+                + f"    public void Invalid{index}() {{ }}\n"
+            )
+        csharp_source += "}\n"
+        cases = (
+            ("tests/test_invalid_metadata.py", python_source),
+            ("tests/invalid-metadata.test.ts", typescript_source),
+            ("tests/InvalidMetadataTests.cs", csharp_source),
+        )
+
+        for relative, source in cases:
+            with self.subTest(relative=relative):
+                self.write(relative, source)
+                result, exit_status = self.extract(relative)
+                self.assertEqual(exit_status, 1)
+                self.assertEqual(
+                    [item["code"] for item in result["diagnostics"]],
+                    ["TEST_VALUE_SCHEMA_ERROR"] * 3,
+                )
+                self.assertTrue(
+                    all(record["metadata"] is None for record in result["tests"])
+                )
 
     # @test-value v1
     # kind = "regression"

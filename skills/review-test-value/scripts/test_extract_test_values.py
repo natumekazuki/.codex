@@ -19,7 +19,19 @@ sys.modules[SPEC.name] = EXTRACTOR
 SPEC.loader.exec_module(EXTRACTOR)
 
 
-VALID_METADATA = '''# @test-value v1
+VALID_METADATA = '''# @test-value v2
+# kind = "invariant"
+# claim = "同じkeyによる再試行で請求件数が1件を超えない"
+# oracle = { type = "contract", ref = "PAYMENT-004" }
+# fault = "応答喪失後の再送で請求を二重に永続化する"
+# observable = "永続化された請求recordの件数"
+# observation_boundary = "component-behavior"
+# scope = "payment-api"
+# lifecycle = "permanent"
+# @end-test-value
+'''
+
+V1_METADATA = '''# @test-value v1
 # kind = "invariant"
 # claim = "同じkeyによる再試行で請求件数が1件を超えない"
 # oracle = { type = "contract", ref = "PAYMENT-004" }
@@ -96,11 +108,13 @@ class ExtractTestValuesTests(unittest.TestCase):
     def extract(self, *paths: str) -> tuple[dict, int]:
         return EXTRACTOR.extract_repository(self.root, list(paths))
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "metadataをdecorated testへ結合しdecoratorから末尾までのsource_textとhashを投影する"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "metadataを別testへ結合するかdecoratorやassertionをsource_textから欠落させる"
+    # fault = "metadataを別testへ結合するかdecoratorやassertionをsource_textから欠落させる"
+    # observable = "抽出recordのmetadata、source範囲、source hash"
+    # observation_boundary = "component-behavior"
     # scope = "python-source-extraction"
     # lifecycle = "permanent"
     # @end-test-value
@@ -118,13 +132,16 @@ class ExtractTestValuesTests(unittest.TestCase):
         result, exit_status = self.extract("tests/test_payment.py")
 
         self.assertEqual(exit_status, 0)
+        self.assertEqual(result["schema_version"], 2)
         self.assertEqual(result["coverage"], "python-source-declarations-v1")
         self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(result["warnings"], [])
         self.assertEqual(len(result["tests"]), 1)
         record = result["tests"][0]
+        self.assertEqual(record["metadata_format_version"], 2)
         self.assertEqual(record["source"]["symbol"], "PaymentTests.test_retry")
         self.assertEqual(record["source"]["metadata_start_line"], 2)
-        self.assertEqual(record["source"]["declaration_start_line"], 10)
+        self.assertEqual(record["source"]["declaration_start_line"], 12)
         self.assertEqual(record["metadata"]["oracle"]["ref"], "PAYMENT-004")
         self.assertTrue(
             record["source_text"].startswith('    @parameterized("lost-response")')
@@ -201,16 +218,18 @@ class ExtractTestValuesTests(unittest.TestCase):
             [item["code"] for item in result["diagnostics"]],
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "TOML parse errorとschema errorはmetadata nullと対応diagnosticを返す"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "壊れたpayloadやunknown fieldを有効metadataとして投影する"
+    # fault = "壊れたpayloadやunknown fieldを有効metadataとして投影する"
+    # observable = "抽出recordのmetadataとparse/schema diagnostic"
+    # observation_boundary = "component-behavior"
     # scope = "test-value-schema"
     # lifecycle = "permanent"
     # @end-test-value
     def test_parse_and_schema_errors_do_not_produce_metadata(self) -> None:
-        malformed = '''# @test-value v1
+        malformed = '''# @test-value v2
 # kind = "invariant
 # @end-test-value
 def test_malformed():
@@ -284,22 +303,26 @@ def test_malformed():
             )
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "multiline文字列内のdecoyを無視して実際の通常oracle tableを拒否する"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "claim文字列内のoracle表記を構文根拠にして通常tableを通す"
+    # fault = "claim文字列内のoracle表記を構文根拠にして通常tableを通す"
+    # observable = "抽出器のoracle syntax diagnostic"
+    # observation_boundary = "component-behavior"
     # scope = "test-value-schema"
     # lifecycle = "permanent"
     # @end-test-value
     def test_oracle_shape_ignores_inline_table_text_in_multiline_string(self) -> None:
-        source = '''# @test-value v1
+        source = '''# @test-value v2
 # kind = "invariant"
 # claim = """
 # oracle = { type = "contract", ref = "DECOY" }
 # claim text
 # """
-# failure_mode = "誤ったoracle構文を受理する"
+# fault = "誤ったoracle構文を受理する"
+# observable = "抽出器のschema diagnostic"
+# observation_boundary = "component-behavior"
 # scope = "metadata-parser"
 # lifecycle = "permanent"
 # [oracle]
@@ -348,11 +371,13 @@ def test_oracle_table_with_decoy():
         self.assertEqual(result["diagnostics"], [])
         self.assertEqual(result["tests"][0]["metadata"]["oracle"]["ref"], "PAYMENT-004")
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
-    # claim = "field型不一致とreview条件なしcharacterizationをSCHEMA_ERRORにする"
-    # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "型不正または期限条件のない一時契約を有効metadataとして通す"
+    # claim = "v2のfield型不一致とlifecycle条件不足をSCHEMA_ERRORにする"
+    # oracle = { type = "issue", ref = "#43" }
+    # fault = "型不正または終了条件のない一時metadataを審査可能として通す"
+    # observable = "抽出結果のTEST_VALUE_SCHEMA_ERRORとmetadata null"
+    # observation_boundary = "component-behavior"
     # scope = "test-value-schema"
     # lifecycle = "permanent"
     # @end-test-value
@@ -385,11 +410,13 @@ def test_oracle_table_with_decoy():
             ["TEST_VALUE_SCHEMA_ERROR", "TEST_VALUE_SCHEMA_ERROR"],
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "review_when付きcharacterizationをdiagnosticなしで投影する"
-    # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "見直し条件を持つ有効なcharacterizationを誤拒否する"
+    # oracle = { type = "issue", ref = "#43" }
+    # fault = "見直し条件を持つ有効なcharacterizationを誤拒否する"
+    # observable = "抽出結果のexit status、diagnostics、metadata.review_when"
+    # observation_boundary = "component-behavior"
     # scope = "test-value-schema"
     # lifecycle = "permanent"
     # @end-test-value
@@ -412,6 +439,172 @@ def test_oracle_table_with_decoy():
             result["tests"][0]["metadata"]["review_when"],
             "外部契約が確定したとき",
         )
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "ephemeralはremove_whenを必須とし、permanentとcharacterizationへ混在させない"
+    # oracle = { type = "issue", ref = "#43" }
+    # fault = "lifecycleと終了条件の不正な組を審査可能なmetadataとして通す"
+    # observable = "lifecycle別の抽出exit status、diagnostics、metadata"
+    # observation_boundary = "component-behavior"
+    # scope = "test-value-schema"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_v2_lifecycle_conditions_are_enforced(self) -> None:
+        valid_ephemeral = VALID_METADATA.replace(
+            '# lifecycle = "permanent"\n',
+            '# lifecycle = "ephemeral"\n'
+            '# remove_when = "修正後の回帰checkへ置換したとき"\n',
+        )
+        missing_remove = VALID_METADATA.replace(
+            '# lifecycle = "permanent"',
+            '# lifecycle = "ephemeral"',
+        )
+        permanent_with_review = VALID_METADATA.replace(
+            '# lifecycle = "permanent"\n',
+            '# lifecycle = "permanent"\n# review_when = "契約変更時"\n',
+        )
+        characterization_with_only_remove = VALID_METADATA.replace(
+            '# lifecycle = "permanent"\n',
+            '# lifecycle = "characterization"\n'
+            '# remove_when = "実装が安定したとき"\n',
+        )
+        cases = {
+            "tests/test_ephemeral.py": valid_ephemeral,
+            "tests/test_missing_remove.py": missing_remove,
+            "tests/test_permanent_review.py": permanent_with_review,
+            "tests/test_characterization_remove.py": characterization_with_only_remove,
+        }
+        for relative, metadata in cases.items():
+            self.write(
+                relative,
+                metadata + f"def {Path(relative).stem}():\n    assert True\n",
+            )
+
+        valid_result, valid_status = self.extract("tests/test_ephemeral.py")
+        invalid_result, invalid_status = self.extract(
+            "tests/test_missing_remove.py",
+            "tests/test_permanent_review.py",
+            "tests/test_characterization_remove.py",
+        )
+
+        self.assertEqual(valid_status, 0)
+        self.assertEqual(valid_result["diagnostics"], [])
+        self.assertEqual(
+            valid_result["tests"][0]["metadata"]["remove_when"],
+            "修正後の回帰checkへ置換したとき",
+        )
+        self.assertEqual(invalid_status, 1)
+        self.assertEqual(
+            [item["code"] for item in invalid_result["diagnostics"]],
+            [
+                "TEST_VALUE_SCHEMA_ERROR",
+                "TEST_VALUE_SCHEMA_ERROR",
+                "TEST_VALUE_SCHEMA_ERROR",
+            ],
+        )
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "v2固有fieldのunknown値と型不一致を抽出境界で拒否する"
+    # oracle = { type = "issue", ref = "#43" }
+    # fault = "未知boundary、未知risk tag、文字列risk_tags、failure_modeをv2 metadataとして通す"
+    # observable = "各入力に対するTEST_VALUE_SCHEMA_ERRORとmetadata null"
+    # observation_boundary = "component-behavior"
+    # scope = "test-value-schema"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_v2_rejects_unknown_fields_enums_and_types(self) -> None:
+        replacements = (
+            (
+                '# observation_boundary = "component-behavior"',
+                '# observation_boundary = "database"',
+            ),
+            (
+                '# observation_boundary = "component-behavior"',
+                '# observation_boundary = 1',
+            ),
+            (
+                '# lifecycle = "permanent"',
+                '# lifecycle = "permanent"\n# risk_tags = ["availability"]',
+            ),
+            (
+                '# lifecycle = "permanent"',
+                '# lifecycle = "permanent"\n# risk_tags = "security"',
+            ),
+            (
+                '# lifecycle = "permanent"',
+                '# lifecycle = "permanent"\n# failure_mode = "legacy field"',
+            ),
+        )
+        paths = []
+        for index, (old, new) in enumerate(replacements):
+            relative = f"tests/test_invalid_v2_{index}.py"
+            paths.append(relative)
+            self.write(
+                relative,
+                VALID_METADATA.replace(old, new)
+                + f"def test_invalid_v2_{index}():\n    assert True\n",
+            )
+
+        result, exit_status = self.extract(*paths)
+
+        self.assertEqual(exit_status, 1)
+        self.assertTrue(all(record["metadata"] is None for record in result["tests"]))
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_VALUE_SCHEMA_ERROR"] * len(paths),
+        )
+        self.write(
+            "tests/test_valid_v2.py",
+            VALID_METADATA + "def test_valid_v2():\n    assert True\n",
+        )
+        valid_result, valid_status = self.extract("tests/test_valid_v2.py")
+        self.assertEqual(valid_status, 0)
+        valid_metadata = valid_result["tests"][0]["metadata"]
+        for field in (
+            "kind",
+            "lifecycle",
+            "observation_boundary",
+            "risk_tags",
+            "oracle",
+            "expires_on",
+        ):
+            with self.subTest(nullable_field=field):
+                errors = EXTRACTOR.validate_metadata(
+                    {**valid_metadata, field: None},
+                    2,
+                )
+                self.assertTrue(errors)
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "path modeのv1を移行dataとして読取るがTEST_VALUE_V2_REQUIREDで審査開始を止める"
+    # oracle = { type = "adr", ref = "ADR-0022 v1読取りをv2移行に限定する" }
+    # fault = "v1 recordを成功扱いするか移行に必要なmetadataを失う"
+    # observable = "exit status、diagnostic、metadata_format_version、metadata hash"
+    # observation_boundary = "public-boundary"
+    # scope = "extractor-path-mode"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_path_mode_requires_v2_and_retains_valid_v1_migration_data(self) -> None:
+        self.write(
+            "tests/test_v1.py",
+            V1_METADATA + "def test_v1():\n    assert True\n",
+        )
+
+        result, exit_status = self.extract("tests/test_v1.py")
+
+        self.assertEqual(exit_status, 1)
+        self.assertEqual(result["warnings"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_VALUE_V2_REQUIRED"],
+        )
+        record = result["tests"][0]
+        self.assertEqual(record["metadata_format_version"], 1)
+        self.assertEqual(record["metadata"]["failure_mode"], "応答喪失後の再送で請求を二重に永続化する")
+        self.assertRegex(record["metadata_hash"], r"^sha256:[0-9a-f]{64}$")
 
     # @test-value v1
     # kind = "regression"
@@ -554,6 +747,57 @@ def test_oracle_table_with_decoy():
             ["test_changed"],
         )
         self.assertIn("observed() == 2", result["tests"][0]["source_text"])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "Git modeは未変更v1を選ばず、選択されたv1だけをV2_REQUIREDで停止する"
+    # oracle = { type = "adr", ref = "ADR-0022 v1読取りをv2移行に限定する" }
+    # fault = "未変更v1を一括移行対象にするか変更v1を審査対象として通す"
+    # observable = "Git選択結果のrecord symbol、diagnostic、exit status"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_requires_migration_only_for_selected_v1(self) -> None:
+        source = (
+            V1_METADATA
+            + "def test_v1():\n"
+            "    assert legacy_observed() == 1\n\n"
+            + VALID_METADATA
+            + "def test_v2():\n"
+            "    assert current_observed() == 1\n"
+        )
+        path = self.write("tests/test_versions.py", source)
+        base = self.initialize_git()
+        v2_only = source.replace("current_observed() == 1", "current_observed() == 2")
+        path.write_text(v2_only, encoding="utf-8")
+
+        result, exit_status, stderr = self.extract_git(base)
+
+        self.assertEqual(exit_status, 0, stderr)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(result["warnings"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["test_v2"],
+        )
+
+        path.write_text(
+            v2_only.replace("legacy_observed() == 1", "legacy_observed() == 2"),
+            encoding="utf-8",
+        )
+        mixed_result, mixed_status, mixed_stderr = self.extract_git(base)
+
+        self.assertEqual(mixed_status, 1, mixed_stderr)
+        self.assertEqual(
+            [record["source"]["symbol"] for record in mixed_result["tests"]],
+            ["test_v1", "test_v2"],
+        )
+        self.assertEqual(
+            [item["code"] for item in mixed_result["diagnostics"]],
+            ["TEST_VALUE_V2_REQUIRED"],
+        )
+        self.assertEqual(mixed_result["tests"][0]["metadata_format_version"], 1)
 
     # @test-value v1
     # kind = "regression"
@@ -931,11 +1175,13 @@ def test_oracle_table_with_decoy():
                     ["test_replaced"],
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "metadata結合を壊す変更もbase側recordから対応testへ投影する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "開始markerの破損でmetadata欠落diagnosticとtest recordが審査から消える"
+    # fault = "開始markerの破損でmetadata欠落diagnosticとtest recordが審査から消える"
+    # observable = "Git選択されたrecordとTEST_VALUE_MISSING diagnostic"
+    # observation_boundary = "component-behavior"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -944,7 +1190,7 @@ def test_oracle_table_with_decoy():
         path = self.write("tests/test_binding.py", source)
         base = self.initialize_git()
         path.write_text(
-            source.replace("@test-value v1", "@test-values v1"),
+            source.replace("@test-value v2", "@test-values v2"),
             encoding="utf-8",
         )
 
