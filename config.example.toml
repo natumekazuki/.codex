@@ -1,9 +1,8 @@
 # Portable Codex user config example.
 # Keep the real config.toml local. Copy only the sections you want to merge.
 
-model = "gpt-5.6"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
-model_personality = "pragmatic"
 personality = "pragmatic"
 project_doc_max_bytes = 131072
 
