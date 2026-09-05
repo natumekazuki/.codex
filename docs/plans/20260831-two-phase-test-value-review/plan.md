@@ -15,7 +15,7 @@ runtime activationの同一child二turn、follow-up fallback、native registry�
 - 曖昧、高リスク、deterministic audit対象のrecordだけを、追加context付きでSolへ昇格する。
 - `status`、`disposition`、record gate、Skill実行全体のaggregate gateを決定的なruleで確定する。
 - declaration checkをpolicy checkへ移し、runtime behaviorを守るtestは実際のobservation boundaryを観測させる。
-- v1の読み取り互換性を維持しながら、新規・意味変更testへmetadata v2を要求する。
+- v1はその場でv2へ移行するためだけに読み取り、path指定を含む審査対象はv2への書換えと再抽出を必須にする。
 - custom agent導入と新gateの有効化を分け、変更自身を審査できないbootstrap循環を避ける。
 
 ## Task Boundary
@@ -89,14 +89,14 @@ runtime activationの同一child二turn、follow-up fallback、native registry�
 - Independent review trigger: RTV-203と同じactivation reviewで確認する。
 - Gate: ready。
 
-### RTV-206: v1互換とv2強制をexit statusで区別する
+### RTV-206: v1の読取りを移行に限定し、v2再抽出後に審査する
 
 - Accepted anchor: ADR-0022のmetadata v2とv1互換契約。
 - Scope / owner: marker scanning、metadata schema、output projection、Git selection integration。
 - Siblings in scope: path指定modeのv1、Git modeで選択されたv1、未変更v1、v2、v1 / v2混在source、Python、TypeScript、C#。
-- Failure mode / consumer impact: deprecation warningだけでpath指定modeがexit `1`になりmigrationできない、または変更v1がwarningだけで新gateを通過する。
-- State transitions / failure timing: record binding後にmetadata versionとselection reasonを評価し、warningとerrorを別projectionへ出す。
-- Direct verification: 各modeと各言語で`warnings`、`diagnostics`、exit `0 / 1 / 2`、canonical metadata hashを検証する。
+- Failure mode / consumer impact: path指定またはGit modeでv1のまま評価を続ける、あるいは混在入力のv1を除外して移行義務を消す。
+- State transitions / failure timing: 対象v1の読取り後は移行要求で停止する。同じ作業でv2へ書き直し、元の選択条件による再抽出が成功した後だけ審査packetを生成する。
+- Direct verification: 各modeと各言語でv1の読取可能性とexit `1`、v1 packet拒否、混在入力の停止、v2移行後の再抽出成功、未選択v1の非移行を確認する。
 - Independent review trigger: RTV-203と同じactivation reviewで確認する。
 - Gate: ready。
 
@@ -185,8 +185,8 @@ runtime activationの同一child二turn、follow-up fallback、native registry�
 - [ ] `@test-value v2`と`fault`、`observable`、optional `impact`、`observation_boundary`を追加する。
 - [ ] optional `risk_tags`とephemeral用`remove_when`を追加する。
 - [ ] output schema v2で`diagnostics`と`warnings`を分離する。
-- [ ] path指定modeのv1をwarning、Git modeで選択されたv1をerrorにする。
-- [ ] Python、TypeScript、C#でv1とv2を同じrunへ投影する。
+- [ ] 両modeの審査対象v1は読取り後に移行要求を返し、v2へ移行して再抽出するまで審査を開始しない。
+- [ ] Python、TypeScript、C#の混在v1/v2入力を移行用に読み取り、審査packetは検証済みv2だけにする。
 - [ ] MOVE / DROP resolution ledgerとaggregate gateを追加する。
 - [ ] 必須回帰caseとdeterministic auditを追加する。
 - [ ] `SKILL.md`、`AGENTS.md`、README、Skill UI metadataを新workflowへ更新する。
@@ -218,7 +218,7 @@ runtime activationの同一child二turn、follow-up fallback、native registry�
 - 同じcanonical locator bytesとreview contract versionは同じaudit選択結果を返す。
 - metadataにrisk tagがなくても、親risk contextのtagでSolへ昇格する。
 - `MOVE_TO_POLICY_CHECK`と`DROP`は元recordが消えただけではaggregate `PASS`にならない。
-- path指定modeのv1はwarningでexit `0`、Git modeで選択されたv1はerrorでexit `1`になる。
+- 両modeの対象v1は移行要求でexit `1`となり、v2への書換えと同じ選択条件での再抽出が成功するまで評価を続行しない。
 
 ## Validation
 

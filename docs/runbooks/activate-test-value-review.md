@@ -38,7 +38,7 @@ CLIの[非対話実行](https://learn.chatgpt.com/docs/non-interactive-mode)と[
 
 1. #42: 独立した各`codex exec`と同じ設定読込で、model、effort、permission、公開tool、自動注入元をhostから確認する。確認できない構成はpacket送信前に停止する。親履歴、全checkoutと共通`.git`、認証、親ログ、別phase、MCP、web、shell、追加child、link経由読取に対する直接拒否試験を実装する。
 2. #42: stdinでのpacket入力、出力schemaと既存validatorの照合、receipt、有限deadline、cancel時の所有process tree終了、所有scratchだけのcleanupを実装する。version照会のtimeoutをworker lifecycleの検証で代用しない。
-3. #43: v1限定読取の実装承認を確認し、3言語のv2、warnings、phase v2、未知boundaryの型付き解消を一体で実装する。v1の自動変換や旧resultの読替えを追加しない。
+3. #43: 2026-09-05に承認された移行専用のv1読取りと、3言語のv2、phase v2、未知boundaryの型付き解消を一体で実装する。対象v1は両modeで移行要求を返し、その場でv2へ書き直して元の選択条件で再抽出する。移行不能時は停止し、v1のまま評価しない。情報不足を推測で埋める自動変換や旧resultの読替えを追加しない。
 4. #44: 既存のselector、builder、validator、routingを接続し、全言語と全batch、親riskとmetadata risk、保持根拠、DROP/MOVE resolutionを集計する。ledgerを失った空selectionを成功にしない。未実装の保持根拠やresolutionをcallerのbooleanで代用しない。
 5. #45: offline checksと必要なcommit-bound reviewを終え、synthetic repositoryで両Luna phaseとrequired SolのE2Eを行う。Phase 1不合格でもPhase 2を省略しない。mockの成功と実モデルの成功を分けて記録する。
 6. #45: task baseとactivation候補commitを固定し、候補自身の新規・変更testを候補版の新方式で審査する。新規sessionで候補版の読込と実効設定を確認した後、検証済みのOS/runtimeに限って標準Skillとaggregate gateを同じリリースで切り替える。
@@ -64,7 +64,7 @@ preflightとschemaのoffline成功は、新方式によるtest価値審査の`PA
 
 v2をconsumerへ導入する前なら、対象の準備変更を通常の追加commitで戻し、確認済みの旧入口を維持できる。ユーザーのworktreeをresetせず、無関係な変更を破棄しない。
 
-v2導入後はworkerの新規実行を停止し、v1/v2読取能力と未解決ledgerを保持する。未実行を`BLOCKED`として報告し、修正した新経路へ戻す。v1専用extractorへ戻したり、旧単一審査や別modelへsilent fallbackして`PASS`を出したりしない。v2読取とgateの意味を保つ別の変更が必要なら、明示的に設計と承認を行う。
+v2導入後はworkerの新規実行を停止し、v2読取能力、移行専用のv1読取り、未解決ledgerを保持する。未実行を`BLOCKED`として報告し、修正した新経路へ戻す。v1専用extractorへ戻したり、旧単一審査や別modelへsilent fallbackして`PASS`を出したりしない。v2読取とgateの意味を保つ別の変更が必要なら、明示的に設計と承認を行う。
 
 ## mainへ統合する前の確認
 

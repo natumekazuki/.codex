@@ -129,7 +129,7 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - resolution ledgerはSkill実行中の派生物であり、repositoryの正本として保存しない。
 - Skill実行全体のaggregate gateは、surviving recordがすべて`PASS`、必要なresolutionがすべて`RESOLVED`、`BLOCKED`がない場合だけ`PASS`とする。
 
-### metadata v2とv1互換を分ける
+### v1読取りをv2移行に限定する
 
 - `@test-value v2`はv1の`failure_mode`を次のfieldへ分ける。
   - `fault`: assertionを失敗させるべき具体的な欠陥。
@@ -139,8 +139,11 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - v2はoptionalな`risk_tags`と、`lifecycle = "ephemeral"`で必須となる`remove_when`を持つ。
 - `characterization`は`expires_on`または`review_when`を一つ以上必須とする。`ephemeral`は`remove_when`を必須とする。`permanent`では三fieldを禁止する。
 - extractor output schemaをv2へ上げ、errorの`diagnostics`とnon-blockingな`warnings`を分ける。
-- path指定modeでv1を抽出した場合は`TEST_VALUE_V1_DEPRECATED` warningを返し、他にerrorがなければexit `0`とする。
-- Git modeで新規または意味変更されたv1 recordは`TEST_VALUE_V2_REQUIRED` errorを返し、exit `1`とする。
+- 2026-09-05のユーザー指定により、v1の読取り互換はその場でv2へ移行するためだけに限定する。従来のpath指定modeでwarningだけを返してv1の審査を続ける判断を置き換える。
+- path指定modeとGit modeのどちらでも、審査対象にv1があれば`TEST_VALUE_V2_REQUIRED`をdiagnosticsへ返し、exit `1`とする。読取結果は移行の入力としてだけ扱い、v1 recordを審査packetへ渡さない。
+- 同じ作業内で対象コメントをv2へ書き直し、元の選択条件で再抽出する。全対象がv2として検証を通ってから審査を開始する。移行できない場合や編集権限がない場合は移行要求を残して停止し、v1評価へfallbackしない。
+- v1/v2混在入力でも、v1を除外して一部だけ合格にしない。必要な移行と再抽出が完了するまで、その審査実行を続けない。
+- 読取互換の必要性は既存v1からの段階的な移行に限る。移行用parserの保守は必要だが、v1審査経路は維持しない。対象consumerにv1がなくなり移行が不要になった時点で読取互換の撤去を判断する。
 - 未変更のv1 recordはADR-0021に従って選択しない。v1の`failure_mode`を機械的にv2 fieldへ分割しない。
 
 ### required agentはfail closedにする
@@ -165,7 +168,7 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - Phase 1とPhase 2を一つのLuna promptへまとめる: 実行回数は減るが、metadata-only isolationを検証できないため採用しない。
 - 全recordをSolへ渡す: 判断品質を揃えやすいが、明白なschema矛盾やdeclaration checkまで高コストな審査へ送るため採用しない。
 - high-riskをmetadataの自己申告だけで決める: 作者がrisk tagを省略するとSol routingを迂回できるため採用しない。
-- v1 deprecationをerror diagnosticとして返す: path指定modeでv1 recordを読みながら移行する経路まで停止するため採用しない。
+- v1をwarning付きで審査し続ける: 2026-09-05の指定により採用しない。読取りは移行用に残し、v2への書換えと再抽出を審査の前提にする。
 - testを削除した後は空のGit selectionを自動的に`PASS`とする: 移行先policy checkや削除根拠を確認できないため採用しない。
 - agent定義と新gateを同時に有効化する: 現在のsessionが新agentを起動できず、変更自身の完了条件を満たせないため採用しない。
 
@@ -175,7 +178,7 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - Positive: declaration checkを永続behavior testから分離しつつ、policy checkとしての価値は保持できる。
 - Positive: high-risk recordはmetadataの申告漏れだけでSol審査を迂回できない。
 - Positive: `ACCEPT`、保持先、完了gateの意味を分離できる。
-- Positive: v1を読み取り可能なまま、新規・意味変更testへv2を強制できる。
+- Positive: 既存v1を移行用に読み取れる一方、path指定を含むすべての審査対象へv2を要求できる。
 - Negative: 一つのSkill実行に複数のagent turnとschema validationが必要になる。
 - Negative: MOVEとDROPの完了には、record単位のreview resultに加えて一時的なresolution ledgerが必要になる。
 - Negative: 独立workerの新規sessionで隔離smokeを完了するまで標準gateを切り替えられない。形式の準備を先行しても、v2抽出器だけをliveへ部分導入しない。
