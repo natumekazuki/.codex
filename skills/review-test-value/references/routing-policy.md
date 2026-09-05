@@ -15,7 +15,7 @@ risk tagは`security`、`authentication`、`authorization`、`billing`、`irreve
 
 high-riskでもaudit対象でもない明白な`REDESIGN`または`MISMATCH`だけを理由にSolへ送らない。required agentがunavailableなら親agentは代行せず、`NEEDS_CONTEXT`、`BLOCKED`とする。
 
-audit selectionは`record_id`とcontract versionのSHA-256を100で割った剰余が`audit_percent`未満かで決める。同じ入力は常に同じ結果になる。
+audit selectionは`record_id`とcontract versionのSHA-256を100で割った剰余が`audit_percent`未満かで決める。同じ入力は常に同じ結果になる。候補版のaudit計算には`deep-review-v2`を渡す。routing manifestとworkflow context自体のshape/versionはv1のままとする。
 
 `review_routing.py`のinputは`records`と`workflow_context`を持つJSON objectとする。各routing recordは`record_id`、`metadata_hash`、`source_hash`、`contract_version`、`metadata`、Phase 1とPhase 2のverdict、`context_requirements`を持つ。`workflow_context`は`review_contract_version = "review-workflow-context-v1"`と同順の`records`を持ち、各entryは`record_id`、`metadata_hash`、`parent_risk_tags`、`audit_percent`だけを持つ。outputのrouting manifestは`review_contract_version = "review-routing-v1"`と同順の`records`を持ち、各entryへrecord identity、workflow contextのhash、routing resultを固定する。
 
@@ -32,7 +32,7 @@ ADR-0022の優先表をそのまま適用する。未完了・schema不正、req
 - `consumer`、`public-boundary`、`component-behavior`: `permanent`かつ保持根拠ありなら`KEEP_PERMANENT`、保持根拠なしなら`DROP`、有効なtemporary条件があれば`KEEP_TEMPORARY`
 - actual boundaryまたは保持根拠が未確定なら`null`
 
-Bootstrapはmetadata v1を読む。`characterization`は`expires_on`または`review_when`がある場合だけtemporary条件が有効である。v1の`ephemeral`は削除条件を表現できないため、temporary条件未確定として`null`にする。v2の`remove_when`対応はactivation changeで追加する。
+候補版はmetadata v2だけを審査する。`characterization`は`expires_on`または`review_when`、`ephemeral`は`remove_when`をtemporary条件とする。記載された条件が現在も有効かはhostの保持根拠確認が必要であり、期限文字列の存在だけで運用上のPASSを出さない。
 
 保持根拠の入力は`PRESENT`、`ABSENT`、`UNRESOLVED`とし、AIの自由記述から推測しない。`UNRESOLVED`は`disposition = null`、`status = NEEDS_CONTEXT`、`gate = BLOCKED`へ閉じる。
 

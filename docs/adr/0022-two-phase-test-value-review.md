@@ -24,7 +24,7 @@
   - Phase 2は固定済みのPhase 1結果、同じmetadata、test sourceを読み、actual observableとobservation boundaryを照合する。
 - Phase 1 packetへtest source、source line、assertion summary、production source、oracle本文、実行証拠を含めない。
 - Phase 1が`REDESIGN`でもPhase 2を省略しない。Phase 2でactual observableと保持先候補を特定し、修正後の行き先を判断できるようにする。
-- 同じLuna child sessionを二turnで使う。runtimeがfollow-upをサポートしない場合は二つのLuna child runを使えるが、二phaseを一promptへ統合しない。
+- #42〜#45で具体化したtransportでは、Phase 1とPhase 2をそれぞれ新規の独立した`codex exec`プロセスで実行する。Solも別の新規runとする。親履歴のfork、resume、同じchildへのfollow-upを使わず、検証済みのPhase 1結果だけをPhase 2へ明示入力する。二phaseを一promptへ統合しない。
 - 親agentはPhase 1結果をPhase 2開始前に固定し、Phase 2による変更を受け付けない。
 
 ### Solは追加contextを必要とするrecordだけを審査する
@@ -114,7 +114,7 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 | 4 | `ACCEPT` | `KEEP_PERMANENT`かつpermanent testとして存在 | `PASS` |
 | 5 | `ACCEPT` | `KEEP_TEMPORARY`かつ必要な期限・条件を持つtestとして存在 | `PASS` |
 | 6 | `ACCEPT` | `MOVE_TO_POLICY_CHECK`または`DROP`で元testが残存、またはresolution未完了 | `CHANGES_REQUIRED` |
-| 7 | `ACCEPT` | `MOVE_TO_POLICY_CHECK`または`DROP`で元testが消え、対応resolutionが`RESOLVED` | resolution entryがrecord gateを置き換えて`PASS` |
+| 7 | `ACCEPT` | `MOVE_TO_POLICY_CHECK`または`DROP`で元testが消え、対応resolutionが`RESOLVED` | 別のresolution entryで対応義務を解消する |
 
 - aggregate gateは、`BLOCKED`が一件でもあれば`BLOCKED`、それ以外で`CHANGES_REQUIRED`または未解決resolutionが一件でもあれば`CHANGES_REQUIRED`、それ以外は`PASS`とする。
 - recordもresolution entryも存在しない空のGit selectionは、以前にrequired resolutionがなかった場合だけ`PASS`にできる。以前のreviewでrequired resolutionが作られたSkill実行では、そのledgerを失った空selectionを`PASS`にしない。
@@ -124,12 +124,16 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - ADR-0021に従い、test declaration全体の削除はGit modeのsurviving recordへ含めない。
 - `MOVE_TO_POLICY_CHECK`または`DROP`を返したrecordは、同じSkill実行中の一時的なresolution ledgerで追跡する。
 - ledger entryは元のrecord locatorとmetadata hash、実行したaction、移行先artifact、direct check、resolution verdictを持つ。
+- 2026-09-06、#44の契約に従い、元recordが`REDESIGN`でも必要な審査が完了した正当なDROP/MOVEは、別のresolution entryで義務を解消できると明確化する。元statusとrecord gateは改変せず、現在のsourceに対するresolutionをaggregateへ反映する。
+- 元の判定は正規packet/resultとroutingから既存validatorで再検証する。callerのphase完了flagや`sol_required`だけを根拠にしない。未完了phase、required Solの不足、未解決の契約違反は、testの削除では解消できない。
+- MOVEは元testの除去、現在の移行先、同じfailureを検出するcheckの成功を必要とする。DROPは除去に加え、代替不要のaccepted contract上の理由、または既存canonical checkの根拠と成功を必要とする。これらを同じcurrent snapshotへ結び付ける。
+- 初期manifestを不変とし、ledgerはtask内だけでatomicに更新する。欠落した継続stateや、対象の取りこぼしを証明できない空selectionを成功にしない。
 - `MOVE_TO_POLICY_CHECK`は、元testの除去、移行先artifactの存在、そのartifactが宣言上のfailure modeを直接検出するcheckの成功を確認して`RESOLVED`にする。
 - `DROP`は、元testの除去と、代替checkが不要または既存canonical ownerが同じfailure modeを検出する根拠を確認して`RESOLVED`にする。
 - resolution ledgerはSkill実行中の派生物であり、repositoryの正本として保存しない。
 - Skill実行全体のaggregate gateは、surviving recordがすべて`PASS`、必要なresolutionがすべて`RESOLVED`、`BLOCKED`がない場合だけ`PASS`とする。
 
-### metadata v2とv1互換を分ける
+### v1読取りをv2移行に限定する
 
 - `@test-value v2`はv1の`failure_mode`を次のfieldへ分ける。
   - `fault`: assertionを失敗させるべき具体的な欠陥。
@@ -139,22 +143,25 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - v2はoptionalな`risk_tags`と、`lifecycle = "ephemeral"`で必須となる`remove_when`を持つ。
 - `characterization`は`expires_on`または`review_when`を一つ以上必須とする。`ephemeral`は`remove_when`を必須とする。`permanent`では三fieldを禁止する。
 - extractor output schemaをv2へ上げ、errorの`diagnostics`とnon-blockingな`warnings`を分ける。
-- path指定modeでv1を抽出した場合は`TEST_VALUE_V1_DEPRECATED` warningを返し、他にerrorがなければexit `0`とする。
-- Git modeで新規または意味変更されたv1 recordは`TEST_VALUE_V2_REQUIRED` errorを返し、exit `1`とする。
+- 2026-09-05のユーザー指定により、v1の読取り互換はその場でv2へ移行するためだけに限定する。従来のpath指定modeでwarningだけを返してv1の審査を続ける判断を置き換える。
+- path指定modeとGit modeのどちらでも、審査対象にv1があれば`TEST_VALUE_V2_REQUIRED`をdiagnosticsへ返し、exit `1`とする。読取結果は移行の入力としてだけ扱い、v1 recordを審査packetへ渡さない。
+- 同じ作業内で対象コメントをv2へ書き直し、元の選択条件で再抽出する。全対象がv2として検証を通ってから審査を開始する。移行できない場合や編集権限がない場合は移行要求を残して停止し、v1評価へfallbackしない。
+- v1/v2混在入力でも、v1を除外して一部だけ合格にしない。必要な移行と再抽出が完了するまで、その審査実行を続けない。
+- 読取互換の必要性は既存v1からの段階的な移行に限る。移行用parserの保守は必要だが、v1審査経路は維持しない。対象consumerにv1がなくなり移行が不要になった時点で読取互換の撤去を判断する。
 - 未変更のv1 recordはADR-0021に従って選択しない。v1の`failure_mode`を機械的にv2 fieldへ分割しない。
 
 ### required agentはfail closedにする
 
 - `test_value_luna`は`gpt-5.6-luna`、reasoning effort `medium`、read-onlyとする。
 - `test_value_sol`は`gpt-5.6-sol`、reasoning effort `xhigh`、read-onlyとする。
-- model、reasoning effort、sandbox、role contractは`agents/*.toml`を正本とし、Skill UI metadataやrouting hookへ複製しない。
+- model、reasoning effort、role contractは`agents/*.toml`を正本とし、Skill UI metadataやrouting hookへ複製しない。独立workerの限定read権限はrunnerが所有する。roleの`read-only`は書込み禁止の意図を表し、旧`sandbox_mode`や`--sandbox`を新しいpermission profileへ重ねない。対象版で実効権限と情報取得経路を確認できない場合はworkerを有効化しない。
 - required agentを起動できない場合、親agentは同一sessionで代行せず、`status = NEEDS_CONTEXT`、`gate = BLOCKED`を返す。
 - agent unavailableを別modelへのsilent fallbackで解消しない。
 
 ### bootstrapを二段階に分ける
 
 - 最初のbootstrap changeでagent定義、review contract、packet builder、result validator、routing policy、v1を使う回帰checkを追加する。この時点では`AGENTS.md`の完了条件を新gateへ切り替えない。
-- bootstrap changeを現行`review-test-value`契約で検証した後、live configへcustom agentを登録し、新しいsessionで起動確認する。live configの変更はrepository changeに含めず、明示的なauthorityを得て行う。
+- bootstrap changeを現行`review-test-value`契約で検証した後、新規の独立workerで隔離、実効model/effort、注入元と公開toolを確認する。native custom-agent registryへの登録はこのtransportの成立条件ではない。必要なlive configや認証の変更はrepository changeに含めず、明示的なauthorityを得て行う。
 - 次のactivation changeでmetadata v2、warning、risk routing、resolution ledger、aggregate gateを実装し、`AGENTS.md`の完了条件を`gate = PASS`へ切り替える。
 - activation changeは新しい二phase workflowで審査する。
 - review result cacheとmodel effortの引き下げは初期activationの完了条件に含めず、運用証拠を得た後に別判断とする。
@@ -165,7 +172,7 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - Phase 1とPhase 2を一つのLuna promptへまとめる: 実行回数は減るが、metadata-only isolationを検証できないため採用しない。
 - 全recordをSolへ渡す: 判断品質を揃えやすいが、明白なschema矛盾やdeclaration checkまで高コストな審査へ送るため採用しない。
 - high-riskをmetadataの自己申告だけで決める: 作者がrisk tagを省略するとSol routingを迂回できるため採用しない。
-- v1 deprecationをerror diagnosticとして返す: path指定modeでv1 recordを読みながら移行する経路まで停止するため採用しない。
+- v1をwarning付きで審査し続ける: 2026-09-05の指定により採用しない。読取りは移行用に残し、v2への書換えと再抽出を審査の前提にする。
 - testを削除した後は空のGit selectionを自動的に`PASS`とする: 移行先policy checkや削除根拠を確認できないため採用しない。
 - agent定義と新gateを同時に有効化する: 現在のsessionが新agentを起動できず、変更自身の完了条件を満たせないため採用しない。
 
@@ -175,10 +182,10 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - Positive: declaration checkを永続behavior testから分離しつつ、policy checkとしての価値は保持できる。
 - Positive: high-risk recordはmetadataの申告漏れだけでSol審査を迂回できない。
 - Positive: `ACCEPT`、保持先、完了gateの意味を分離できる。
-- Positive: v1を読み取り可能なまま、新規・意味変更testへv2を強制できる。
+- Positive: 既存v1を移行用に読み取れる一方、path指定を含むすべての審査対象へv2を要求できる。
 - Negative: 一つのSkill実行に複数のagent turnとschema validationが必要になる。
 - Negative: MOVEとDROPの完了には、record単位のreview resultに加えて一時的なresolution ledgerが必要になる。
-- Negative: custom agent登録後の新sessionでmanual smokeを行うまでactivation changeへ進めない。
+- Negative: 独立workerの新規sessionで隔離smokeを完了するまで標準gateを切り替えられない。形式の準備を先行しても、v2抽出器だけをliveへ部分導入しない。
 - Follow-up: deterministic auditの結果からLunaとSolのdisagreement、latency、token量を比較し、cacheまたはreasoning effort変更を別契約として判断する。
 
 ## Executable Anchors

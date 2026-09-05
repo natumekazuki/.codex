@@ -31,9 +31,18 @@ EXTRACTOR_RESULT_KEYS = {
     "coverage",
     "repository_root",
     "tests",
+    "transitions",
     "diagnostics",
+    "warnings",
 }
-EXTRACTOR_RECORD_KEYS = {"source", "metadata", "source_text", "source_hash", "metadata_hash"}
+EXTRACTOR_RECORD_KEYS = {
+    "source",
+    "metadata_format_version",
+    "metadata",
+    "source_text",
+    "source_hash",
+    "metadata_hash",
+}
 def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -55,12 +64,35 @@ def record_id_for(record: dict[str, Any]) -> str:
     return sha256_text(canonical_json({"locator": locator, "metadata_hash": metadata_hash}))
 
 
+def deleted_record_id_for(record: dict[str, Any]) -> str:
+    source = _object(record.get("source"), "record.source")
+    locator = {
+        "path": _string(source.get("path"), "record.source.path"),
+        "declaration_start_line": _positive_int(
+            source.get("declaration_start_line"),
+            "record.source.declaration_start_line",
+        ),
+    }
+    source_hash = _hash(record.get("source_hash"), "record.source_hash")
+    metadata_hash = _hash(record.get("metadata_hash"), "record.metadata_hash")
+    return sha256_text(
+        canonical_json(
+            {
+                "transition": "DELETED",
+                "locator": locator,
+                "source_hash": source_hash,
+                "metadata_hash": metadata_hash,
+            }
+        )
+    )
+
+
 def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
-    records = _extract_records(extractor_result)
+    records = _extract_packet_records(extractor_result)
     packet_records = []
-    for record in records:
+    for record, deleted in records:
         metadata = _object(record.get("metadata"), "record.metadata")
-        metadata_errors = validate_metadata(metadata)
+        metadata_errors = validate_metadata(metadata, 2)
         if metadata_errors:
             raise PacketError("record.metadata is invalid: " + "; ".join(metadata_errors))
         metadata_hash = _hash(record.get("metadata_hash"), "record.metadata_hash")
@@ -68,15 +100,15 @@ def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
             raise PacketError("record.metadata_hash does not match canonical metadata")
         packet_records.append(
             {
-                "record_id": record_id_for(record),
-                "metadata_format_version": 1,
+                "record_id": deleted_record_id_for(record) if deleted else record_id_for(record),
+                "metadata_format_version": 2,
                 "metadata": metadata,
                 "metadata_hash": metadata_hash,
             }
         )
     _require_unique(packet_records, "record_id")
     return {
-        "review_contract_version": "metadata-review-v1",
+        "review_contract_version": "metadata-review-v2",
         "records": packet_records,
     }
 
@@ -92,8 +124,11 @@ def build_alignment_packet(
     except ResultValidationError as exc:
         raise PacketError(str(exc)) from exc
     review_by_id = {item["record_id"]: item for item in metadata_reviews}
-    extractor_records = _extract_records(extractor_result)
-    records_by_id = {record_id_for(item): item for item in extractor_records}
+    extractor_records = _extract_packet_records(extractor_result)
+    records_by_id = {
+        deleted_record_id_for(item) if deleted else record_id_for(item): item
+        for item, deleted in extractor_records
+    }
     packet_records = []
     for metadata_record in metadata_packet["records"]:
         record_id = metadata_record["record_id"]
@@ -114,7 +149,7 @@ def build_alignment_packet(
             }
         )
     packet = {
-        "review_contract_version": "alignment-review-v1",
+        "review_contract_version": "alignment-review-v2",
         "metadata_result_hash": result_hash(metadata_result),
         "records": packet_records,
     }
@@ -190,27 +225,30 @@ def build_deep_packet(
             }
         )
     packet = {
-        "review_contract_version": "deep-review-v1",
+        "review_contract_version": "deep-review-v2",
         "metadata_result_hash": alignment_packet["metadata_result_hash"],
         "records": deep_records,
     }
     return {**packet, "input_hash": result_hash(packet)}
 
 
-def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
+def _extract_packet_records(
+    extractor_result: dict[str, Any],
+) -> list[tuple[dict[str, Any], bool]]:
     if set(extractor_result) != EXTRACTOR_RESULT_KEYS:
         raise PacketError("extractor result has unexpected keys")
-    if extractor_result.get("schema_version") != 1:
-        raise PacketError("extractor schema_version must be 1")
+    if extractor_result.get("schema_version") != 2:
+        raise PacketError("extractor schema_version must be 2")
     diagnostics = extractor_result.get("diagnostics")
     if diagnostics != []:
         raise PacketError("extractor result must have no diagnostics")
+    if not isinstance(extractor_result.get("warnings"), list):
+        raise PacketError("extractor warnings must be an array")
     records = extractor_result.get("tests")
     if not isinstance(records, list):
         raise PacketError("extractor tests must be an array")
     for record in records:
-        if not isinstance(record, dict) or set(record) != EXTRACTOR_RECORD_KEYS:
-            raise PacketError("extractor test record has unexpected keys")
+        _validate_extractor_record(record, "extractor test record")
     locators = []
     for record in records:
         source = _object(record.get("source"), "record.source")
@@ -227,7 +265,89 @@ def _extract_records(extractor_result: dict[str, Any]) -> list[dict[str, Any]]:
         )
     if len(locators) != len(set(locators)):
         raise PacketError("extractor result contains duplicate record locator")
-    return records
+    transitions = extractor_result.get("transitions")
+    if transitions is None:
+        return [(record, False) for record in records]
+    if not isinstance(transitions, list):
+        raise PacketError("extractor transitions must be null or an array")
+    before_locators = []
+    after_locators = []
+    transition_values = []
+    packet_records = []
+    after_records = []
+    for transition in transitions:
+        if not isinstance(transition, dict) or set(transition) != {"kind", "before", "after"}:
+            raise PacketError("extractor transition has unexpected keys")
+        kind = transition["kind"]
+        if kind not in {"ADDED", "SURVIVED", "DELETED"}:
+            raise PacketError("extractor transition kind is invalid")
+        before = transition["before"]
+        after = transition["after"]
+        if kind == "ADDED":
+            if before is not None:
+                raise PacketError("ADDED transition before must be null")
+            _validate_extractor_record(after, "ADDED transition after")
+            packet_records.append((after, False))
+            after_records.append(after)
+        elif kind == "SURVIVED":
+            _validate_extractor_record(before, "SURVIVED transition before")
+            _validate_extractor_record(after, "SURVIVED transition after")
+            packet_records.append((after, False))
+            after_records.append(after)
+        else:
+            _validate_extractor_record(before, "DELETED transition before")
+            packet_records.append((before, True))
+            if after is not None:
+                raise PacketError("DELETED transition after must be null")
+        if before is not None:
+            before_locators.append(_record_locator(before, "transition.before"))
+        if after is not None:
+            after_locators.append(_record_locator(after, "transition.after"))
+        transition_values.append(canonical_json(transition))
+    if len(before_locators) != len(set(before_locators)):
+        raise PacketError("extractor transitions contain duplicate before locator")
+    if len(after_locators) != len(set(after_locators)):
+        raise PacketError("extractor transitions contain duplicate after locator")
+    if len(transition_values) != len(set(transition_values)):
+        raise PacketError("extractor transitions contain a duplicate transition")
+    if after_records != records:
+        raise PacketError("transition after records do not match extractor tests")
+    return packet_records
+
+
+def _validate_extractor_record(record: Any, name: str) -> None:
+    if not isinstance(record, dict) or set(record) != EXTRACTOR_RECORD_KEYS:
+        raise PacketError(f"{name} has unexpected keys")
+    if record["metadata_format_version"] != 2:
+        raise PacketError(f"{name} metadata_format_version must be 2")
+    source = _object(record.get("source"), f"{name}.source")
+    if set(source) != SOURCE_KEYS:
+        raise PacketError(f"{name}.source has unexpected keys")
+    _string(source.get("path"), f"{name}.source.path")
+    _positive_int(source.get("declaration_start_line"), f"{name}.source.declaration_start_line")
+    _positive_int(source.get("declaration_end_line"), f"{name}.source.declaration_end_line")
+    source_text = _string(record.get("source_text"), f"{name}.source_text")
+    source_hash = _hash(record.get("source_hash"), f"{name}.source_hash")
+    if sha256_text(source_text) != source_hash:
+        raise PacketError(f"{name}.source_hash does not match source_text")
+    metadata = _object(record.get("metadata"), f"{name}.metadata")
+    metadata_errors = validate_metadata(metadata, 2)
+    if metadata_errors:
+        raise PacketError(f"{name}.metadata is invalid: " + "; ".join(metadata_errors))
+    metadata_hash = _hash(record.get("metadata_hash"), f"{name}.metadata_hash")
+    if sha256_text(canonical_json(metadata)) != metadata_hash:
+        raise PacketError(f"{name}.metadata_hash does not match canonical metadata")
+
+
+def _record_locator(record: dict[str, Any], name: str) -> tuple[str, int]:
+    source = _object(record.get("source"), f"{name}.source")
+    return (
+        _string(source.get("path"), f"{name}.source.path"),
+        _positive_int(
+            source.get("declaration_start_line"),
+            f"{name}.source.declaration_start_line",
+        ),
+    )
 
 
 def _validate_context(item: dict[str, Any]) -> dict[str, Any]:

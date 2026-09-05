@@ -7,7 +7,9 @@ description: Python、TypeScript、C#の新規・変更testに隣接する`@test
 
 構造化コメントとtest sourceの対応付けをscriptへ任せ、AIは抽出済みrecordだけを審査する。欠落した値や曖昧な結合を会話内で補完しない。
 
-二段階審査のartifactはbootstrap中であり、runtime activationと新session smokeが完了するまでこのSkillの実行経路には使用しない。`test_value_luna`と`test_value_sol`を必須roleとして起動せず、以下の現行workflowを使う。
+このfeature候補のextractor/packetはv2へ更新中であり、liveへ配布してはならない。下記はliveの旧workflowの記録であり、候補v2出力を旧審査へ渡す手順ではない。候補の直接検証と有効化条件は[runbook](../../docs/runbooks/activate-test-value-review.md)に従う。
+
+二段階審査のruntime activationと新session smokeが完了するまで、この候補を標準実行経路には使用しない。`test_value_luna`と`test_value_sol`を必須roleとして起動せず、以下の現行workflowを使う。
 
 activation条件を満たした後に別途有効化する運用を妨げない。切替条件、隔離実行、aggregate gateは#42〜#45のscopeで扱い、このSkillでは変更しない。
 
@@ -100,13 +102,27 @@ python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_value
 
 ### review packet・schema・routing
 
+出力JSON Schemaの意味検証には、検証用のPython環境へ固定した依存を導入する。抽出器と通常審査のruntime依存ではない。
+
 ```powershell
+python -m pip install -r skills/review-test-value/scripts/requirements-test.txt
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_output_schema.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_resolution.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py
 ```
 
 packet、result schema、routing、判定検証の実装や公開CLI契約を変更した場合に実行する。exit `0`の`tests`だけを審査し、exit `1`/`2`や`NEEDS_CONTEXT`を完了扱いにしない。現在のtest価値審査gateと`test_value_luna`/`test_value_sol`の役割は、このSkill変更で有効化・変更しない。
+
+### worker有効化準備
+
+```powershell
+python -X utf8 -m unittest skills/review-test-value/scripts/test_preflight_review_worker.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/preflight_review_worker.py
+```
+
+このpreflightはversion照会とreadiness報告だけを行い、workerを起動しない。`BLOCKED`を実モデル成功と扱わない。候補版の実行と継続条件は[有効化runbook](../../docs/runbooks/activate-test-value-review.md)を参照する。

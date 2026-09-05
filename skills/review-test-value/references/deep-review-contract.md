@@ -1,4 +1,4 @@
-# Deep Review Contract v1
+# Deep Review Contract v2
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Sol deep reviewは、Lunaだけで閉じないrecord、高リスクrecord、監�
 
 ## Input
 
-packetは`review_contract_version = "deep-review-v1"`、alignment packetと同じ`metadata_result_hash`、`records`、これら三fieldのcanonical JSONから計算した`input_hash`を持つ。builderはalignment packetとは別に固定済みPhase 1 result artifactを受け取り、`metadata_result_hash`と埋め込みreviewを照合してからpacketを構築する。各recordは次を持つ。
+packetは`review_contract_version = "deep-review-v2"`、alignment packetと同じ`metadata_result_hash`、`records`、これら三fieldのcanonical JSONから計算した`input_hash`を持つ。builderはalignment packetとは別に固定済みPhase 1 result artifactを受け取り、`metadata_result_hash`と埋め込みreviewを照合してからpacketを構築する。各recordは次を持つ。
 
 - Phase 1、Phase 2と同じrecord identity、metadata、source、hash
 - 固定済みの`metadata_review`と`alignment_review`
@@ -20,7 +20,7 @@ Solはpacket外を探索しない。alignment recordはallowlist fieldから再�
 
 ```json
 {
-  "review_contract_version": "deep-review-v1",
+  "review_contract_version": "deep-review-v2",
   "input_hash": "sha256:...",
   "reviews": [
     {
@@ -31,6 +31,7 @@ Solはpacket外を探索しない。alignment recordはallowlist fieldから再�
       "evidence": [],
       "unverified": [],
       "context_requirements": [],
+      "context_resolution": null,
       "next_action": null
     }
   ]
@@ -40,3 +41,9 @@ Solはpacket外を探索しない。alignment recordはallowlist fieldから再�
 `input_hash`はdeep packetの`review_contract_version`、`metadata_result_hash`、`records`から計算したSHA-256と一致させる。Sol resultはpacketの`input_hash`をそのまま返す。final aggregatorはdeep packetを再検証してhashを再計算し、別のPhase 1、alignment、routing、bounded contextで得たSol resultの再利用を拒否する。
 
 `verdict`は`APPROVE`、`REDESIGN`、`NEEDS_CONTEXT`のいずれかとする。`APPROVE`と`REDESIGN`は`evidence`を一件以上必要とする。packetだけで閉じられない場合は`NEEDS_CONTEXT`とし、必要なsourceまたは証拠を`context_requirements`へ具体的に挙げる。
+
+## 未確定boundaryの解消
+
+各reviewはnullableな`context_resolution`を必須とする。Lunaの`RECHECK`を解消して`APPROVE`または`REDESIGN`を返す場合は、`actual_boundary`、非空の`actual_observables`、非空の`context_evidence`を持つobjectを返す。`context_evidence`の各要素は`ref`と`content_hash`だけを持ち、同じrecordのdeep packetに含まれるcontextへ一致しなければならない。
+
+`NEEDS_CONTEXT`と、Lunaが`RECHECK`でないrecordでは`context_resolution = null`とする。既知のLuna boundaryと異なる解消を`APPROVE`で上書きしない。反証がある場合は`REDESIGN`を返す。finalは検証済みの型付き解消だけを利用し、自由文や`APPROVE`だけからboundaryを推測しない。Phase 1の`REDESIGN`、Phase 2の`MISMATCH`は解消結果によって救済しない。

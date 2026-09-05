@@ -19,6 +19,7 @@ Astraをroot profileと通常のdesigner / reviewerへ広く適用する案は�
 - runtime modeを`conditional`、`manual`、`off`に分け、既定は`manual`とする。自動投入は親user turnにつき2 role合計1回、同一root sessionで同時1件までとする。spawn、follow-up、retryは枠を消費し、wait、status、結果取得、terminationは消費しない。
 - `hooks/astra-routing.ps1`がmode、turn、予約、実行中agent、manual grant、既知の通常agentをGit管理外のstateで所有する。`PreToolUse`で投入前に予約し、`SubagentStart` / `SubagentStop`で実行状態とagent種別を更新し、`UserPromptSubmit` / `SessionStart`で短い条件を再注入する。follow-upは既知のAstraまたは通常agentだけに許可する。
 - state破損時はAstra自動投入と、対象modelを判定できない既存agentへのfollow-upを継続して拒否する。新しいSol / Luna作業は止めない。Astraが動作中でないことを確認して対象stateを削除した後に再生成する。削除前のagent識別情報は復元せず、そのagentへのfollow-upを拒否する。hook未実行、特殊tool経路、専用role以外のaliasでmodel指定が省略された呼出しまで完全に封鎖したとは扱わず、実runtimeの確認を導入条件に残す。
+- agent作成前のtool失敗を予約元の`tool_use_id`へ結び付けるterminal hookがないruntimeでは、予約を自動解除せずfail closedを維持する。成功、失敗、blocked、cancelledの全終了を識別できるruntime契約と実runtime検証が揃うまで、`conditional`を標準設定へ切り替えない。
 
 ## Consequences
 
@@ -26,6 +27,7 @@ Astraをroot profileと通常のdesigner / reviewerへ広く適用する案は�
 - 一つの難問へAstraを一度だけ投入し、その後の実装と検証をSol / Lunaへ戻せる。
 - runtime stateとhook trustが増える。portable sourceとPowerShell状態遷移の検証だけでは、実hostのhook到達、model read-back、compaction / resume経路を証明できない。
 - follow-up先を既知のAstraまたは通常agentとして識別するには、正常なspawnまたは`SubagentStart`のstateが必要になる。state消失後は既存agentへ継続できず、新しい通常agentを起動する必要がある。
+- terminal hookを通知しないspawn失敗では、予約が残り、そのsessionの後続Astra投入を拒否する。Astraが動作中でないことを確認したoperatorによるstate再生成が必要になる。
 
 ## Policy Anchors
 

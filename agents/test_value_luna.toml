@@ -10,7 +10,7 @@ Rules:
 - Do not edit files or perform Git operations.
 - Accept only one explicitly named phase and its schema-versioned packet.
 - In metadata phase, use only the metadata packet. Do not request, infer, or reconstruct test source, source locations, assertions, production code, oracle bodies, or execution evidence.
-- In metadata phase, return the input metadata_hash and only structured evidence allowed by metadata-review-contract-v1. Never put source-derived prose in evidence.
+- In metadata phase, return the input metadata_hash and only structured evidence allowed by metadata-review-contract-v2. Never put source-derived prose in evidence.
 - In alignment phase, treat the supplied metadata result as frozen. Do not change, reinterpret, or replace its verdict. Compare the supplied metadata with the supplied test source and identify the actual observable and observation boundary.
 - Review every record in the packet, including records whose metadata verdict is REDESIGN.
 - Do not explore the repository or use tools to obtain omitted context. Return NEEDS_CONTEXT or RECHECK with exact context requirements when the packet is insufficient.

@@ -1,5 +1,13 @@
 # テスト価値の二段階審査と保持先判定
 
+## 2026-09-05の継続作業
+
+この計画のbaseと完了チェックは2026-08-31のbootstrap履歴である。#42〜#45の作業baseは`f7ba58ae47263c2a6a46d006c92c1d69ec29f704`であり、下記の旧baseを流用しない。
+
+runtime activationの同一child二turn、follow-up fallback、native registry登録を前提とする未完了手順は、#42〜#45とADR-0022の独立`codex exec`方式に置き換えた。Phase 1、Phase 2、必要なSolは各新規runとし、強制隔離と実効設定を確認する。過去のチェック済み項目は、この新しいtransportの成功証拠ではない。
+
+標準Skillと完了gateは旧方式を維持する。隔離smoke、実モデルE2E、固定した候補自身の新方式審査、新規sessionからの候補読込が揃うまで標準切替を保留する。
+
 ## Goal
 
 - metadataだけで検証上の主張が成立することをLuna Phase 1で確認する。
@@ -7,7 +15,7 @@
 - 曖昧、高リスク、deterministic audit対象のrecordだけを、追加context付きでSolへ昇格する。
 - `status`、`disposition`、record gate、Skill実行全体のaggregate gateを決定的なruleで確定する。
 - declaration checkをpolicy checkへ移し、runtime behaviorを守るtestは実際のobservation boundaryを観測させる。
-- v1の読み取り互換性を維持しながら、新規・意味変更testへmetadata v2を要求する。
+- v1はその場でv2へ移行するためだけに読み取り、path指定を含む審査対象はv2への書換えと再抽出を必須にする。
 - custom agent導入と新gateの有効化を分け、変更自身を審査できないbootstrap循環を避ける。
 
 ## Task Boundary
@@ -17,7 +25,7 @@
 - Canonical owner:
   - 抽出、schema validation、packet構築、output validation、deterministic aggregationは`skills/review-test-value/scripts/`が所有する。
   - Phaseごとの意味論は`skills/review-test-value/references/`が所有する。
-  - model、reasoning effort、sandbox、role固有の禁止事項は`agents/*.toml`が所有する。
+  - model、reasoning effort、role固有の禁止事項は`agents/*.toml`が所有する。独立workerの限定read権限はrunnerが所有し、旧sandbox設定を重ねない。
   - Skillの呼び出し順とfail-closed workflowは`skills/review-test-value/SKILL.md`が所有する。
   - task共通の完了条件は、activation時に`AGENTS.md`へ反映する。
 - Authority:
@@ -34,18 +42,18 @@
 - Failure mode / consumer impact: test sourceやassertion summaryがPhase 1へ漏れ、自己完結していないmetadataが`VALID`になる。
 - State transitions / failure timing: extractor成功後、Phase 1 agent起動前のpacket構築時に拒否する。
 - Direct verification: Phase 1 packetに`source_text`、source line、assertion summary、oracle本文を混入させるfixtureを拒否し、agent outputのsource evidenceもschema違反にする。
-- Independent review trigger: activation前にcustom agent manual smokeで実際の二turn境界を確認する。
+- Independent review trigger: activation前に新規の独立`codex exec`でmetadata-only隔離と実効設定を確認する。
 - Gate: ready。
 
 ### RTV-202: Phase 1結果を固定したまま全recordのPhase 2を完了する
 
 - Accepted anchor: ADR-0022のPhase 2必須化とfrozen result契約。
 - Scope / owner: Phase 2 packet builder、alignment review contract、review result validator。
-- Siblings in scope: Phase 1の`VALID`、`REDESIGN`、`NEEDS_CONTEXT`、Luna follow-up対応runtime、非対応runtime。
+- Siblings in scope: Phase 1の`VALID`、`REDESIGN`、`NEEDS_CONTEXT`、各phaseの新規独立workerとその失敗経路。
 - Failure mode / consumer impact: Phase 1の不合格が本文閲覧後に書き換えられる、または明白なPhase 1不合格を理由にPhase 2が省略され、actual boundaryと保持先を判断できない。
 - State transitions / failure timing: Phase 1 validation完了時にhash付きresultを固定し、Phase 2 output validation時に同一性を確認する。
 - Direct verification: 全Phase 1 verdictでPhase 2 packetが生成されること、改変したPhase 1 resultとrecord集合、locator、hashの不一致が拒否されることを検証する。
-- Independent review trigger: RTV-201と同じmanual smokeで同じchildへのfollow-upと二child fallbackを確認する。
+- Independent review trigger: RTV-201と同じsmokeで、独立したPhase 2へのfrozen結果の明示入力と改変拒否を確認する。
 - Gate: ready。
 
 ### RTV-203: routingはriskの申告漏れでdowngradeされない
@@ -81,25 +89,25 @@
 - Independent review trigger: RTV-203と同じactivation reviewで確認する。
 - Gate: ready。
 
-### RTV-206: v1互換とv2強制をexit statusで区別する
+### RTV-206: v1の読取りを移行に限定し、v2再抽出後に審査する
 
 - Accepted anchor: ADR-0022のmetadata v2とv1互換契約。
 - Scope / owner: marker scanning、metadata schema、output projection、Git selection integration。
 - Siblings in scope: path指定modeのv1、Git modeで選択されたv1、未変更v1、v2、v1 / v2混在source、Python、TypeScript、C#。
-- Failure mode / consumer impact: deprecation warningだけでpath指定modeがexit `1`になりmigrationできない、または変更v1がwarningだけで新gateを通過する。
-- State transitions / failure timing: record binding後にmetadata versionとselection reasonを評価し、warningとerrorを別projectionへ出す。
-- Direct verification: 各modeと各言語で`warnings`、`diagnostics`、exit `0 / 1 / 2`、canonical metadata hashを検証する。
+- Failure mode / consumer impact: path指定またはGit modeでv1のまま評価を続ける、あるいは混在入力のv1を除外して移行義務を消す。
+- State transitions / failure timing: 対象v1の読取り後は移行要求で停止する。同じ作業でv2へ書き直し、元の選択条件による再抽出が成功した後だけ審査packetを生成する。
+- Direct verification: 各modeと各言語でv1の読取可能性とexit `1`、v1 packet拒否、混在入力の停止、v2移行後の再抽出成功、未選択v1の非移行を確認する。
 - Independent review trigger: RTV-203と同じactivation reviewで確認する。
 - Gate: ready。
 
 ### RTV-207: required agentを利用できないとき親agentが代行しない
 
 - Accepted anchor: ADR-0022のfail-closedとbootstrap契約。
-- Scope / owner: agent TOML、Skill orchestration、result validator、live config導入手順。
-- Siblings in scope: Luna unavailable、Sol不要、Sol requiredかつunavailable、follow-up非対応runtime、Spark routing mode。
+- Scope / owner: agent TOML、独立worker runner、result validator、明示承認された認証と設定の導入手順。
+- Siblings in scope: Luna unavailable、Sol不要、Sol requiredかつunavailable、未検証runtime、親のrouting modeが異なる構成。
 - Failure mode / consumer impact: required modelを起動できない環境で別modelまたは親agentが審査し、同じ品質契約を満たしたように報告する。
 - State transitions / failure timing: required agentの起動失敗時に`NEEDS_CONTEXT / BLOCKED`へ確定し、review packetを別roleへ送らない。
-- Direct verification: agent unavailable fixture、agent TOMLのmodel / effort / sandbox static check、各routing modeのmanual smokeを行う。
+- Direct verification: unavailable fixture、roleのmodel/effortとworkerの実効権限の照合、各親構成の独立worker smokeを行う。
 - Independent review trigger: bootstrap changeとactivation changeをそれぞれcommit-bound reviewする。
 - Gate: ready。
 
@@ -146,9 +154,9 @@
 
 ### Runtime activation
 
-- [ ] live configへ二roleを登録するauthorityをユーザーへ確認する。
-- [ ] 許可後にlive configを更新し、登録結果をread-backする。
-- [ ] 新しいCodex sessionでLuna Phase 1、同じchildへのPhase 2、二child fallbackをsmoke testする。
+- [ ] 同じ独立worker実行に結合された実効model/effort、toolとcontextの検証経路を用意する。
+- [ ] 必要な認証やlive設定の変更だけを明示承認後に適用し、結果をread-backする。native registry登録を必須にしない。
+- [ ] 新規の独立`codex exec`を各Luna phaseとSolに使い、隔離とfrozen結果の照合をsmoke testする。
 - [ ] Sol不要recordでSolを起動しないことを確認する。
 - [ ] `RECHECK`、high-risk、audit recordでSolを起動することを確認する。
 - [ ] required agent unavailable時に親agentが代行しないことを確認する。
@@ -177,8 +185,8 @@
 - [ ] `@test-value v2`と`fault`、`observable`、optional `impact`、`observation_boundary`を追加する。
 - [ ] optional `risk_tags`とephemeral用`remove_when`を追加する。
 - [ ] output schema v2で`diagnostics`と`warnings`を分離する。
-- [ ] path指定modeのv1をwarning、Git modeで選択されたv1をerrorにする。
-- [ ] Python、TypeScript、C#でv1とv2を同じrunへ投影する。
+- [ ] 両modeの審査対象v1は読取り後に移行要求を返し、v2へ移行して再抽出するまで審査を開始しない。
+- [ ] Python、TypeScript、C#の混在v1/v2入力を移行用に読み取り、審査packetは検証済みv2だけにする。
 - [ ] MOVE / DROP resolution ledgerとaggregate gateを追加する。
 - [ ] 必須回帰caseとdeterministic auditを追加する。
 - [ ] `SKILL.md`、`AGENTS.md`、README、Skill UI metadataを新workflowへ更新する。
@@ -210,7 +218,7 @@
 - 同じcanonical locator bytesとreview contract versionは同じaudit選択結果を返す。
 - metadataにrisk tagがなくても、親risk contextのtagでSolへ昇格する。
 - `MOVE_TO_POLICY_CHECK`と`DROP`は元recordが消えただけではaggregate `PASS`にならない。
-- path指定modeのv1はwarningでexit `0`、Git modeで選択されたv1はerrorでexit `1`になる。
+- 両modeの対象v1は移行要求でexit `1`となり、v2への書換えと同じ選択条件での再抽出が成功するまで評価を続行しない。
 
 ## Validation
 
@@ -245,8 +253,8 @@ python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-valu
 Runtime activationでは次をmanual smokeする。
 
 - `test_value_luna`のPhase 1がmetadata-only schemaを返す。
-- frozen Phase 1 resultを同じchildへ渡したPhase 2がalignment schemaを返す。
-- follow-up非対応時の二child fallbackでもPhase 1へtest sourceを渡さない。
+- frozen Phase 1 resultを別の新規独立workerへ明示入力したPhase 2がalignment schemaを返す。
+- Phase 1にはtest source、親履歴、他phaseのartifactを渡さず、直接読取要求も強制拒否する。
 - `NEEDS_CONTEXT`、`RECHECK`、high-risk、audit対象、またはbounded contextが必要なrecordだけが`test_value_sol`へ昇格する。
 - balanced、spark-first、standard-onlyの各modeでagent TOMLのmodelが維持される。
 - required agent unavailable時に親agentが代行せず`BLOCKED`になる。
@@ -265,5 +273,5 @@ Runtime activationでは次をmanual smokeする。
 - 同じLuna threadがPhase 2でPhase 1を補正する可能性がある。親側でresultを固定し、Phase 2 schemaへPhase 1 verdictの再出力を持たせない。
 - Solがself-containedでないmetadataを追加contextから救済する可能性がある。high-riskまたはaudit対象のPhase 1 `REDESIGN`はSolへ送るが、frozen verdictを変更させずfinal `REDESIGN / CHANGES_REQUIRED`を維持する。それ以外の明白なPhase 1 `REDESIGN`はSolへ送らない。
 - declaration checkの移行先が存在しない場合がある。`MOVE_TO_POLICY_CHECK`を`PASS`にせず、移行先とdirect checkをresolution ledgerで要求する。
-- custom agentが現在のsessionで利用できない。bootstrap changeとactivationを分け、live config反映後の新sessionでsmokeを完了する。
+- 現在のreadiness実装にはworker起動経路がない。bootstrapとactivationを分け、実効境界の検証経路とworkerを実装した後、新規sessionでsmokeを完了する。
 - metadataだけではhigh-riskを完全に分類できない。親workflowのrisk contextを和集合にし、metadataからdowngradeできないようにする。

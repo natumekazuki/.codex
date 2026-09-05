@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strictly validate phase results and aggregate Bootstrap record outcomes."""
+"""Strictly validate phase results and aggregate record outcomes."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from review_routing import (
     decide_disposition,
     decide_gate,
     unavailable_result,
+    BOUNDARIES,
     validate_routing_manifest,
 )
 
@@ -56,15 +57,25 @@ DEEP_RECORD_KEYS = ALIGNMENT_RECORD_KEYS | {
 METADATA_EVIDENCE_KEYS = {"fields", "finding"}
 METADATA_EVIDENCE_FINDINGS = {
     "SELF_CONTAINED_CLAIM",
-    "CONCRETE_FAILURE_MODE",
+    "CONCRETE_FAULT",
     "COHERENT_BOUNDARY",
     "LIFECYCLE_ALIGNED",
     "ORACLE_DECLARED",
+    "CLAIM_NOT_FALSIFIABLE",
+    "FAULT_NOT_SPECIFIC",
+    "BOUNDARY_INCONSISTENT",
+    "ORACLE_CIRCULAR",
+}
+NEGATIVE_METADATA_FINDINGS = {
+    "CLAIM_NOT_FALSIFIABLE",
+    "FAULT_NOT_SPECIFIC",
+    "BOUNDARY_INCONSISTENT",
+    "ORACLE_CIRCULAR",
 }
 
 PHASE_SPECS = {
     "metadata": {
-        "version": "metadata-review-v1",
+        "version": "metadata-review-v2",
         "verdicts": {"VALID", "REDESIGN", "NEEDS_CONTEXT"},
         "keys": {
             "record_id",
@@ -76,14 +87,13 @@ PHASE_SPECS = {
         },
     },
     "alignment": {
-        "version": "alignment-review-v1",
+        "version": "alignment-review-v2",
         "verdicts": {"ALIGNED", "MISMATCH", "RECHECK"},
         "keys": {
             "record_id",
             "metadata_hash",
             "source_hash",
             "verdict",
-            "declared_boundary",
             "actual_boundary",
             "actual_observables",
             "overclaim",
@@ -95,7 +105,7 @@ PHASE_SPECS = {
         },
     },
     "deep": {
-        "version": "deep-review-v1",
+        "version": "deep-review-v2",
         "verdicts": {"APPROVE", "REDESIGN", "NEEDS_CONTEXT"},
         "keys": {
             "record_id",
@@ -105,10 +115,127 @@ PHASE_SPECS = {
             "evidence",
             "unverified",
             "context_requirements",
+            "context_resolution",
             "next_action",
         },
     },
 }
+
+_SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
+def phase_result_schema(phase: str) -> dict[str, Any]:
+    """Build the codex exec output schema for one v2 review phase.
+
+    This schema describes the result shape and local field constraints. Packet
+    identity, review order, hashes, and frozen-result comparisons remain the
+    responsibility of ``validate_phase_result``.
+    """
+    try:
+        spec = PHASE_SPECS[phase]
+    except KeyError as exc:
+        raise ResultValidationError(f"unknown phase: {phase}") from exc
+
+    # Keep this to the Codex Structured Outputs supported subset. Local
+    # non-empty, conditional, hash, order, and packet checks stay in the
+    # executable validator below.
+    string = {"type": "string"}
+    string_list = {"type": "array", "items": string}
+    hash_string = {"type": "string"}
+    review_properties: dict[str, Any] = {
+        "record_id": hash_string,
+        "metadata_hash": hash_string,
+        "verdict": {"type": "string", "enum": sorted(spec["verdicts"])},
+        "evidence": string_list,
+        "unverified": string_list,
+        "next_action": {"type": ["string", "null"]},
+    }
+    if phase != "metadata":
+        review_properties.update(
+            {
+                "source_hash": hash_string,
+                "context_requirements": string_list,
+            }
+        )
+    if phase == "metadata":
+        review_properties["evidence"] = {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["fields", "finding"],
+                "properties": {
+                    "fields": {
+                        "type": "array",
+                        "items": string,
+                    },
+                    "finding": {
+                        "type": "string",
+                        "enum": sorted(METADATA_EVIDENCE_FINDINGS),
+                    },
+                },
+            },
+        }
+    elif phase == "alignment":
+        review_properties.update(
+            {
+                "actual_boundary": {
+                    "type": ["string", "null"],
+                    "enum": [*sorted(BOUNDARIES), None],
+                },
+                "actual_observables": string_list,
+                "overclaim": {"type": "boolean"},
+                "disposition_candidate": {
+                    "type": ["string", "null"],
+                    "enum": [
+                        "KEEP_PERMANENT",
+                        "KEEP_TEMPORARY",
+                        "MOVE_TO_POLICY_CHECK",
+                        "DROP",
+                        None,
+                    ],
+                },
+            }
+        )
+    elif phase == "deep":
+        review_properties["context_resolution"] = {
+            "type": ["object", "null"],
+            "additionalProperties": False,
+            "required": ["actual_boundary", "actual_observables", "context_evidence"],
+            "properties": {
+                "actual_boundary": {"type": "string", "enum": sorted(BOUNDARIES)},
+                "actual_observables": string_list,
+                "context_evidence": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["ref", "content_hash"],
+                        "properties": {"ref": string, "content_hash": hash_string},
+                    },
+                },
+            },
+        }
+    review_schema: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": sorted(spec["keys"]),
+        "properties": review_properties,
+    }
+    top_properties: dict[str, Any] = {
+        "review_contract_version": {"type": "string", "enum": [spec["version"]]},
+        "reviews": {"type": "array", "items": review_schema},
+    }
+    required = ["review_contract_version", "reviews"]
+    if phase == "deep":
+        top_properties["input_hash"] = hash_string
+        required.append("input_hash")
+    return {
+        "$schema": _SCHEMA_DRAFT,
+        "title": f"{spec['version']} result",
+        "type": "object",
+        "additionalProperties": False,
+        "required": required,
+        "properties": top_properties,
+    }
 
 
 def validate_phase_result(
@@ -175,18 +302,24 @@ def validate_phase_result(
                 raise ResultValidationError("source_hash does not match the packet")
             _string_list(review["context_requirements"], "review.context_requirements")
         if phase == "alignment":
-            _validate_alignment(review)
+            _validate_alignment(review, expected)
         if phase == "metadata" and review["verdict"] == "NEEDS_CONTEXT":
             if not review["unverified"] or review["next_action"] is None:
                 raise ResultValidationError("metadata NEEDS_CONTEXT requires unverified and next_action")
         if phase == "metadata" and review["verdict"] in {"VALID", "REDESIGN"}:
             if not review["evidence"]:
                 raise ResultValidationError("completed metadata verdict requires evidence")
+            findings = {item["finding"] for item in review["evidence"]}
+            if review["verdict"] == "VALID" and findings & NEGATIVE_METADATA_FINDINGS:
+                raise ResultValidationError("VALID metadata review must not contain negative findings")
+            if review["verdict"] == "REDESIGN" and not findings & NEGATIVE_METADATA_FINDINGS:
+                raise ResultValidationError("REDESIGN metadata review requires a negative finding")
         if phase == "deep":
             if review["verdict"] in {"APPROVE", "REDESIGN"} and not review["evidence"]:
                 raise ResultValidationError("completed deep verdict requires evidence")
             if review["verdict"] == "NEEDS_CONTEXT" and not review["context_requirements"]:
                 raise ResultValidationError("deep NEEDS_CONTEXT requires context_requirements")
+            _validate_context_resolution(review, expected)
     if review_ids != expected_ids:
         raise ResultValidationError("review record set or order does not match the packet")
     return result
@@ -205,7 +338,7 @@ def validate_alignment_packet(
         "records",
     }:
         raise ResultValidationError("alignment packet has unexpected keys")
-    if packet["review_contract_version"] != "alignment-review-v1":
+    if packet["review_contract_version"] != "alignment-review-v2":
         raise ResultValidationError("alignment packet contract version is invalid")
     records = packet["records"]
     if not isinstance(records, list):
@@ -242,7 +375,7 @@ def validate_deep_packet(
         "records",
     }:
         raise ResultValidationError("deep packet has unexpected keys")
-    if packet["review_contract_version"] != "deep-review-v1":
+    if packet["review_contract_version"] != "deep-review-v2":
         raise ResultValidationError("deep packet contract version is invalid")
     if packet["metadata_result_hash"] != alignment_packet["metadata_result_hash"]:
         raise ResultValidationError("deep packet metadata_result_hash does not match alignment")
@@ -367,12 +500,18 @@ def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
                     sol_verdict=sol_review["verdict"] if sol_review is not None else None,
                 )
                 retention = retention_by_id[record_id]
+                actual_boundary = alignment_review["actual_boundary"]
+                if alignment_review["verdict"] == "RECHECK" and sol_review is not None:
+                    resolution = sol_review["context_resolution"]
+                    if resolution is not None:
+                        actual_boundary = resolution["actual_boundary"]
                 disposition = decide_disposition(
-                    actual_boundary=alignment_review["actual_boundary"],
+                    actual_boundary=actual_boundary,
                     lifecycle=metadata["lifecycle"],
                     retention_basis=retention["retention_basis"],
                     expires_on=metadata.get("expires_on"),
                     review_when=metadata.get("review_when"),
+                    remove_when=metadata.get("remove_when"),
                 )
                 if disposition is None:
                     outcome = unavailable_result()
@@ -386,7 +525,7 @@ def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
     except (KeyError, TypeError, ValueError) as exc:
         raise ResultValidationError(str(exc)) from exc
     return {
-        "review_contract_version": "review-final-v1",
+        "review_contract_version": "review-final-v2",
         "records": final_records,
         "gate": aggregate_gate([record["gate"] for record in final_records]),
     }
@@ -399,11 +538,11 @@ def _validate_alignment_record(record: Any) -> None:
     if not isinstance(source, dict) or set(source) != SOURCE_KEYS:
         raise ResultValidationError("alignment packet source has unexpected keys")
     metadata = record["metadata"]
-    errors = validate_metadata(metadata)
+    errors = validate_metadata(metadata, 2)
     if errors:
         raise ResultValidationError("record.metadata is invalid: " + "; ".join(errors))
-    if record["metadata_format_version"] != 1:
-        raise ResultValidationError("metadata_format_version must be 1")
+    if record["metadata_format_version"] != 2:
+        raise ResultValidationError("metadata_format_version must be 2")
     if record["metadata_hash"] != _sha256_text(_canonical_json(metadata)):
         raise ResultValidationError("alignment packet metadata_hash does not match metadata")
     if record["source_hash"] != _sha256_text(_string(record["source_text"], "record.source_text")):
@@ -414,11 +553,23 @@ def _validate_alignment_record(record: Any) -> None:
             source["declaration_start_line"], "record.source.declaration_start_line"
         ),
     }
-    expected_id = _sha256_text(
+    current_id = _sha256_text(
         _canonical_json({"locator": locator, "metadata_hash": record["metadata_hash"]})
     )
-    if record["record_id"] != expected_id:
-        raise ResultValidationError("record_id does not match source locator and metadata_hash")
+    deleted_id = _sha256_text(
+        _canonical_json(
+            {
+                "transition": "DELETED",
+                "locator": locator,
+                "source_hash": record["source_hash"],
+                "metadata_hash": record["metadata_hash"],
+            }
+        )
+    )
+    if record["record_id"] not in {current_id, deleted_id}:
+        raise ResultValidationError(
+            "record_id does not match the current or deleted source identity"
+        )
     _string(source["symbol"], "record.source.symbol")
     metadata_start = _positive_int(
         source["metadata_start_line"], "record.source.metadata_start_line"
@@ -503,27 +654,25 @@ def _validate_retention_records(
     return by_id
 
 
-def _validate_alignment(review: dict[str, Any]) -> None:
-    boundaries = {"consumer", "public-boundary", "component-behavior", "declaration", "implementation"}
-    if review["actual_boundary"] not in boundaries:
+def _validate_alignment(review: dict[str, Any], expected: dict[str, Any]) -> None:
+    actual_boundary = review["actual_boundary"]
+    if actual_boundary is not None and actual_boundary not in BOUNDARIES:
         raise ResultValidationError("actual_boundary is invalid")
-    if review["declared_boundary"] is not None and review["declared_boundary"] not in boundaries:
-        raise ResultValidationError("declared_boundary is invalid")
     observables = _string_list(review["actual_observables"], "review.actual_observables")
-    if not observables:
-        raise ResultValidationError("actual_observables must not be empty")
     if not isinstance(review["overclaim"], bool):
         raise ResultValidationError("overclaim must be a boolean")
     if review["verdict"] == "ALIGNED":
+        if actual_boundary is None or not observables:
+            raise ResultValidationError("ALIGNED review requires a boundary and observables")
         if review["overclaim"]:
             raise ResultValidationError("ALIGNED review must not report overclaim")
-        if (
-            review["declared_boundary"] is not None
-            and review["declared_boundary"] != review["actual_boundary"]
-        ):
+        metadata = expected.get("metadata")
+        if not isinstance(metadata, dict) or metadata.get("observation_boundary") != actual_boundary:
             raise ResultValidationError(
-                "ALIGNED review must match declared_boundary and actual_boundary"
+                "ALIGNED review must match metadata observation_boundary"
             )
+    if review["verdict"] == "MISMATCH" and (actual_boundary is None or not observables):
+        raise ResultValidationError("MISMATCH review requires a boundary and observables")
     candidates = {"KEEP_PERMANENT", "KEEP_TEMPORARY", "MOVE_TO_POLICY_CHECK", "DROP", None}
     if review["disposition_candidate"] not in candidates:
         raise ResultValidationError("disposition_candidate is invalid")
@@ -531,6 +680,55 @@ def _validate_alignment(review: dict[str, Any]) -> None:
         raise ResultValidationError("completed alignment verdict requires evidence")
     if review["verdict"] == "RECHECK" and not review["context_requirements"]:
         raise ResultValidationError("RECHECK requires context_requirements")
+
+
+def _validate_context_resolution(review: dict[str, Any], expected: dict[str, Any]) -> None:
+    alignment_review = expected.get("alignment_review")
+    if not isinstance(alignment_review, dict):
+        raise ResultValidationError("deep packet alignment_review is invalid")
+    resolution = review["context_resolution"]
+    completed = review["verdict"] in {"APPROVE", "REDESIGN"}
+    if alignment_review.get("verdict") != "RECHECK":
+        if resolution is not None:
+            raise ResultValidationError("non-RECHECK deep review must not resolve context")
+        return
+    if not completed:
+        if resolution is not None:
+            raise ResultValidationError("NEEDS_CONTEXT deep review must not resolve context")
+        return
+    if not isinstance(resolution, dict) or set(resolution) != {
+        "actual_boundary",
+        "actual_observables",
+        "context_evidence",
+    }:
+        raise ResultValidationError("completed RECHECK deep review requires context_resolution")
+    boundary = resolution["actual_boundary"]
+    if boundary not in BOUNDARIES:
+        raise ResultValidationError("context_resolution actual_boundary is invalid")
+    observables = _string_list(
+        resolution["actual_observables"], "context_resolution.actual_observables"
+    )
+    if not observables:
+        raise ResultValidationError("context_resolution actual_observables must not be empty")
+    evidence = resolution["context_evidence"]
+    if not isinstance(evidence, list) or not evidence:
+        raise ResultValidationError("context_resolution context_evidence must not be empty")
+    available = set()
+    for context in expected.get("context", []):
+        if isinstance(context, dict):
+            available.add((context.get("ref"), context.get("content_hash")))
+    for item in evidence:
+        if not isinstance(item, dict) or set(item) != {"ref", "content_hash"}:
+            raise ResultValidationError("context_resolution evidence has unexpected keys")
+        pair = (
+            _string(item["ref"], "context_resolution context ref"),
+            _string(item["content_hash"], "context_resolution context hash"),
+        )
+        if pair not in available:
+            raise ResultValidationError("context_resolution evidence does not match deep context")
+    luna_boundary = alignment_review.get("actual_boundary")
+    if review["verdict"] == "APPROVE" and luna_boundary is not None and boundary != luna_boundary:
+        raise ResultValidationError("APPROVE context_resolution contradicts known Luna boundary")
 
 
 def _string(value: Any, name: str) -> str:
@@ -554,11 +752,20 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("phase", choices=["metadata", "alignment", "deep", "aggregate"])
-    parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("phase", nargs="?", choices=["metadata", "alignment", "deep", "aggregate"])
+    parser.add_argument("--input", type=Path)
     parser.add_argument("--packet", type=Path)
+    parser.add_argument("--emit-schema", choices=["metadata", "alignment", "deep"])
     args = parser.parse_args()
     try:
+        if args.emit_schema is not None:
+            if args.phase is not None or args.input is not None or args.packet is not None:
+                raise ResultValidationError("--emit-schema cannot be combined with phase, --input, or --packet")
+            output = phase_result_schema(args.emit_schema)
+            print(json.dumps(output, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+            return 0
+        if args.phase is None or args.input is None:
+            raise ResultValidationError("phase and --input are required unless --emit-schema is used")
         value = _read_json(args.input)
         if args.phase == "aggregate":
             output = aggregate_results(value)

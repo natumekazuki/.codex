@@ -108,6 +108,208 @@ function New-State {
     }
 }
 
+function Test-JsonObjectShape {
+    param($Value, [string[]]$PropertyNames)
+
+    if ($null -eq $Value -or $Value -isnot [pscustomobject]) {
+        return $false
+    }
+    $actualNames = @($Value.PSObject.Properties.Name | Sort-Object)
+    $expectedNames = @($PropertyNames | Sort-Object)
+    return (($actualNames -join "`n") -ceq ($expectedNames -join "`n"))
+}
+
+function Test-JsonIntegerInRange {
+    param($Value, [long]$Minimum, [long]$Maximum)
+
+    $integerTypes = @(
+        [byte], [sbyte], [int16], [uint16], [int32], [uint32], [int64], [uint64]
+    )
+    if (-not ($integerTypes | Where-Object { $Value -is $_ })) {
+        return $false
+    }
+    try {
+        $number = [decimal]$Value
+        return ($number -ge $Minimum -and $number -le $Maximum)
+    } catch {
+        return $false
+    }
+}
+
+function Test-RoundTripTimestamp {
+    param($Value)
+
+    if ($Value -is [DateTime]) {
+        return $Value.Kind -eq [DateTimeKind]::Utc
+    }
+    if ($Value -is [DateTimeOffset]) {
+        return $Value.Offset -eq [TimeSpan]::Zero
+    }
+    if ($Value -isnot [string] -or [string]::IsNullOrWhiteSpace($Value)) {
+        return $false
+    }
+    $parsed = [DateTimeOffset]::MinValue
+    return [DateTimeOffset]::TryParseExact(
+        $Value,
+        'o',
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind,
+        [ref]$parsed
+    )
+}
+
+function Test-AstraAgentRecord {
+    param($Value)
+
+    if (-not (Test-JsonObjectShape -Value $Value -PropertyNames @('agentId', 'taskName', 'role'))) {
+        return $false
+    }
+    return (
+        $Value.agentId -is [string] -and
+        -not [string]::IsNullOrWhiteSpace($Value.agentId) -and
+        $Value.taskName -is [string] -and
+        $Value.role -is [string] -and
+        $astraRoles -contains $Value.role
+    )
+}
+
+function Test-NonAstraAgentRecord {
+    param($Value)
+
+    if (-not (Test-JsonObjectShape -Value $Value -PropertyNames @('agentId', 'taskName', 'role'))) {
+        return $false
+    }
+    return (
+        $Value.agentId -is [string] -and
+        $Value.taskName -is [string] -and
+        (-not [string]::IsNullOrWhiteSpace($Value.agentId) -or -not [string]::IsNullOrWhiteSpace($Value.taskName)) -and
+        $Value.role -is [string] -and
+        $knownNonAstraRoles -contains $Value.role
+    )
+}
+
+function Test-AstraRoutingState {
+    param($State, [string]$SessionId)
+
+    $rootProperties = @(
+        'version', 'sessionId', 'currentTurnId', 'automaticRemaining', 'recoveryRequired',
+        'pendingAstra', 'activeAstra', 'knownAstraAgents', 'knownNonAstraAgents', 'manualGrant', 'updatedAt'
+    )
+    if (-not (Test-JsonObjectShape -Value $State -PropertyNames $rootProperties)) {
+        return $false
+    }
+    if (-not (Test-JsonIntegerInRange -Value $State.version -Minimum $stateVersion -Maximum $stateVersion)) {
+        return $false
+    }
+    if ($State.sessionId -isnot [string] -or $State.sessionId -cne $SessionId) {
+        return $false
+    }
+    if ($State.currentTurnId -isnot [string] -or [string]::IsNullOrWhiteSpace($State.currentTurnId)) {
+        return $false
+    }
+    if (-not (Test-JsonIntegerInRange -Value $State.automaticRemaining -Minimum 0 -Maximum 1)) {
+        return $false
+    }
+    if ($State.recoveryRequired -isnot [bool] -or -not (Test-RoundTripTimestamp -Value $State.updatedAt)) {
+        return $false
+    }
+    if ($State.knownAstraAgents -isnot [array] -or $State.knownNonAstraAgents -isnot [array]) {
+        return $false
+    }
+
+    $knownAgentIds = @{}
+    foreach ($known in $State.knownAstraAgents) {
+        if (-not (Test-AstraAgentRecord -Value $known) -or $knownAgentIds.ContainsKey($known.agentId)) {
+            return $false
+        }
+        $knownAgentIds[$known.agentId] = $known
+    }
+
+    $knownNonAstraAgentIds = @{}
+    $knownNonAstraTaskNames = @{}
+    foreach ($known in $State.knownNonAstraAgents) {
+        if (-not (Test-NonAstraAgentRecord -Value $known)) {
+            return $false
+        }
+        if (-not [string]::IsNullOrWhiteSpace($known.agentId)) {
+            if ($knownNonAstraAgentIds.ContainsKey($known.agentId)) {
+                return $false
+            }
+            $knownNonAstraAgentIds[$known.agentId] = $true
+        }
+        if (-not [string]::IsNullOrWhiteSpace($known.taskName)) {
+            if ($knownNonAstraTaskNames.ContainsKey($known.taskName)) {
+                return $false
+            }
+            $knownNonAstraTaskNames[$known.taskName] = $true
+        }
+    }
+
+    if ($null -ne $State.activeAstra) {
+        if (-not (Test-AstraAgentRecord -Value $State.activeAstra)) {
+            return $false
+        }
+        $activeId = $State.activeAstra.agentId
+        if (-not $knownAgentIds.ContainsKey($activeId)) {
+            return $false
+        }
+        $knownActive = $knownAgentIds[$activeId]
+        if ($knownActive.taskName -cne $State.activeAstra.taskName -or $knownActive.role -cne $State.activeAstra.role) {
+            return $false
+        }
+    }
+
+    if ($null -ne $State.pendingAstra) {
+        $pendingProperties = @('toolUseId', 'action', 'role', 'taskName', 'turnId')
+        if (-not (Test-JsonObjectShape -Value $State.pendingAstra -PropertyNames $pendingProperties)) {
+            return $false
+        }
+        if (
+            $State.pendingAstra.toolUseId -isnot [string] -or [string]::IsNullOrWhiteSpace($State.pendingAstra.toolUseId) -or
+            $State.pendingAstra.action -isnot [string] -or @('spawn', 'followup') -notcontains $State.pendingAstra.action -or
+            $State.pendingAstra.role -isnot [string] -or $astraRoles -notcontains $State.pendingAstra.role -or
+            $State.pendingAstra.taskName -isnot [string] -or [string]::IsNullOrWhiteSpace($State.pendingAstra.taskName) -or
+            $State.pendingAstra.turnId -isnot [string] -or [string]::IsNullOrWhiteSpace($State.pendingAstra.turnId)
+        ) {
+            return $false
+        }
+    }
+    if ($null -ne $State.activeAstra -and $null -ne $State.pendingAstra) {
+        return $false
+    }
+
+    if ($null -ne $State.manualGrant) {
+        $grantProperties = @('turnId', 'roles', 'remaining', 'updatedAt')
+        if (-not (Test-JsonObjectShape -Value $State.manualGrant -PropertyNames $grantProperties)) {
+            return $false
+        }
+        if (
+            $State.manualGrant.turnId -isnot [string] -or $State.manualGrant.turnId -cne $State.currentTurnId -or
+            $State.manualGrant.roles -isnot [array] -or $State.manualGrant.roles.Count -lt 1 -or
+            -not (Test-JsonIntegerInRange -Value $State.manualGrant.remaining -Minimum 0 -Maximum ([int]::MaxValue)) -or
+            -not (Test-RoundTripTimestamp -Value $State.manualGrant.updatedAt)
+        ) {
+            return $false
+        }
+        $grantRoles = @($State.manualGrant.roles)
+        if (@($grantRoles | Where-Object { $_ -isnot [string] -or $astraRoles -notcontains $_ }).Count -gt 0) {
+            return $false
+        }
+    }
+
+    if ([bool]$State.recoveryRequired -and (
+        [int]$State.automaticRemaining -ne 0 -or
+        $null -ne $State.pendingAstra -or
+        $null -ne $State.activeAstra -or
+        $State.knownAstraAgents.Count -ne 0 -or
+        $State.knownNonAstraAgents.Count -ne 0 -or
+        $null -ne $State.manualGrant
+    )) {
+        return $false
+    }
+    return $true
+}
+
 function Read-State {
     param([string]$Path, [string]$SessionId)
 
@@ -116,8 +318,8 @@ function Read-State {
     }
     try {
         $state = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -ErrorAction Stop
-        if ([int]$state.version -ne $stateVersion -or [string]$state.sessionId -ne $SessionId) {
-            throw 'State identity mismatch.'
+        if (-not (Test-AstraRoutingState -State $state -SessionId $SessionId)) {
+            throw 'State schema or invariant mismatch.'
         }
         return $state
     } catch {
