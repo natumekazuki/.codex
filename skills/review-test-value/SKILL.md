@@ -100,9 +100,13 @@ python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_value
 
 ### review packet・schema・routing
 
+出力JSON Schemaの意味検証には、検証用のPython環境へ固定した依存を導入する。抽出器と通常審査のruntime依存ではない。
+
 ```powershell
+python -m pip install -r skills/review-test-value/scripts/requirements-test.txt
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_output_schema.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
@@ -110,3 +114,12 @@ python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_re
 ```
 
 packet、result schema、routing、判定検証の実装や公開CLI契約を変更した場合に実行する。exit `0`の`tests`だけを審査し、exit `1`/`2`や`NEEDS_CONTEXT`を完了扱いにしない。現在のtest価値審査gateと`test_value_luna`/`test_value_sol`の役割は、このSkill変更で有効化・変更しない。
+
+### worker有効化準備
+
+```powershell
+python -X utf8 -m unittest skills/review-test-value/scripts/test_preflight_review_worker.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/preflight_review_worker.py
+```
+
+このpreflightはversion照会とreadiness報告だけを行い、workerを起動しない。`BLOCKED`を実モデル成功と扱わない。候補版の実行と継続条件は[有効化runbook](../../docs/runbooks/activate-test-value-review.md)を参照する。

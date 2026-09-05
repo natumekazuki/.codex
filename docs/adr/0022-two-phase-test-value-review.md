@@ -24,7 +24,7 @@
   - Phase 2は固定済みのPhase 1結果、同じmetadata、test sourceを読み、actual observableとobservation boundaryを照合する。
 - Phase 1 packetへtest source、source line、assertion summary、production source、oracle本文、実行証拠を含めない。
 - Phase 1が`REDESIGN`でもPhase 2を省略しない。Phase 2でactual observableと保持先候補を特定し、修正後の行き先を判断できるようにする。
-- 同じLuna child sessionを二turnで使う。runtimeがfollow-upをサポートしない場合は二つのLuna child runを使えるが、二phaseを一promptへ統合しない。
+- #42〜#45で具体化したtransportでは、Phase 1とPhase 2をそれぞれ新規の独立した`codex exec`プロセスで実行する。Solも別の新規runとする。親履歴のfork、resume、同じchildへのfollow-upを使わず、検証済みのPhase 1結果だけをPhase 2へ明示入力する。二phaseを一promptへ統合しない。
 - 親agentはPhase 1結果をPhase 2開始前に固定し、Phase 2による変更を受け付けない。
 
 ### Solは追加contextを必要とするrecordだけを審査する
@@ -147,14 +147,14 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 
 - `test_value_luna`は`gpt-5.6-luna`、reasoning effort `medium`、read-onlyとする。
 - `test_value_sol`は`gpt-5.6-sol`、reasoning effort `xhigh`、read-onlyとする。
-- model、reasoning effort、sandbox、role contractは`agents/*.toml`を正本とし、Skill UI metadataやrouting hookへ複製しない。
+- model、reasoning effort、role contractは`agents/*.toml`を正本とし、Skill UI metadataやrouting hookへ複製しない。独立workerの限定read権限はrunnerが所有する。roleの`read-only`は書込み禁止の意図を表し、旧`sandbox_mode`や`--sandbox`を新しいpermission profileへ重ねない。対象版で実効権限と情報取得経路を確認できない場合はworkerを有効化しない。
 - required agentを起動できない場合、親agentは同一sessionで代行せず、`status = NEEDS_CONTEXT`、`gate = BLOCKED`を返す。
 - agent unavailableを別modelへのsilent fallbackで解消しない。
 
 ### bootstrapを二段階に分ける
 
 - 最初のbootstrap changeでagent定義、review contract、packet builder、result validator、routing policy、v1を使う回帰checkを追加する。この時点では`AGENTS.md`の完了条件を新gateへ切り替えない。
-- bootstrap changeを現行`review-test-value`契約で検証した後、live configへcustom agentを登録し、新しいsessionで起動確認する。live configの変更はrepository changeに含めず、明示的なauthorityを得て行う。
+- bootstrap changeを現行`review-test-value`契約で検証した後、新規の独立workerで隔離、実効model/effort、注入元と公開toolを確認する。native custom-agent registryへの登録はこのtransportの成立条件ではない。必要なlive configや認証の変更はrepository changeに含めず、明示的なauthorityを得て行う。
 - 次のactivation changeでmetadata v2、warning、risk routing、resolution ledger、aggregate gateを実装し、`AGENTS.md`の完了条件を`gate = PASS`へ切り替える。
 - activation changeは新しい二phase workflowで審査する。
 - review result cacheとmodel effortの引き下げは初期activationの完了条件に含めず、運用証拠を得た後に別判断とする。
@@ -178,7 +178,7 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - Positive: v1を読み取り可能なまま、新規・意味変更testへv2を強制できる。
 - Negative: 一つのSkill実行に複数のagent turnとschema validationが必要になる。
 - Negative: MOVEとDROPの完了には、record単位のreview resultに加えて一時的なresolution ledgerが必要になる。
-- Negative: custom agent登録後の新sessionでmanual smokeを行うまでactivation changeへ進めない。
+- Negative: 独立workerの新規sessionで隔離smokeを完了するまで標準gateを切り替えられない。形式の準備を先行しても、v2抽出器だけをliveへ部分導入しない。
 - Follow-up: deterministic auditの結果からLunaとSolのdisagreement、latency、token量を比較し、cacheまたはreasoning effort変更を別契約として判断する。
 
 ## Executable Anchors

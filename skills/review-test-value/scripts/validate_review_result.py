@@ -16,6 +16,7 @@ from review_routing import (
     decide_disposition,
     decide_gate,
     unavailable_result,
+    BOUNDARIES,
     validate_routing_manifest,
 )
 
@@ -109,6 +110,104 @@ PHASE_SPECS = {
         },
     },
 }
+
+_SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
+def phase_result_schema(phase: str) -> dict[str, Any]:
+    """Build the codex exec output schema for one v1 review phase.
+
+    This schema describes the result shape and local field constraints. Packet
+    identity, review order, hashes, and frozen-result comparisons remain the
+    responsibility of ``validate_phase_result``.
+    """
+    try:
+        spec = PHASE_SPECS[phase]
+    except KeyError as exc:
+        raise ResultValidationError(f"unknown phase: {phase}") from exc
+
+    # Keep this to the Codex Structured Outputs supported subset. Local
+    # non-empty, conditional, hash, order, and packet checks stay in the
+    # executable validator below.
+    string = {"type": "string"}
+    string_list = {"type": "array", "items": string}
+    hash_string = {"type": "string"}
+    review_properties: dict[str, Any] = {
+        "record_id": hash_string,
+        "metadata_hash": hash_string,
+        "verdict": {"type": "string", "enum": sorted(spec["verdicts"])},
+        "evidence": string_list,
+        "unverified": string_list,
+        "next_action": {"type": ["string", "null"]},
+    }
+    if phase != "metadata":
+        review_properties.update(
+            {
+                "source_hash": hash_string,
+                "context_requirements": string_list,
+            }
+        )
+    if phase == "metadata":
+        review_properties["evidence"] = {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["fields", "finding"],
+                "properties": {
+                    "fields": {
+                        "type": "array",
+                        "items": string,
+                    },
+                    "finding": {
+                        "type": "string",
+                        "enum": sorted(METADATA_EVIDENCE_FINDINGS),
+                    },
+                },
+            },
+        }
+    elif phase == "alignment":
+        review_properties.update(
+            {
+                "declared_boundary": {
+                    "type": ["string", "null"],
+                    "enum": [*sorted(BOUNDARIES), None],
+                },
+                "actual_boundary": {"type": "string", "enum": sorted(BOUNDARIES)},
+                "actual_observables": string_list,
+                "overclaim": {"type": "boolean"},
+                "disposition_candidate": {
+                    "type": ["string", "null"],
+                    "enum": [
+                        "KEEP_PERMANENT",
+                        "KEEP_TEMPORARY",
+                        "MOVE_TO_POLICY_CHECK",
+                        "DROP",
+                        None,
+                    ],
+                },
+            }
+        )
+    review_schema: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": sorted(spec["keys"]),
+        "properties": review_properties,
+    }
+    top_properties: dict[str, Any] = {
+        "review_contract_version": {"type": "string", "enum": [spec["version"]]},
+        "reviews": {"type": "array", "items": review_schema},
+    }
+    required = ["review_contract_version", "reviews"]
+    if phase == "deep":
+        top_properties["input_hash"] = hash_string
+        required.append("input_hash")
+    return {
+        "$schema": _SCHEMA_DRAFT,
+        "title": f"{spec['version']} result",
+        "type": "object",
+        "additionalProperties": False,
+        "required": required,
+        "properties": top_properties,
+    }
 
 
 def validate_phase_result(
@@ -504,10 +603,9 @@ def _validate_retention_records(
 
 
 def _validate_alignment(review: dict[str, Any]) -> None:
-    boundaries = {"consumer", "public-boundary", "component-behavior", "declaration", "implementation"}
-    if review["actual_boundary"] not in boundaries:
+    if review["actual_boundary"] not in BOUNDARIES:
         raise ResultValidationError("actual_boundary is invalid")
-    if review["declared_boundary"] is not None and review["declared_boundary"] not in boundaries:
+    if review["declared_boundary"] is not None and review["declared_boundary"] not in BOUNDARIES:
         raise ResultValidationError("declared_boundary is invalid")
     observables = _string_list(review["actual_observables"], "review.actual_observables")
     if not observables:
@@ -554,11 +652,20 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("phase", choices=["metadata", "alignment", "deep", "aggregate"])
-    parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("phase", nargs="?", choices=["metadata", "alignment", "deep", "aggregate"])
+    parser.add_argument("--input", type=Path)
     parser.add_argument("--packet", type=Path)
+    parser.add_argument("--emit-schema", choices=["metadata", "alignment", "deep"])
     args = parser.parse_args()
     try:
+        if args.emit_schema is not None:
+            if args.phase is not None or args.input is not None or args.packet is not None:
+                raise ResultValidationError("--emit-schema cannot be combined with phase, --input, or --packet")
+            output = phase_result_schema(args.emit_schema)
+            print(json.dumps(output, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+            return 0
+        if args.phase is None or args.input is None:
+            raise ResultValidationError("phase and --input are required unless --emit-schema is used")
         value = _read_json(args.input)
         if args.phase == "aggregate":
             output = aggregate_results(value)

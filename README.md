@@ -75,6 +75,7 @@
 - role の選択基準と risk gate は `AGENTS.md` を正本とする。具体的な未解決設計がない小変更にdesignerのhandoffを加えず、必要な独立reviewの条件は維持する
 - 各 role の明示model、reasoning effort、sandbox、静的契約は `agents/*.toml`、model未指定roleの選択差分は設定例とprofileを正本とする
 - `review-test-value`の二段階審査artifactとcustom agent例はbootstrap中である。runtime activationと新session smokeが完了するまでは、現行の単一審査workflowを利用する
+- 独立workerの準備状況、候補版preflight、未実装の境界、標準切替と切戻しは[有効化runbook](docs/runbooks/activate-test-value-review.md)を参照する。preflightはworkerを起動せず`BLOCKED`を返す
 - Spark の利用状態は `hooks/set-spark-routing.ps1` で切り替え、操作方法は `hooks/subagent-routing-modes.md` を参照する
 - model変更の比較方法は `docs/runbooks/compare-subagent-roles.md` を参照し、単一runのtoken差だけで既定roleを置き換えない
 

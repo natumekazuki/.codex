@@ -1,5 +1,13 @@
 # テスト価値の二段階審査と保持先判定
 
+## 2026-09-05の継続作業
+
+この計画のbaseと完了チェックは2026-08-31のbootstrap履歴である。#42〜#45の作業baseは`f7ba58ae47263c2a6a46d006c92c1d69ec29f704`であり、下記の旧baseを流用しない。
+
+runtime activationの同一child二turn、follow-up fallback、native registry登録を前提とする未完了手順は、#42〜#45とADR-0022の独立`codex exec`方式に置き換えた。Phase 1、Phase 2、必要なSolは各新規runとし、強制隔離と実効設定を確認する。過去のチェック済み項目は、この新しいtransportの成功証拠ではない。
+
+標準Skillと完了gateは旧方式を維持する。隔離smoke、実モデルE2E、固定した候補自身の新方式審査、新規sessionからの候補読込が揃うまで標準切替を保留する。
+
 ## Goal
 
 - metadataだけで検証上の主張が成立することをLuna Phase 1で確認する。
