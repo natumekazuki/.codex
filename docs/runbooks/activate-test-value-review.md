@@ -8,6 +8,10 @@ liveの標準入口は単一審査のままである。このfeature候補はmet
 
 #42のpreflightはreadiness報告だけを行い、versionやroleを取得できても`BLOCKED`を返す。独立workerの本実行、timeout/cancel/cleanup、#44の一回実行coordinatorとの接続は未完了である。環境設定だけを済ませれば有効化できる状態ではない。#45の実モデルE2E、候補自身の新方式審査、新session確認が揃うまで標準gateを切り替えない。
 
+#44の`review_resolution.py`は、hostの根拠をrecord/source/snapshotへ結び付ける保持判定と、正規aggregate inputで再検証するDROP/MOVE義務の保存を担当する。初期manifestを不変とし、ledgerへ解消attemptをatomicに追記する。返す`obligation_gate`はこの義務だけの判定であり、task全体のfinal gateではない。全言語、全batch、現在のselection、source変更、追加contextの予算を集計するcoordinatorは未実装である。
+
+保持根拠や除去・checkのreceiptは、信頼するhostが実際に取得・確認したものから作る。modelの自由出力をhost判断として転送しない。このcomponent単独では、入力内容の取得元や現在のfilesystemとの一致を証明しない。
+
 2026-09-06、非機密canaryだけを対象とした独立`codex exec`試行では、通常権限のWindows sandboxがsplit filesystem read restrictionを強制できず、CLIがunsandboxed実行を拒否した。昇格版もsetup helperの起動がWin32 error `1223`で失敗した。CLI stdinへsynthetic promptを書き込む処理は実行したが、thread開始、model request/output、canary commandは観測していない。実モデル隔離の成功証拠ではない。
 
 次の環境操作は、管理者承認のある対話端末での`codex.exe sandbox setup --elevated --current-user`である。これはsandbox用users/group、ACL、firewall、logon rights/local policyとlive Codex設定を変更するため、実行には当該操作への承認が必要になる。setup後も、候補workerの同じ設定でcanary拒否、managed inputの非混入、両modelの実効設定、lifecycleを確認する。読取拒否試験には実認証情報や実機密ファイルを使わず、合成した非機密canaryを使う。
@@ -60,6 +64,7 @@ python -X utf8 -m unittest skills/review-test-value/scripts/test_preflight_revie
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_resolution.py
 ```
 
 preflightとschemaのoffline成功は、新方式によるtest価値審査の`PASS`ではない。bootstrap変更は現行SkillのGit modeをtask baseから適用して審査する。activation候補自身の新方式審査は、この旧審査とは別に必要である。

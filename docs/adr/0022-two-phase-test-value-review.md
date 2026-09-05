@@ -114,7 +114,7 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 | 4 | `ACCEPT` | `KEEP_PERMANENT`かつpermanent testとして存在 | `PASS` |
 | 5 | `ACCEPT` | `KEEP_TEMPORARY`かつ必要な期限・条件を持つtestとして存在 | `PASS` |
 | 6 | `ACCEPT` | `MOVE_TO_POLICY_CHECK`または`DROP`で元testが残存、またはresolution未完了 | `CHANGES_REQUIRED` |
-| 7 | `ACCEPT` | `MOVE_TO_POLICY_CHECK`または`DROP`で元testが消え、対応resolutionが`RESOLVED` | resolution entryがrecord gateを置き換えて`PASS` |
+| 7 | `ACCEPT` | `MOVE_TO_POLICY_CHECK`または`DROP`で元testが消え、対応resolutionが`RESOLVED` | 別のresolution entryで対応義務を解消する |
 
 - aggregate gateは、`BLOCKED`が一件でもあれば`BLOCKED`、それ以外で`CHANGES_REQUIRED`または未解決resolutionが一件でもあれば`CHANGES_REQUIRED`、それ以外は`PASS`とする。
 - recordもresolution entryも存在しない空のGit selectionは、以前にrequired resolutionがなかった場合だけ`PASS`にできる。以前のreviewでrequired resolutionが作られたSkill実行では、そのledgerを失った空selectionを`PASS`にしない。
@@ -124,6 +124,10 @@ record gateとSkill実行全体のaggregate gateは次の優先順で決める�
 - ADR-0021に従い、test declaration全体の削除はGit modeのsurviving recordへ含めない。
 - `MOVE_TO_POLICY_CHECK`または`DROP`を返したrecordは、同じSkill実行中の一時的なresolution ledgerで追跡する。
 - ledger entryは元のrecord locatorとmetadata hash、実行したaction、移行先artifact、direct check、resolution verdictを持つ。
+- 2026-09-06、#44の契約に従い、元recordが`REDESIGN`でも必要な審査が完了した正当なDROP/MOVEは、別のresolution entryで義務を解消できると明確化する。元statusとrecord gateは改変せず、現在のsourceに対するresolutionをaggregateへ反映する。
+- 元の判定は正規packet/resultとroutingから既存validatorで再検証する。callerのphase完了flagや`sol_required`だけを根拠にしない。未完了phase、required Solの不足、未解決の契約違反は、testの削除では解消できない。
+- MOVEは元testの除去、現在の移行先、同じfailureを検出するcheckの成功を必要とする。DROPは除去に加え、代替不要のaccepted contract上の理由、または既存canonical checkの根拠と成功を必要とする。これらを同じcurrent snapshotへ結び付ける。
+- 初期manifestを不変とし、ledgerはtask内だけでatomicに更新する。欠落した継続stateや、対象の取りこぼしを証明できない空selectionを成功にしない。
 - `MOVE_TO_POLICY_CHECK`は、元testの除去、移行先artifactの存在、そのartifactが宣言上のfailure modeを直接検出するcheckの成功を確認して`RESOLVED`にする。
 - `DROP`は、元testの除去と、代替checkが不要または既存canonical ownerが同じfailure modeを検出する根拠を確認して`RESOLVED`にする。
 - resolution ledgerはSkill実行中の派生物であり、repositoryの正本として保存しない。
