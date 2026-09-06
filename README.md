@@ -70,6 +70,6 @@ pwsh ./scripts/sync-natural-japanese.ps1
 
 hookは有効な`CODEX_HOME`（未指定ならユーザーhomeの`.codex`）から解決する。`/hooks`でtrustと到達を確認し、inline hooks等との重複を避ける。新規session、一般child、再開・compactionで短い抑制を届ける。専門workerには一般hookを注入しない。旧routingのlocal stateを一括削除する必要はない。
 
-WithMateのMemory／Characterは[固有runbook](docs/runbooks/withmate-character-context.md)、Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
+WithMateのMemory／Character操作はMCP toolの説明とschemaに従い、[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
 
 CIは既存の抽出・packet・validator・routing・resolution・監査機能と抑制hookを確認する。offlineの成功を実モデル審査や新規sessionの成功と同一視しない。候補の必須審査が完了してから、[小さな比較と導入手順](docs/runbooks/compare-subagent-roles.md)で確認・切替する。公開CIへ有料モデル実行やsecretを追加しない。
