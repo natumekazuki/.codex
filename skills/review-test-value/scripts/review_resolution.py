@@ -106,6 +106,14 @@ def build_retention_evidence(
     return result
 
 
+def derive_retention_basis(
+    evidence: list[dict[str, Any]], determination: dict[str, Any] | None
+) -> str:
+    """Derive the retention basis from validated host evidence."""
+
+    return _retention_basis(_bounded_evidence(evidence), determination)
+
+
 def validate_retention_evidence(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != {
         "identity",

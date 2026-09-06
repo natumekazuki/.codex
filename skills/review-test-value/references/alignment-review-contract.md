@@ -23,6 +23,8 @@ alignment packet、deep packet、final aggregationは固定済みPhase 1 result 
 - declarationそのものが正式なpublic artifactなら`public-boundary`として扱う。
 - `fault`と`observable`が本文で直接検出できる範囲を超えるときは`overclaim = true`とする。任意の`impact`が間接的な影響を記すことだけではoverclaimにしない。
 - test本文だけで確定できないhelper、fixture、mock、oracle、SUTを`context_requirements`へ具体的に挙げる。
+- 正しい内部変更で壊れるprivate wiringや内部順序の固定、入力と期待値の同じ生成元への依存、mockが対象処理を置き換えていないかを確認する。対象欠陥を入れても通る観測を十分な検証としない。
+- 既存checkとの差と、type・schema・static・build・smoke・browser・visual checkの方が直接的かを保持先候補へ反映する。record外の既存checkを見たと推測せず、必要なら限定contextを要求する。根拠のあるDROP/MOVEを扱い、安全契約を保証するnegative assertionは自動却下しない。
 
 ## Output
 

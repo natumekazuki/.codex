@@ -2,3 +2,6 @@ interface:
   display_name: "Design UI Information"
   short_description: "少ない視覚語彙と一貫した意味対応でUIを設計する"
   default_prompt: "Use $design-ui-information to design this UI with a minimal visual vocabulary, semantic primitives, flat surfaces, and justified interaction rules."
+
+policy:
+  allow_implicit_invocation: false

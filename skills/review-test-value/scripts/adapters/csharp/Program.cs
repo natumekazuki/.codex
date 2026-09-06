@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -72,6 +73,7 @@ static string QualifiedSymbol(MethodDeclarationSyntax method)
     return string.Join(".", namespaces.Concat(types).Append(method.Identifier.ValueText));
 }
 
+Console.InputEncoding = Encoding.UTF8;
 var source = await Console.In.ReadToEndAsync();
 var tree = CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Latest));
 var root = await tree.GetRootAsync();

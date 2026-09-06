@@ -1,6 +1,6 @@
 ---
 name: audit-codex-work-quality
-description: 日時を固定したCodex作業区間を監査し、成果物品質、レビュー収束、不要な誘導や検証を実行証拠から振り返り、専用SQLite履歴へ記録する。日次・夜間監査や前回分析の確認に使う。通常のcode review、単一taskの検証報告、引継ぎには使わない。
+description: 日次・夜間・期間指定など、日時を固定したCodex作業監査を明示的に依頼されたとき、成果物品質、レビュー収束、不要な誘導や検証を実行証拠から振り返り、専用SQLite履歴へ記録する。通常のcode review、単一taskの検証報告、引継ぎには使わない。
 ---
 
 # Codex Work Quality Audit

@@ -2,12 +2,9 @@
 
 $ErrorActionPreference = 'Stop'
 
-@'
-Implementation restraint:
-- code、test、compatibility、fallback、config、abstractionを追加する前に、現在の要求、accepted contract、観測済みfailure modeのどれが根拠かを特定する。根拠がなければ追加しない。
-- 追加前にcanonical ownerと既存helper / patternを探し、次にstandard library、native platform、導入済みdependencyを使う。現在のscopeをそれらで素直に満たせない場合だけ新しいabstractionやdependencyを作る。
-- canonical ownerで最も単純な完全解を実装する。並行経路、shim、flag、「将来のため」のscaffoldingを足すより、既存経路の変更または削除を優先する。ただし最小diffを理由に症状だけをpatchしたり、同じownerの経路を不整合なまま残したりしない。
-- failureは観測可能に保つ。specific errorへcontextを加える、またはsystem boundaryで明示的に変換する処理はよい。retry、fallback、既定値は明示された既知のrecoverable failureにだけ使い、失敗をsuccess-shaped resultへ変えない。
-- checkはaccepted behaviorと具体的なfailure modeをstable observable boundaryで検証する。absence自体がsecurity、protocol、data-loss preventionなどのcontractでない限り、削除済みbehavior、実装詳細、absenceだけを固定するtestを追加しない。
-- trust boundaryのinput validation、security、accessibility、data-loss prevention、明示要求までYAGNIで削らない。scope外のrobustnessやcompatibilityが有益に見える場合は、黙って実装せず根拠とtrade-offを示す。
-'@
+@"
+Implementation restraint（正本: AGENTS.md）:
+- 現在の要求・契約・具体的な不具合に根拠を持つ、最も単純な完全解を作る。不要な抽象化、互換層、fallback、管理文書、testや無関係な整理を増やさない。
+- 失敗を成功に見せない。必要な確認で終え、明示要求、入力検証、安全性、accessibility、データ保護を保つ。
+- testの新規追加・意味変更にはreview-test-valueの必須審査を適用し、削除・移設の解消確認も省かない。
+"@

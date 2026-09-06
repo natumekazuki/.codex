@@ -43,6 +43,128 @@ EXTRACTOR_RECORD_KEYS = {
     "source_hash",
     "metadata_hash",
 }
+
+
+def build_metadata_packet_multi(
+    extractor_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build one canonical metadata packet from language-scoped extractors."""
+
+    if not isinstance(extractor_results, list) or not extractor_results:
+        raise PacketError("extractor_results must be a non-empty array")
+    records_by_id: dict[str, tuple[tuple[str, int, str], dict[str, Any]]] = {}
+    adapters: set[str] = set()
+    for index, extractor_result in enumerate(extractor_results):
+        packet = build_metadata_packet(extractor_result)
+        adapter = _string(extractor_result.get("adapter"), f"extractors[{index}].adapter")
+        if adapter in adapters:
+            raise PacketError("extractor_results contain a duplicate adapter")
+        adapters.add(adapter)
+        packet_records = _extract_packet_records(extractor_result)
+        if len(packet["records"]) != len(packet_records):
+            raise PacketError("extractor packet record count does not match")
+        for metadata_record, (source_record, deleted) in zip(
+            packet["records"], packet_records
+        ):
+            record_id = metadata_record["record_id"]
+            if record_id in records_by_id:
+                raise PacketError("extractor_results contain a duplicate record_id")
+            source = _object(source_record.get("source"), "record.source")
+            records_by_id[record_id] = (
+                (
+                    _string(source.get("path"), "record.source.path"),
+                    _positive_int(
+                        source.get("declaration_start_line"),
+                        "record.source.declaration_start_line",
+                    ),
+                    "1" if deleted else "0",
+                ),
+                metadata_record,
+            )
+    records = [item[1] for item in sorted(records_by_id.values(), key=lambda item: item[0])]
+    return {"review_contract_version": "metadata-review-v2", "records": records}
+
+
+def build_alignment_packet_multi(
+    extractor_results: list[dict[str, Any]], metadata_result: dict[str, Any]
+) -> dict[str, Any]:
+    """Build one canonical alignment packet while preserving each adapter identity."""
+
+    metadata_packet = build_metadata_packet_multi(extractor_results)
+    try:
+        reviews = validate_phase_result(
+            "metadata", metadata_result, metadata_packet["records"]
+        )["reviews"]
+    except ResultValidationError as exc:
+        raise PacketError(str(exc)) from exc
+    reviews_by_id = {review["record_id"]: review for review in reviews}
+    records_by_id: dict[str, dict[str, Any]] = {}
+    for extractor_result in extractor_results:
+        local_metadata = build_metadata_packet(extractor_result)
+        local_result = {
+            "review_contract_version": "metadata-review-v2",
+            "reviews": [reviews_by_id[item["record_id"]] for item in local_metadata["records"]],
+        }
+        local_alignment = build_alignment_packet(extractor_result, local_result)
+        for record in local_alignment["records"]:
+            if record["record_id"] in records_by_id:
+                raise PacketError("extractor_results contain a duplicate record_id")
+            records_by_id[record["record_id"]] = record
+    packet = {
+        "review_contract_version": "alignment-review-v2",
+        "metadata_result_hash": result_hash(metadata_result),
+        "records": [records_by_id[item["record_id"]] for item in metadata_packet["records"]],
+    }
+    try:
+        validate_alignment_packet(packet, metadata_result)
+    except ResultValidationError as exc:
+        raise PacketError(str(exc)) from exc
+    return packet
+
+
+def extractor_record_identities_multi(
+    extractor_results: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    """Return canonical source identities for host-evidence preparation."""
+
+    metadata_packet = build_metadata_packet_multi(extractor_results)
+    source_hashes: dict[str, str] = {}
+    for extractor_result in extractor_results:
+        for record, deleted in _extract_packet_records(extractor_result):
+            record_id = deleted_record_id_for(record) if deleted else record_id_for(record)
+            source_hashes[record_id] = _hash(record.get("source_hash"), "record.source_hash")
+    return [
+        {
+            "record_id": record["record_id"],
+            "metadata_hash": record["metadata_hash"],
+            "source_hash": source_hashes[record["record_id"]],
+        }
+        for record in metadata_packet["records"]
+    ]
+
+
+def extractor_record_summaries_multi(
+    extractor_results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return host-readable summaries in the same canonical order as multi packets."""
+
+    packet = build_metadata_packet_multi(extractor_results)
+    source_by_id: dict[str, dict[str, Any]] = {}
+    for extractor_result in extractor_results:
+        for record, deleted in _extract_packet_records(extractor_result):
+            record_id = deleted_record_id_for(record) if deleted else record_id_for(record)
+            source_by_id[record_id] = _object(record.get("source"), "record.source")
+    return [
+        {
+            "record_id": record["record_id"],
+            "source": {
+                "path": _string(source_by_id[record["record_id"]].get("path"), "record.source.path"),
+                "symbol": _string(source_by_id[record["record_id"]].get("symbol"), "record.source.symbol"),
+            },
+            "claim": _string(record["metadata"].get("claim"), "record.metadata.claim"),
+        }
+        for record in packet["records"]
+    ]
 def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -230,6 +352,45 @@ def build_deep_packet(
         "records": deep_records,
     }
     return {**packet, "input_hash": result_hash(packet)}
+
+
+def project_deep_batch(
+    global_packet: dict[str, Any], contiguous_records: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Project one non-empty contiguous transport batch from a frozen deep packet."""
+
+    if not isinstance(global_packet, dict) or set(global_packet) != {
+        "review_contract_version",
+        "metadata_result_hash",
+        "records",
+        "input_hash",
+    }:
+        raise PacketError("global deep packet has unexpected keys")
+    if global_packet["review_contract_version"] != "deep-review-v2":
+        raise PacketError("global deep packet contract version is invalid")
+    global_records = global_packet["records"]
+    if not isinstance(global_records, list) or not isinstance(contiguous_records, list) or not contiguous_records:
+        raise PacketError("deep batch records must be a non-empty array")
+    frozen = {
+        "review_contract_version": global_packet["review_contract_version"],
+        "metadata_result_hash": global_packet["metadata_result_hash"],
+        "records": global_records,
+    }
+    if global_packet["input_hash"] != result_hash(frozen):
+        raise PacketError("global deep packet input_hash is invalid")
+    starts = [
+        index
+        for index in range(len(global_records) - len(contiguous_records) + 1)
+        if global_records[index : index + len(contiguous_records)] == contiguous_records
+    ]
+    if len(starts) != 1:
+        raise PacketError("deep batch records are not one unique contiguous global slice")
+    projected = {
+        "review_contract_version": global_packet["review_contract_version"],
+        "metadata_result_hash": global_packet["metadata_result_hash"],
+        "records": contiguous_records,
+    }
+    return {**projected, "input_hash": result_hash(projected)}
 
 
 def _extract_packet_records(

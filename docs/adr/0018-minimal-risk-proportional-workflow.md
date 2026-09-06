@@ -1,5 +1,7 @@
 # ADR-0018: 標準workflowを最小化し、独立reviewをriskに比例させる
 
+> 2026-09-06: 一般開発の固定工程・文書作成義務・職種別role・routingに関する判断は[Issue #52](https://github.com/natumekazuki/.codex/issues/52)でsuperseded。本文は履歴として保持する。現在の構成は[README](../../README.md)、専門test価値審査は[review-test-value](../../skills/review-test-value/SKILL.md)を参照する。
+
 - Status: accepted, partially superseded by ADR-0019
 - Date: 2026-08-13
 - Partially supersedes: ADR-0005, ADR-0007, ADR-0008, ADR-0011, ADR-0012, ADR-0013

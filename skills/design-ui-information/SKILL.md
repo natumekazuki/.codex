@@ -1,11 +1,13 @@
 ---
 name: design-ui-information
-description: UIの設計・実装・reviewで、視覚階層、情報密度、tokenとprimitive、loading表示、keyboardとaccessibilityを判断する。cardや常設説明を必要な場合だけ使い、一貫した意味対応で画面を整える。UIに関係しない実装には使わない。
+description: UI設計方針の指定・適用・見直しを明示的に依頼されたとき、視覚階層、情報密度、tokenとprimitive、loading表示、keyboardとaccessibilityを判断する。通常のUI小変更やUIに関係しない実装へ自動適用しない。
 ---
 
 # Design UI Information
 
 UIを構成する視覚的な概念を最小限にし、各要素へ一つの明確な役割を持たせる。主要タスクと現在状態を、まず形、配置、icon、色、motionで伝える。文字は、視覚設計だけでは意味が一意にならない場合、または安全、回復、アクセシビリティ、法令上必要な場合にだけ使う。情報量の少なさを保ちながら、理解、安全、回復可能性を損なわない。
+
+明示された画面、workflow、componentを作業範囲とする。局所変更を全画面・全状態の監査へ広げず、既存design systemがないことだけを理由に新設しない。以下の手順と判断チェックは、依頼範囲と変更の影響に該当する項目へ適用する。
 
 ## Design authority
 
@@ -43,7 +45,7 @@ Cardは、独立して選択、並べ替え、移動、展開、反復できるs
 
 1. **主要タスクと通常状態を特定する。** 利用者、目的、現在状態、次の操作、不可逆または高コストな影響を整理する。正常系だけでなく、空、読込中、成功、エラー、権限不足、部分データの状態も対象にする。
 
-2. **既存のdesign languageを監査する。** Token、primitive、代表画面、componentを調べ、承認済みの規則、妥当なpattern、単なる反復、design debtを分ける。既存箇所の多さを正当性の代用にしない。
+2. **既存のdesign languageを確認する。** 依頼範囲に関係するtoken、primitive、代表画面、componentを調べ、承認済みの規則、妥当なpattern、単なる反復、design debtを分ける。既存箇所の多さを正当性の代用にしない。
 
 3. **最小の表現手段を選ぶ。** Surfaceを増やす前に、単一surface上の階層で表現できるか確認する。次の順で意味を伝えられるか判定し、上位の手段だけで初見の利用者が誤認なく判断できるなら下位を追加しない。
    1. 形、配置、余白、色、motion、既知のicon
@@ -82,7 +84,7 @@ Cardは、独立して選択、並べ替え、移動、展開、反復できるs
 
    全機能のkeyboard完遂、複合widgetの矢印key操作、厳密なfocus管理、shortcut体系、keyboard E2E testは常時必須にしない。明示要件、業務・生産性tool、keyboard中心の利用者、custom widgetがある場合にだけKeyboard UX contractとして追加する。
 
-10. **描画結果と一貫性を検証する。** 実装後、代表的なviewportと状態でscreenshotまたはlive renderを確認する。通常、空・読込中、成功、エラー、狭幅・mobile、必要に応じてzoom・文字拡大を含める。主要タスクが目立つこと、同じ意味が同じ表現になっていること、不要なtoken、variant、card、入れ子surfaceがないこと、画面端・四隅・safe areaに意図しない背景が露出しないこと、icon-only controlが一意に判別できること、loading表示の範囲と進捗が分かること、詳細が発見可能なこと、重要情報が欠けないことを確認する。視覚確認できない状態は記録し、DOM、accessibility、interactionの直接checkで代替する。
+10. **描画結果と一貫性を検証する。** 実装後、変更の影響を受ける代表的なviewportと状態でscreenshotまたはlive renderを確認する。空・読込中、成功、エラー、狭幅・mobile、zoom・文字拡大のうち、表示や判断が変わる状態を選ぶ。主要タスクが目立つこと、同じ意味が同じ表現になっていること、不要なtoken、variant、card、入れ子surfaceがないこと、画面端・四隅・safe areaに意図しない背景が露出しないこと、icon-only controlが一意に判別できること、loading表示の範囲と進捗が分かること、詳細が発見可能なこと、重要情報が欠けないことを確認する。視覚確認できない状態は記録し、DOM、accessibility、interactionの直接checkで代替する。
 
 ## 判断チェック
 

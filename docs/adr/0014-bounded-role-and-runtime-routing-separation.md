@@ -1,5 +1,7 @@
 # ADR-0014: bounded roleとruntime routingの責務を分離する
 
+> 2026-09-06: 一般開発の固定工程・文書作成義務・職種別role・routingに関する判断は[Issue #52](https://github.com/natumekazuki/.codex/issues/52)でsuperseded。本文は履歴として保持する。現在の構成は[README](../../README.md)、専門test価値審査は[review-test-value](../../skills/review-test-value/SKILL.md)を参照する。
+
 - Status: accepted
 - Date: 2026-08-08
 - Amends: ADR-0002, ADR-0013

@@ -1,5 +1,7 @@
 # ADR-0004: reviewをblocking findingと明示的なrisk acceptanceで収束させる
 
+> 2026-09-06: 一般開発の固定工程・文書作成義務・職種別role・routingに関する判断は[Issue #52](https://github.com/natumekazuki/.codex/issues/52)でsuperseded。本文は履歴として保持する。現在の構成は[README](../../README.md)、専門test価値審査は[review-test-value](../../skills/review-test-value/SKILL.md)を参照する。
+
 - Status: accepted, amended by ADR-0012 and ADR-0013
 - Date: 2026-07-18
 - Supersedes: ADR-0003

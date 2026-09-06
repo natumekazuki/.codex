@@ -1,5 +1,7 @@
 # ADR-0007: frozen Candidateと不変条件lensでhigh-risk reviewを収束させる
 
+> 2026-09-06: 一般開発の固定工程・文書作成義務・職種別role・routingに関する判断は[Issue #52](https://github.com/natumekazuki/.codex/issues/52)でsuperseded。本文は履歴として保持する。現在の構成は[README](../../README.md)、専門test価値審査は[review-test-value](../../skills/review-test-value/SKILL.md)を参照する。
+
 - Status: accepted, amended by ADR-0008, ADR-0012, and ADR-0013, partially superseded by ADR-0018 and ADR-0019
 - Date: 2026-07-26
 - Amends: ADR-0004, ADR-0005

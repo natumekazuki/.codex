@@ -49,6 +49,8 @@ jobs:
           skills/review-test-value/scripts/test_review_result_schema.py
           skills/review-test-value/scripts/test_review_output_schema.py
           skills/review-test-value/scripts/test_preflight_review_worker.py
+          skills/review-test-value/scripts/test_review_worker.py
+          skills/review-test-value/scripts/test_run_test_value_review.py
           skills/review-test-value/scripts/test_review_routing.py
           skills/review-test-value/scripts/test_review_resolution.py
       - name: Compile Python entry points
@@ -62,6 +64,8 @@ jobs:
           skills/review-test-value/scripts/review_routing.py
           skills/review-test-value/scripts/validate_review_result.py
           skills/review-test-value/scripts/preflight_review_worker.py
+          skills/review-test-value/scripts/review_worker.py
+          skills/review-test-value/scripts/run_test_value_review.py
           skills/review-test-value/scripts/review_resolution.py
 
   test-value-multilang:
@@ -100,19 +104,13 @@ jobs:
       - name: Run multilanguage adapter tests
         run: python -m unittest skills/review-test-value/scripts/test_extract_test_values_multilang.py
 
-  routing-tests:
-    name: Subagent routing tests (Windows)
+  hook-tests:
+    name: Hook tests (Windows)
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Run subagent routing tests
-        shell: pwsh
-        run: ./hooks/test-subagent-routing.ps1
-      - name: Run Astra routing tests
-        shell: pwsh
-        run: ./hooks/test-astra-routing.ps1
       - name: Smoke test implementation restraint hook
         shell: pwsh
         run: |
