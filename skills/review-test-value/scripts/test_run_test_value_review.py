@@ -229,7 +229,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                     "deep",
                     {},
                     cli="C:/codex.exe",
-                    role_file=Path("C:/test_value_sol.toml"),
+                    role_file=Path("C:/test_value_deep.toml"),
                 )
         self.assertEqual(
             canary.exception.details,
@@ -1125,7 +1125,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
             sol_result, proof = coordinator._execute_deep_round(
                 global_packet,
                 cli="C:/codex.exe",
-                role_file=Path("C:/test_value_sol.toml"),
+                role_file=Path("C:/test_value_deep.toml"),
                 toolchain_identity={"identity": "toolchain"},
                 prompt_char_budget=budget,
             )
@@ -1309,7 +1309,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                 coordinator._execute_deep_round(
                     global_packet,
                     cli="C:/codex.exe",
-                    role_file=Path("C:/test_value_sol.toml"),
+                    role_file=Path("C:/test_value_deep.toml"),
                     toolchain_identity={"identity": "toolchain"},
                     prompt_char_budget=budget,
                 )

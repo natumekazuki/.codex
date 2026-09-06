@@ -94,7 +94,7 @@ def _load_role(role_path: Path) -> tuple[dict[str, Any], str]:
         raise PreflightError("RUNTIME_UNSUPPORTED", "role TOML does not match the supported role contract")
     if any(not isinstance(role[key], str) or not role[key].strip() for key in required | (set(role) & optional)):
         raise PreflightError("RUNTIME_UNSUPPORTED", "role TOML does not match the supported role contract")
-    if role["name"] not in {"test_value_luna", "test_value_sol"}:
+    if role["name"] not in {"test_value_luna", "test_value_deep"}:
         raise PreflightError("RUNTIME_UNSUPPORTED", "role TOML is not one of the supported review roles")
     return role, "sha256:" + hashlib.sha256(role_bytes).hexdigest()
 

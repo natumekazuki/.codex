@@ -16,5 +16,5 @@ config_file = "agents/general_luna.toml"
 [agents.test_value_luna]
 config_file = "agents/test_value_luna.toml"
 
-[agents.test_value_sol]
-config_file = "agents/test_value_sol.toml"
+[agents.test_value_deep]
+config_file = "agents/test_value_deep.toml"

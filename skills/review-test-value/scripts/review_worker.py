@@ -57,7 +57,7 @@ PHASE_CONTRACTS = {
 PHASE_ROLES = {
     "metadata": "test_value_luna",
     "alignment": "test_value_luna",
-    "deep": "test_value_sol",
+    "deep": "test_value_deep",
 }
 PHASE_VERSIONS = {
     "metadata": "metadata-review-v2",

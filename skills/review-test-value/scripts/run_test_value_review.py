@@ -172,7 +172,7 @@ def _toolchain_identity(cli: str, repository_root: Path) -> dict[str, Any]:
             ),
             "sol": current_worker_identity(
                 cli=cli,
-                role_file=str(repository_root / "agents" / "test_value_sol.toml"),
+                role_file=str(repository_root / "agents" / "test_value_deep.toml"),
                 phases=("deep",),
             ),
         }
@@ -901,7 +901,7 @@ def plan_deep_batches(
     *,
     prompt_char_budget: int = DEEP_PROMPT_CHAR_BUDGET,
 ) -> list[dict[str, Any]]:
-    """Plan every contiguous deep transport batch before launching Sol."""
+    """Plan every contiguous deep transport batch before launching deep review."""
 
     if not isinstance(prompt_char_budget, int) or isinstance(prompt_char_budget, bool) or prompt_char_budget <= 0:
         raise CoordinatorBlocked("DEEP_BATCH_UNAVAILABLE", "deep prompt budget is invalid")
@@ -1401,7 +1401,7 @@ def _load_generation(state_dir: Path, descriptor: dict[str, Any]) -> dict[str, A
         or item.get("phase") != phase
         for item, phase in zip(phase_evidence, ("metadata", "alignment"))
     ):
-        raise CoordinatorBlocked("STATE_INVALID", "generation Luna evidence is incomplete")
+        raise CoordinatorBlocked("STATE_INVALID", "generation metadata/alignment evidence is incomplete")
     deep_required = any(
         item["result"]["required"]
         for item in aggregation["input"]["routing_manifest"]["records"]
@@ -1962,7 +1962,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         return result
 
     luna_role = scripts_root / "agents" / "test_value_luna.toml"
-    sol_role = scripts_root / "agents" / "test_value_sol.toml"
+    deep_role = scripts_root / "agents" / "test_value_deep.toml"
     worker_evidence = []
     metadata_result, evidence = _execute_phase(
         "metadata", metadata_packet, cli=args.cli, role_file=luna_role
@@ -2000,7 +2000,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     }
     supplied_context = set(host["context_by_record"]) | set(host["retry_context_by_record"])
     if not supplied_context.issubset(required):
-        raise CoordinatorBlocked("UNREQUESTED_CONTEXT", "context supplied for a non-Sol record")
+        raise CoordinatorBlocked("UNREQUESTED_CONTEXT", "context supplied for a record without required deep review")
     deep_packet = build_deep_packet(
         alignment_packet,
         metadata_result,
@@ -2014,7 +2014,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         sol_result, evidence = _execute_deep_round(
             deep_packet,
             cli=args.cli,
-            role_file=sol_role,
+            role_file=deep_role,
             toolchain_identity=toolchain_identity,
         )
         worker_evidence.append(evidence)
@@ -2040,7 +2040,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             retry_result, retry_evidence = _execute_deep_round(
                 deep_packet,
                 cli=args.cli,
-                role_file=sol_role,
+                role_file=deep_role,
                 toolchain_identity=toolchain_identity,
             )
             if (

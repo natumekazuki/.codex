@@ -1,8 +1,8 @@
 # Review Routing Policy v1
 
-## Sol routing
+## Deep routing
 
-次のいずれかに該当するrecordはSol reviewをrequiredにする。
+次のいずれかに該当するrecordはLuna/maxのdeep reviewをrequiredにする。
 
 - Phase 1が`NEEDS_CONTEXT`
 - Phase 2が`RECHECK`
@@ -13,7 +13,7 @@
 
 risk tagは`security`、`authentication`、`authorization`、`billing`、`irreversible-data-loss`、`privacy`だけを認める。metadataと親workflowのtagは和集合にし、metadataから親tagを解除できない。親workflowのrisk contextはrouting manifestとは独立した`review-workflow-context-v1` artifactとして`record_id`と`metadata_hash`へ固定する。未知のtag、型不一致、record IDまたはhash不一致はrouting前に拒否する。
 
-high-riskでもaudit対象でもない明白な`REDESIGN`または`MISMATCH`だけを理由にSolへ送らない。required agentがunavailableなら親agentは代行せず、`NEEDS_CONTEXT`、`BLOCKED`とする。
+high-riskでもaudit対象でもない明白な`REDESIGN`または`MISMATCH`だけを理由にdeepへ送らない。required agentがunavailableなら親agentは代行せず、`NEEDS_CONTEXT`、`BLOCKED`とする。
 
 audit selectionは`record_id`とcontract versionのSHA-256を100で割った剰余が`audit_percent`未満かで決める。同じ入力は常に同じ結果になる。候補版のaudit計算には`deep-review-v2`を渡す。routing manifestとworkflow context自体のshape/versionはv1のままとする。
 
@@ -21,9 +21,11 @@ audit selectionは`record_id`とcontract versionのSHA-256を100で割った剰�
 
 deep packet builderとfinal aggregatorは、alignment packet、固定済みPhase 1 result artifact、Phase 2 result、manifestとは独立したworkflow contextからrouting resultを再計算する。alignment packetの`metadata_result_hash`と埋め込みreviewを元artifactへ照合する。record ID、metadata hash、source hash、verdict、context requirement、workflow context hash、risk context、audit選択、required判定のいずれかが一致しないmanifestを拒否する。callerが渡した`sol_required` booleanだけでdeep reviewやgateを省略しない。
 
+既存artifactの`sol_required`、`sol_verdict`、`sol_result`はdeep phaseを指すschema名として維持する。modelの選択やSolへの呼出しを意味しない。
+
 ## Status
 
-ADR-0022の優先表をそのまま適用する。未完了・schema不正、required Solのunavailable・schema不正・`NEEDS_CONTEXT`を最優先で`NEEDS_CONTEXT`とする。Solは固定済みの`REDESIGN`または`MISMATCH`を救済しない。
+ADR-0022の優先表をそのまま適用する。未完了・schema不正、required deep reviewerのunavailable・schema不正・`NEEDS_CONTEXT`を最優先で`NEEDS_CONTEXT`とする。deep reviewerは固定済みの`REDESIGN`または`MISMATCH`を救済しない。
 
 ## Disposition
 
@@ -32,7 +34,7 @@ ADR-0022の優先表をそのまま適用する。未完了・schema不正、req
 - `consumer`、`public-boundary`、`component-behavior`: `permanent`かつ保持根拠ありなら`KEEP_PERMANENT`、保持根拠なしなら`DROP`、有効なtemporary条件があれば`KEEP_TEMPORARY`
 - actual boundaryまたは保持根拠が未確定なら`null`
 
-候補版はmetadata v2だけを審査する。`characterization`は`expires_on`または`review_when`、`ephemeral`は`remove_when`をtemporary条件とする。記載された条件が現在も有効かはhostの保持根拠確認が必要であり、期限文字列の存在だけで運用上のPASSを出さない。
+現在のtestはmetadata v2を審査する。正常な歴史的v1削除は[alignment契約](alignment-review-contract.md#歴史的v1削除)のDROP／MOVEと解消確認を使う。v2では、`characterization`は`expires_on`または`review_when`、`ephemeral`は`remove_when`をtemporary条件とする。記載された条件が現在も有効かはhostの保持根拠確認が必要であり、期限文字列の存在だけで運用上のPASSを出さない。
 
 保持根拠の入力は`PRESENT`、`ABSENT`、`UNRESOLVED`とし、AIの自由記述から推測しない。`UNRESOLVED`は`disposition = null`、`status = NEEDS_CONTEXT`、`gate = BLOCKED`へ閉じる。
 
@@ -47,6 +49,6 @@ ADR-0022の優先表をそのまま適用する。未完了・schema不正、req
 
 resolution ledgerと元test削除後の`PASS`はactivation changeで有効化する。Bootstrap validatorは対応resolutionを受け取らず、削除済みartifactを`PASS`にしない。
 
-final aggregatorのinputは完全な`alignment_packet`、同じrecord集合と順序の固定済み`metadata_result`と`alignment_result`、検証対象のcanonical `deep_packet`、独立した`workflow_routing_context`、検証対象の`routing_manifest`、required record集合とdeep packet hashへ結合した`sol_result`または未実行を表す`null`、同じrecord集合と順序の`retention_records`だけを持つ。正規artifactをrecordごとに分割しない。metadata verdict、alignment verdict、Sol required、Sol verdict、actual boundary、metadataを独立したscalarとして再入力しない。
+final aggregatorのinputは完全な`alignment_packet`、同じrecord集合と順序の固定済み`metadata_result`と`alignment_result`、検証対象のcanonical `deep_packet`、独立した`workflow_routing_context`、検証対象の`routing_manifest`、required record集合とdeep packet hashへ結合した`sol_result`または未実行を表す`null`、同じrecord集合と順序の`retention_records`だけを持つ。正規artifactをrecordごとに分割しない。metadata verdict、alignment verdict、deep required、deep verdict、actual boundary、metadataを独立したscalarとして再入力しない。
 
-required recordに対応するSol resultがない場合、またはSol verdictが`NEEDS_CONTEXT`の場合は、dispositionを計算せず`NEEDS_CONTEXT / null / BLOCKED`へ短絡する。
+required recordに対応するdeep resultがない場合、またはdeep verdictが`NEEDS_CONTEXT`の場合は、dispositionを計算せず`NEEDS_CONTEXT / null / BLOCKED`へ短絡する。
