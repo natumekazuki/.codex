@@ -9,7 +9,7 @@ Phase 1は、test sourceを見ずに`@test-value` metadataが自己完結した�
 packetは`review_contract_version = "metadata-review-v2"`と`records`を持つ。各recordは次だけを持つ。
 
 - `record_id`: locatorとmetadata hashから決定論的に作るopaque ID
-- `metadata_format_version`: `2`
+- `metadata_format_version`: 現在のtestは`2`。正常なGit削除元に限り`1`。
 - `metadata`
 - `metadata_hash`
 
@@ -24,6 +24,12 @@ packetへsource path、line、symbol、source text、source hash、assertion sum
 - lifecycleが主張の目的と整合するか。
 
 test本文があれば判断できる、という理由で不足を補完しない。不足がmetadata自身の再設計を要する場合は`REDESIGN`、boundedな追加contextでmetadata単体の意味を確定できる場合は`NEEDS_CONTEXT`とする。
+
+## 歴史的v1削除
+
+`metadata_format_version = 1`はbuilderがGit transitionの削除元として検証した旧metadataである。元の`claim`、`failure_mode`、`oracle`、`scope`、`lifecycle`で主張の反証可能性と具体的な欠陥を評価する。v2専用fieldの欠如自体を違反とせず、値を推測・追加しない。意味が曖昧なら通常どおりREDESIGN／NEEDS_CONTEXTとし、evidenceは実在するfieldだけを指す。
+
+このphaseへ削除元のsourceやlocatorを追加しない。削除identityは後段のalignmentで再検証する。v1の現在testを許す経路ではない。
 
 ## Output
 

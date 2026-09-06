@@ -903,40 +903,44 @@ def test_oracle_table_with_decoy():
         )
 
     # @test-value v2
-    # kind = "compatibility"
-    # claim = "完全削除されたv1 testも移行要求を保持し、v1のまま審査へ進めない"
-    # oracle = { type = "issue", ref = "natumekazuki/.codex#43" }
-    # fault = "削除されたv1 recordのTEST_VALUE_V2_REQUIREDを失い、DELETED transitionだけを成功結果として返す"
-    # observable = "Git抽出結果のDELETED.before、diagnostic、exit status"
+    # kind = "regression"
+    # claim = "正常なv1削除は元metadataを審査へ渡し、不正な削除元の診断は保持する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "固定baseへv2移行を要求するか削除元の不正metadataまで黙認する"
+    # observable = "Git抽出CLIのexit、診断とmetadata packetの元v1内容"
     # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
-    # lifecycle = "ephemeral"
-    # remove_when = "v1読取り対応を撤去した時"
+    # lifecycle = "permanent"
     # @end-test-value
-    def test_git_mode_keeps_v1_migration_error_for_deleted_test(self) -> None:
-        deleted = self.write(
-            "tests/test_deleted_v1.py",
-            V1_METADATA + "def test_deleted_v1():\n    assert legacy_observation()\n",
-        )
-        base = self.initialize_git()
-        deleted.unlink()
-
-        result, exit_status, stderr = self.extract_git(base)
-
-        self.assertEqual(exit_status, 1, stderr)
-        self.assertEqual(result["tests"], [])
-        self.assertEqual(
-            [transition["kind"] for transition in result["transitions"]],
-            ["DELETED"],
-        )
-        self.assertEqual(
-            result["transitions"][0]["before"]["metadata_format_version"],
-            1,
-        )
-        self.assertEqual(
-            [value["code"] for value in result["diagnostics"]],
-            ["TEST_VALUE_V2_REQUIRED"],
-        )
+    def test_git_mode_reviews_valid_v1_deletions_and_keeps_invalid_diagnostics(self) -> None:
+        source = V1_METADATA + "def test_deleted_v1():\n    assert legacy_observation()\n"
+        for whole_file in (False, True):
+            for valid in (True, False):
+                with self.subTest(whole_file=whole_file, valid=valid), tempfile.TemporaryDirectory() as tmp:
+                    self.root = Path(tmp)
+                    original = source if valid else source.replace('scope = "payment-api"', 'scope = ""')
+                    deleted = self.write("tests/test_deleted_v1.py", original)
+                    base = self.initialize_git()
+                    before, _ = self.extract("tests/test_deleted_v1.py")
+                    if whole_file:
+                        deleted.unlink()
+                    else:
+                        deleted.write_text("# test retired\n", encoding="utf-8")
+                    result, exit_status, stderr = self.extract_git(base)
+                    self.assertEqual(result["tests"], [])
+                    self.assertEqual([t["kind"] for t in result["transitions"]], ["DELETED"])
+                    historical = result["transitions"][0]["before"]
+                    self.assertEqual(historical, before["tests"][0])
+                    if valid:
+                        self.assertEqual(exit_status, 0, stderr)
+                        self.assertEqual(result["diagnostics"], [])
+                        record = build_metadata_packet(result)["records"][0]
+                        self.assertEqual(record["metadata_format_version"], 1)
+                        self.assertEqual(record["metadata"], historical["metadata"])
+                        self.assertEqual(record["metadata_hash"], historical["metadata_hash"])
+                    else:
+                        self.assertEqual(exit_status, 1, stderr)
+                        self.assertTrue(any(d["code"] != "TEST_VALUE_V2_REQUIRED" for d in result["diagnostics"]))
 
     # @test-value v2
     # kind = "contract"

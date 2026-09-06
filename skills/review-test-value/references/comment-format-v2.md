@@ -37,6 +37,6 @@ def test_retry_preserves_charge_count():
 
 ## v1からの移行
 
-v1の読取りは、そのtask内で対象sourceをv2へ移行するために限る。path modeとGit modeの両方で、対象v1は`TEST_VALUE_V2_REQUIRED`とexit `1`を返す。読めたv1を審査packetへ渡してはならない。
+現在の追加・変更testと明示pathのv1は、そのtask内でv2へ移行するために読み取り、`TEST_VALUE_V2_REQUIRED`とexit `1`を返す。例外はGit modeで削除を確認した正常な`DELETED.before`だけであり、固定baseの元v1 metadataを変更せず歴史的な証拠として審査へ渡す。[Git選択契約](git-selection-v1.md)に従い、削除審査や保持根拠・解消確認を省略しない。
 
 実際のtest本文とaccepted contractを確認し、`fault`、`observable`、`observation_boundary`を記述してsourceを更新する。同じ選択条件で再抽出し、exit `0`になってからv2審査へ進む。情報不足や編集権限不足で移行できなければ停止する。`failure_mode`の分割や推測による自動変換、対象外v1の一括移行は行わない。

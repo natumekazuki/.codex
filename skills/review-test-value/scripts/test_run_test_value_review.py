@@ -17,6 +17,9 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from build_review_packets import (
+    PacketError,
+    build_deep_packet,
+    record_id_for,
     build_alignment_packet_multi,
     build_metadata_packet_multi,
     canonical_json,
@@ -25,7 +28,7 @@ import run_test_value_review as coordinator
 import review_worker
 from review_resolution import content_hash
 from review_routing import build_routing_manifest, decide_gate
-from validate_review_result import aggregate_results
+from validate_review_result import aggregate_results, validate_phase_result, ResultValidationError
 from test_review_packets import extractor_result, metadata_result
 
 
@@ -68,6 +71,96 @@ def alignment_result(packet: dict, verdict: str = "MISMATCH") -> dict:
 
 
 class ReviewCoordinatorTests(unittest.TestCase):
+    # @test-value v2
+    # kind = "regression"
+    # claim = "v1削除は元metadataで各phaseと保持根拠を検証し、削除解消義務を残す"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/alignment-review-contract.md" }
+    # fault = "過去metadataへv2を要求するか削除IDを検証せず受理し、削除義務を飛ばしてPASSにする"
+    # observable = "各packetの元metadata、worker入力検証、集約gateと削除義務"
+    # observation_boundary = "component-behavior"
+    # scope = "test-value-historical-deletion"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_v1_deletion_reaches_review_and_requires_removal_resolution(self):
+        for lifecycle in ("permanent", "characterization", "ephemeral"):
+            for recheck in (False, True):
+                for boundary in ("component-behavior", "declaration"):
+                    with self.subTest(lifecycle=lifecycle, recheck=recheck, boundary=boundary):
+                        extracted = extractor_result()
+                        old = extracted["tests"].pop()
+                        old["metadata_format_version"] = 1
+                        original = old["metadata"]
+                        original["failure_mode"] = original.pop("fault")
+                        original.pop("observable")
+                        original.pop("observation_boundary")
+                        original["lifecycle"] = lifecycle
+                        if lifecycle == "characterization":
+                            original["review_when"] = "contract changes"
+                        old["metadata_hash"] = content_hash(canonical_json(original))
+                        extracted["transitions"] = [{"kind": "DELETED", "before": old, "after": None}]
+                        phase1 = build_metadata_packet_multi([extracted])
+                        self.assertEqual(review_worker._validate_packet("metadata", phase1), phase1["records"])
+                        self.assertEqual(phase1["records"][0]["metadata"], original)
+                        self.assertEqual(set(phase1["records"][0]), {"record_id", "metadata_format_version", "metadata", "metadata_hash"})
+                        frozen = metadata_result(phase1)
+                        frozen["reviews"][0]["evidence"][0]["fields"] = ["claim", "failure_mode", "scope"]
+                        packet = build_alignment_packet_multi([extracted], frozen)
+                        review_worker._validate_packet("alignment", packet)
+                        record = packet["records"][0]
+                        self.assertEqual(record["source_text"], old["source_text"])
+                        self.assertEqual(record["metadata_hash"], old["metadata_hash"])
+                        rid = record["record_id"]
+                        action = "MOVE_TO_POLICY_CHECK" if boundary == "declaration" else "DROP"
+                        aligned = alignment_result(packet, "RECHECK" if recheck else "ALIGNED")
+                        aligned["reviews"][0].update(actual_boundary=None if recheck else boundary,
+                            actual_observables=[] if recheck else ["assertion result"],
+                            context_requirements=["CONTRACT.md"] if recheck else [], disposition_candidate=action)
+                        validate_phase_result("alignment", aligned, packet["records"])
+                        workflow = {"review_contract_version": "review-workflow-context-v1", "records": [{
+                            "record_id": rid, "metadata_hash": record["metadata_hash"],
+                            "parent_risk_tags": ["authorization"], "audit_percent": 0}]}
+                        routing = build_routing_manifest([{
+                            **{k: record[k] for k in ("record_id", "metadata_hash", "source_hash", "metadata")},
+                            "contract_version": "deep-review-v2", "metadata_verdict": "VALID",
+                            "alignment_verdict": aligned["reviews"][0]["verdict"],
+                            "context_requirements": aligned["reviews"][0]["context_requirements"]}], workflow)
+                        evidence = {"kind": "accepted-contract", "ref": "CONTRACT.md", "content": "retained contract",
+                            "content_hash": content_hash("retained contract")}
+                        deep = build_deep_packet(packet, frozen, aligned, routing, workflow, {rid: [evidence]})
+                        review_worker._validate_packet("deep", deep)
+                        self.assertEqual(deep["records"][0]["metadata"], original)
+                        sol = {"review_contract_version": "deep-review-v2", "input_hash": deep["input_hash"], "reviews": [{
+                            **{k: record[k] for k in ("record_id", "metadata_hash", "source_hash")},
+                            "verdict": "APPROVE", "evidence": ["contract and assertion agree"],
+                            "unverified": [], "context_requirements": [], "next_action": None,
+                            "context_resolution": {"actual_boundary": boundary, "actual_observables": ["assertion result"],
+                                "context_evidence": [{"ref": evidence["ref"], "content_hash": evidence["content_hash"]}]} if recheck else None}]}
+                        validate_phase_result("deep", sol, deep["records"], deep["input_hash"])
+                        host = {"retention_by_record": {rid: {
+                            "evidence": [{**evidence, "meaning": "the contract remains required"}],
+                            "determination": {"determination": "SUPPORTED", "rationale": "accepted contract",
+                                "evidence_refs": [{"ref": evidence["ref"], "content_hash": evidence["content_hash"]}]},
+                            "temporal_observation": None}}}
+                        projections, detailed = coordinator._retention_inputs(packet["records"], aligned, sol, host, content_hash("snapshot"))
+                        self.assertEqual(projections[0]["artifact_state"], "TEST_ABSENT")
+                        self.assertEqual(detailed[rid]["metadata"], original)
+                        value = {"alignment_packet": packet, "metadata_result": frozen, "deep_packet": deep,
+                            "alignment_result": aligned, "workflow_routing_context": workflow, "routing_manifest": routing,
+                            "sol_result": sol, "retention_records": projections}
+                        final = aggregate_results(value)
+                        self.assertEqual(final["gate"], "CHANGES_REQUIRED")
+                        self.assertEqual(final["records"][0]["disposition"], action)
+                        obligations = coordinator._obligations(final, detailed)
+                        self.assertEqual([o["action"] for o in obligations], [action])
+                        self.assertEqual(aggregate_results({**value, "sol_result": None})["gate"], "BLOCKED")
+                        forged = copy.deepcopy(packet)
+                        forged["records"][0]["record_id"] = record_id_for(old)
+                        with self.assertRaises(review_worker.ReviewWorkerBlocked):
+                            review_worker._validate_packet("alignment", forged)
+                        current = {**extracted, "tests": [old], "transitions": None}
+                        with self.assertRaises(PacketError):
+                            build_metadata_packet_multi([current])
+
     # @test-value v2
     # kind = "contract"
     # claim = "worker失敗はphaseと安全なvalidator/canary診断だけをstructured BLOCKEDとしてCLIへ返す"

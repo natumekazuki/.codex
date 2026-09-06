@@ -16,6 +16,10 @@ packetは`review_contract_version = "deep-review-v2"`、alignment packetと同�
 
 Solはpacket外を探索しない。alignment recordはallowlist fieldから再構築し、未知fieldを転送しない。context itemは`kind`、`ref`、`content`、`content_hash`を持ち、hash不一致をAI審査前に拒否する。routing manifestはrecord ID、metadata hash、source hash、固定済みPhase 1 / Phase 2 verdict、manifestとは独立した親workflow risk context、audit率から決定論的に再計算し、不一致を拒否する。
 
+## 歴史的v1削除
+
+`metadata_format_version = 1`では、両Luna phaseと同じ未変換の旧metadataと削除identityを使い、`claim`／`failure_mode`と観測の意味を照合する。v1にない宣言boundaryとの一致は要求しない。既知のLuna boundaryとの矛盾、根拠のないcontext解消、固定済みREDESIGN／MISMATCHの救済は引き続き禁止する。APPROVEは削除・移設義務の解消を代替しない。
+
 ## Output
 
 ```json

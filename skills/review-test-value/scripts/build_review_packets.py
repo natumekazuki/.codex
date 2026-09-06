@@ -214,7 +214,7 @@ def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
     packet_records = []
     for record, deleted in records:
         metadata = _object(record.get("metadata"), "record.metadata")
-        metadata_errors = validate_metadata(metadata, 2)
+        metadata_errors = validate_metadata(metadata, record["metadata_format_version"])
         if metadata_errors:
             raise PacketError("record.metadata is invalid: " + "; ".join(metadata_errors))
         metadata_hash = _hash(record.get("metadata_hash"), "record.metadata_hash")
@@ -223,7 +223,7 @@ def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
         packet_records.append(
             {
                 "record_id": deleted_record_id_for(record) if deleted else record_id_for(record),
-                "metadata_format_version": 2,
+                "metadata_format_version": record["metadata_format_version"],
                 "metadata": metadata,
                 "metadata_hash": metadata_hash,
             }
@@ -456,7 +456,9 @@ def _extract_packet_records(
             packet_records.append((after, False))
             after_records.append(after)
         else:
-            _validate_extractor_record(before, "DELETED transition before")
+            _validate_historical_extractor_record(before, "DELETED transition before")
+            if before["metadata"] is None:
+                raise PacketError("DELETED transition before requires valid metadata")
             packet_records.append((before, True))
             if after is not None:
                 raise PacketError("DELETED transition after must be null")

@@ -491,7 +491,6 @@ def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
             ):
                 outcome = unavailable_result()
             else:
-                metadata = record["metadata"]
                 alignment_review = alignment_by_id[record_id]
                 status = aggregate_status(
                     record["metadata_review"]["verdict"],
@@ -505,13 +504,10 @@ def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
                     resolution = sol_review["context_resolution"]
                     if resolution is not None:
                         actual_boundary = resolution["actual_boundary"]
-                disposition = decide_disposition(
+                disposition = decide_record_disposition(
+                    record,
                     actual_boundary=actual_boundary,
-                    lifecycle=metadata["lifecycle"],
                     retention_basis=retention["retention_basis"],
-                    expires_on=metadata.get("expires_on"),
-                    review_when=metadata.get("review_when"),
-                    remove_when=metadata.get("remove_when"),
                 )
                 if disposition is None:
                     outcome = unavailable_result()
@@ -531,6 +527,32 @@ def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def decide_record_disposition(
+    record: dict[str, Any], *, actual_boundary: str | None, retention_basis: str
+) -> str | None:
+    """Route historical deletions to evidence-backed removal resolution."""
+    metadata = record["metadata"]
+    if record["metadata_format_version"] == 1:
+        _validate_alignment_record({key: record[key] for key in ALIGNMENT_RECORD_KEYS})
+        if actual_boundary is None:
+            return None
+        if actual_boundary not in BOUNDARIES:
+            raise ResultValidationError("actual_boundary is invalid")
+        if retention_basis not in {"PRESENT", "ABSENT", "UNRESOLVED"}:
+            raise ResultValidationError("retention_basis is invalid")
+        if retention_basis == "UNRESOLVED":
+            return None
+        return "MOVE_TO_POLICY_CHECK" if actual_boundary == "declaration" else "DROP"
+    return decide_disposition(
+        actual_boundary=actual_boundary,
+        lifecycle=metadata["lifecycle"],
+        retention_basis=retention_basis,
+        expires_on=metadata.get("expires_on"),
+        review_when=metadata.get("review_when"),
+        remove_when=metadata.get("remove_when"),
+    )
+
+
 def _validate_alignment_record(record: Any) -> None:
     if not isinstance(record, dict) or set(record) != ALIGNMENT_RECORD_KEYS:
         raise ResultValidationError("alignment packet record has unexpected keys")
@@ -538,11 +560,12 @@ def _validate_alignment_record(record: Any) -> None:
     if not isinstance(source, dict) or set(source) != SOURCE_KEYS:
         raise ResultValidationError("alignment packet source has unexpected keys")
     metadata = record["metadata"]
-    errors = validate_metadata(metadata, 2)
+    version = record["metadata_format_version"]
+    if type(version) is not int or version not in {1, 2}:
+        raise ResultValidationError("metadata_format_version must be 1 or 2")
+    errors = validate_metadata(metadata, version)
     if errors:
         raise ResultValidationError("record.metadata is invalid: " + "; ".join(errors))
-    if record["metadata_format_version"] != 2:
-        raise ResultValidationError("metadata_format_version must be 2")
     if record["metadata_hash"] != _sha256_text(_canonical_json(metadata)):
         raise ResultValidationError("alignment packet metadata_hash does not match metadata")
     if record["source_hash"] != _sha256_text(_string(record["source_text"], "record.source_text")):
@@ -566,6 +589,8 @@ def _validate_alignment_record(record: Any) -> None:
             }
         )
     )
+    if version == 1 and record["record_id"] != deleted_id:
+        raise ResultValidationError("v1 metadata requires the deleted source identity")
     if record["record_id"] not in {current_id, deleted_id}:
         raise ResultValidationError(
             "record_id does not match the current or deleted source identity"
@@ -667,7 +692,9 @@ def _validate_alignment(review: dict[str, Any], expected: dict[str, Any]) -> Non
         if review["overclaim"]:
             raise ResultValidationError("ALIGNED review must not report overclaim")
         metadata = expected.get("metadata")
-        if not isinstance(metadata, dict) or metadata.get("observation_boundary") != actual_boundary:
+        if expected.get("metadata_format_version") == 1:
+            _validate_alignment_record({key: expected[key] for key in ALIGNMENT_RECORD_KEYS})
+        elif not isinstance(metadata, dict) or metadata.get("observation_boundary") != actual_boundary:
             raise ResultValidationError(
                 "ALIGNED review must match metadata observation_boundary"
             )
@@ -733,7 +760,9 @@ def _validate_context_resolution(review: dict[str, Any], expected: dict[str, Any
     declared_boundary = (
         metadata.get("observation_boundary") if isinstance(metadata, dict) else None
     )
-    if review["verdict"] == "APPROVE" and boundary != declared_boundary:
+    if expected.get("metadata_format_version") == 1:
+        _validate_alignment_record({key: expected[key] for key in ALIGNMENT_RECORD_KEYS})
+    elif review["verdict"] == "APPROVE" and boundary != declared_boundary:
         raise ResultValidationError(
             "APPROVE context_resolution must match metadata observation_boundary"
         )

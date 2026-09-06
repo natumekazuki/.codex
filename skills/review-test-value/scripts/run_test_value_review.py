@@ -48,11 +48,11 @@ from review_routing import (
     RoutingError,
     aggregate_gate,
     build_routing_manifest,
-    decide_disposition,
 )
 from validate_review_result import (
     ResultValidationError,
     aggregate_results,
+    decide_record_disposition,
     result_hash,
     validate_phase_result,
 )
@@ -1063,13 +1063,8 @@ def _retention_inputs(
         except ResolutionStateError as exc:
             raise CoordinatorBlocked(exc.reason_code, str(exc)) from exc
         boundary = _actual_boundary(record_id, alignment_review, sol_by_id)
-        disposition = decide_disposition(
-            actual_boundary=boundary,
-            lifecycle=record["metadata"]["lifecycle"],
-            retention_basis=basis,
-            expires_on=record["metadata"].get("expires_on"),
-            review_when=record["metadata"].get("review_when"),
-            remove_when=record["metadata"].get("remove_when"),
+        disposition = decide_record_disposition(
+            record, actual_boundary=boundary, retention_basis=basis
         )
         if disposition is None:
             projections.append(
@@ -1198,6 +1193,35 @@ def _load_or_initialize_task(
             raise CoordinatorBlocked("STATE_IDENTITY_MISMATCH", "state belongs to another review target")
         if not isinstance(state["generations"], list):
             raise CoordinatorBlocked("STATE_INVALID", "generations must be an array")
+        registered = set()
+        for descriptor in state["generations"]:
+            if not isinstance(descriptor, dict):
+                raise CoordinatorBlocked("STATE_INVALID", "generation descriptor is invalid")
+            generation_id = descriptor.get("generation_id")
+            if (
+                not isinstance(generation_id, str)
+                or not generation_id.startswith("g")
+                or not generation_id[1:].isascii()
+                or not generation_id[1:].isdigit()
+                or len(generation_id) < 7
+                or descriptor.get("generation_path") != f"generations/{generation_id}/generation.json"
+                or generation_id in registered
+            ):
+                raise CoordinatorBlocked("STATE_INVALID", "generation identity is invalid")
+            registered.add(generation_id)
+        generation_root = state_dir / "generations"
+        try:
+            present = {item.name for item in generation_root.iterdir()} if generation_root.exists() else set()
+        except OSError as exc:
+            raise CoordinatorBlocked("STATE_UNAVAILABLE", "cannot enumerate generations") from exc
+        if present - registered:
+            raise CoordinatorBlocked(
+                "STATE_UNPUBLISHED_GENERATION",
+                "unregistered generation artifacts require recovery before review can resume",
+                {"generation_ids": sorted(present - registered)},
+            )
+        if registered - present:
+            raise CoordinatorBlocked("STATE_MISSING", "registered generation artifacts are missing")
         return state
     if any(
         (state_dir / name).exists()
@@ -2053,8 +2077,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if snapshot_descriptor(root, base_oid, mode=mode, head_oid=head_oid) != before:
         raise CoordinatorBlocked("SNAPSHOT_CHANGED", "source changed during review")
     generation_number = len(state["generations"]) + 1
-    while (state_dir / "generations" / f"g{generation_number:06d}").exists():
-        generation_number += 1
+    if (state_dir / "generations" / f"g{generation_number:06d}").exists():
+        raise CoordinatorBlocked(
+            "STATE_UNPUBLISHED_GENERATION",
+            "generation artifacts appeared before publication; preserve them for recovery",
+        )
     generation_id = f"g{generation_number:06d}"
     generation_dir = state_dir / "generations" / generation_id
     try:

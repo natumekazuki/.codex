@@ -51,6 +51,7 @@ jobs:
           skills/review-test-value/scripts/test_preflight_review_worker.py
           skills/review-test-value/scripts/test_review_worker.py
           skills/review-test-value/scripts/test_run_test_value_review.py
+          skills/review-test-value/scripts/test_review_publication.py
           skills/review-test-value/scripts/test_review_routing.py
           skills/review-test-value/scripts/test_review_resolution.py
       - name: Compile Python entry points

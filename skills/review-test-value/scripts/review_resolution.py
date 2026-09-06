@@ -160,7 +160,8 @@ def _derive_retention(
     record = _record_identity(identity)
     if not isinstance(metadata, dict):
         raise ResolutionStateError("RETENTION_INPUT_INVALID", "metadata must be an object")
-    metadata_errors = validate_metadata(metadata, 2)
+    version = 1 if "failure_mode" in metadata else 2
+    metadata_errors = validate_metadata(metadata, version)
     if metadata_errors:
         raise ResolutionStateError(
             "RETENTION_INPUT_INVALID", "metadata is invalid: " + "; ".join(metadata_errors)
@@ -170,6 +171,21 @@ def _derive_retention(
             "RETENTION_IDENTITY_MISMATCH",
             "metadata content does not match the record metadata hash",
         )
+    if version == 1:
+        deleted_id = result_hash({
+            "transition": "DELETED",
+            "locator": {
+                "path": record["locator"]["path"],
+                "declaration_start_line": record["locator"]["declaration_start_line"],
+            },
+            "source_hash": record["source_hash"],
+            "metadata_hash": record["metadata_hash"],
+        })
+        if record["record_id"] != deleted_id or disposition not in RESOLUTION_ACTIONS:
+            raise ResolutionStateError(
+                "RETENTION_IDENTITY_MISMATCH",
+                "v1 metadata requires a deleted source identity and removal disposition",
+            )
     if disposition not in {
         "KEEP_PERMANENT",
         "KEEP_TEMPORARY",

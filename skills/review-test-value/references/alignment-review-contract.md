@@ -26,9 +26,15 @@ alignment packet、deep packet、final aggregationは固定済みPhase 1 result 
 - 正しい内部変更で壊れるprivate wiringや内部順序の固定、入力と期待値の同じ生成元への依存、mockが対象処理を置き換えていないかを確認する。対象欠陥を入れても通る観測を十分な検証としない。
 - 既存checkとの差と、type・schema・static・build・smoke・browser・visual checkの方が直接的かを保持先候補へ反映する。record外の既存checkを見たと推測せず、必要なら限定contextを要求する。根拠のあるDROP/MOVEを扱い、安全契約を保証するnegative assertionは自動却下しない。
 
+## 歴史的v1削除
+
+`metadata_format_version = 1`は元source・metadata・locatorから再計算した削除専用IDに一致する場合だけ受理する。`claim`と`failure_mode`を本文の観測で検出できるか評価する。v1にない宣言boundaryとのenum一致は要求しないが、主張の意味の一致、actual boundaryとobservable、overclaim、source evidence、情報不足時のRECHECKは通常どおり確認する。元metadataへv2 fieldを補完しない。
+
+v1削除の最終処置はDROP（declaration境界はMOVE_TO_POLICY_CHECK）とし、保持根拠と削除／代替チェックの解消確認を必要とする。ALIGNEDやAPPROVEだけで全体PASSにはしない。
+
 ## Output
 
-`verdict`は`ALIGNED`、`MISMATCH`、`RECHECK`のいずれかとする。`ALIGNED`は`overclaim = false`を必要とし、入力metadataの`observation_boundary`と`actual_boundary`を一致させる。`declared_boundary`を重複出力しない。`ALIGNED`と`MISMATCH`はrecord内のsourceを示す`evidence`を一件以上必要とし、確定した判定では`actual_observables`を一件以上返す。`RECHECK`では未確定の`actual_boundary`を`null`、直接観測も不明なら`actual_observables`を空配列にできる。`RECHECK`は`context_requirements`を一件以上必要とする。Phase 1 verdictを出力し直さない。
+`verdict`は`ALIGNED`、`MISMATCH`、`RECHECK`のいずれかとする。`ALIGNED`は`overclaim = false`を必要とし、v2では入力metadataの`observation_boundary`と`actual_boundary`を一致させる。`declared_boundary`を重複出力しない。`ALIGNED`と`MISMATCH`はrecord内のsourceを示す`evidence`を一件以上必要とし、確定した判定では`actual_observables`を一件以上返す。`RECHECK`では未確定の`actual_boundary`を`null`、直接観測も不明なら`actual_observables`を空配列にできる。`RECHECK`は`context_requirements`を一件以上必要とする。Phase 1 verdictを出力し直さない。
 
 `disposition_candidate`は`KEEP_PERMANENT`、`KEEP_TEMPORARY`、`MOVE_TO_POLICY_CHECK`、`DROP`、`null`のいずれかであり、final dispositionではない。
 

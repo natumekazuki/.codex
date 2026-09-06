@@ -726,9 +726,12 @@ def _validate_packet(phase: str, packet: dict[str, Any]) -> list[dict[str, Any]]
                     "metadata_hash",
                 }:
                     raise ResultValidationError("metadata packet record has unexpected keys")
-                if record["metadata_format_version"] != 2:
+                version = record["metadata_format_version"]
+                if type(version) is not int or version not in {1, 2}:
                     raise ResultValidationError("metadata format version is invalid")
-                errors = validate_metadata(record["metadata"], 2)
+                # The builder admits v1 only from a verified Git deletion.
+                # Source identity is checked again in alignment, not exposed here.
+                errors = validate_metadata(record["metadata"], version)
                 if errors:
                     raise ResultValidationError("metadata is invalid: " + "; ".join(errors))
                 if record["metadata_hash"] != sha256_text(canonical_json(record["metadata"])):
