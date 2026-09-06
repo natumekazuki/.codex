@@ -23,7 +23,7 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 | 通常の親 | `gpt-6-astra` | medium、Standard速度 |
 | 一般childの既定 | `gpt-5.6-sol` | medium |
 | `general_sol` | `gpt-5.6-sol` | medium |
-| `general_luna` | `gpt-5.6-luna` | medium |
+| `general_luna` | `gpt-5.6-luna` | max |
 | `test_value_luna` | `gpt-5.6-luna` | medium |
 | `test_value_sol` | `gpt-5.6-sol` | xhigh |
 
@@ -38,7 +38,7 @@ codex --profile gpt56
 codex --profile astra
 ```
 
-どちらも同じ4role・短い共通ルール・必須審査を使う。model配置は運用方針、mediumは初期値であり、性能の最適値や週リミット消費の解消を保証しない。設定例の値と新規sessionの実効値を区別する。
+どちらも同じ4role・短い共通ルール・必須審査を使う。model配置とreasoning effortは運用上の設定値であり、性能の最適値や週リミット消費の解消を保証しない。設定例の値と新規sessionの実効値を区別する。
 
 ## Skill
 
