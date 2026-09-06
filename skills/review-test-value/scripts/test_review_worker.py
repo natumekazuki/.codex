@@ -160,6 +160,8 @@ developer_instructions = \"Review only the supplied packet.\"
     # @end-test-value
     def test_execute_phase_withholds_packet_until_denial_and_validates_output(self) -> None:
         calls: list[tuple[list[str], str, Path]] = []
+        if os.name != "nt":
+            self.skipTest("full handoff uses real Windows filesystem paths")
         packet = _packet(2)
         expected_result = _result(2)
 

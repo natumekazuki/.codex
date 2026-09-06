@@ -592,7 +592,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
     # @end-test-value
     def test_host_evidence_rejects_content_not_observed_in_target(self):
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
+            root = Path(temp).resolve()
             anchor = root / "CONTRACT.md"
             anchor.write_text("accepted behavior\n", encoding="utf-8")
             forged = "different behavior\n"
