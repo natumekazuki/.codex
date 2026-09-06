@@ -8,7 +8,7 @@
 
 ## 導入確認
 
-- 新規sessionで親Astra、一般child既定Sol、汎用Sol/Lunaと専門2roleのmodel・effort、Standard速度、実際の読込元を確認する。自己申告だけを証拠にしない。
+- 新規sessionで親Astra、一般child既定Luna/max、汎用Sol/Lunaと専門2roleのmodel・effort、Standard速度、実際の読込元を確認する。自己申告だけを証拠にしない。
 - 通常の小修正には不要な職種別handoffや校正工程を足さず、明示的な文書推敲では任意Skillを利用できることを確認する。
 - test変更は親・汎用子とも必須審査へ到達する。[専門runbook](activate-test-value-review.md)の同一候補の検証結果を再利用し、未完了ならliveへ部分配布しない。
 - 再開・compactionで短い抑制と必須審査を保ち、専門workerへの入力混入を防ぐ。WithMateの正本・対象・revision・個別承認を維持する。

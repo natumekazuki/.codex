@@ -21,13 +21,13 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 | 用途 | model | effort |
 | --- | --- | --- |
 | 通常の親 | `gpt-6-astra` | medium、Standard速度 |
-| 一般childの既定 | `gpt-5.6-sol` | medium |
+| 一般childの既定 | `gpt-5.6-luna` | max |
 | `general_sol` | `gpt-5.6-sol` | medium |
 | `general_luna` | `gpt-5.6-luna` | max |
 | `test_value_luna` | `gpt-5.6-luna` | medium |
 | `test_value_sol` | `gpt-5.6-sol` | xhigh |
 
-汎用2roleは調査・設計・実装・review・検証に使え、必要な仕事は起動時の依頼で表す。Solは判断を伴う仕事、Lunaは期待結果が明確な仕事の目安であり、固定handoff表や段階的な昇格規則ではない。標準`default`／`worker`／`explorer`はカスタム4種とは別である。
+汎用2roleは調査・設計・実装・review・検証に使え、必要な仕事は起動時の依頼で表す。委譲する調査・データ取得・範囲が明確な実装・検証はLunaを優先する。SolはLunaで未解決の具体的な問題、専門審査の指定、ユーザーの明示指定に限る。親が設計判断と統合を担い、必要な文脈だけを渡す。共通hookがこの方針を再通知するが、モデル利用を機械的に禁止するものではない。標準`default`／`worker`／`explorer`はカスタム4種とは別である。
 
 設定例はCLI `0.153.4`を対象にする。汎用roleの権限は親から継承し、調査依頼のread-only境界が必要な場合はruntimeで制限する。専門審査の入力隔離は[review-test-value](skills/review-test-value/SKILL.md)が所有し、汎用roleや親の自己評価で代行しない。
 
