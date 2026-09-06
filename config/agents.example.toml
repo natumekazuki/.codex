@@ -2,7 +2,7 @@
 # Copy only the agents you actually want to register.
 
 [agents]
-max_concurrent_threads_per_session = 5
+max_concurrent_threads_per_session = 24
 max_depth = 1
 default_subagent_model = "gpt-5.6-sol"
 default_subagent_reasoning_effort = "medium"
