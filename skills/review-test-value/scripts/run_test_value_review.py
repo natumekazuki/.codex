@@ -48,11 +48,11 @@ from review_routing import (
     RoutingError,
     aggregate_gate,
     build_routing_manifest,
-    decide_disposition,
 )
 from validate_review_result import (
     ResultValidationError,
     aggregate_results,
+    decide_record_disposition,
     result_hash,
     validate_phase_result,
 )
@@ -1063,13 +1063,8 @@ def _retention_inputs(
         except ResolutionStateError as exc:
             raise CoordinatorBlocked(exc.reason_code, str(exc)) from exc
         boundary = _actual_boundary(record_id, alignment_review, sol_by_id)
-        disposition = decide_disposition(
-            actual_boundary=boundary,
-            lifecycle=record["metadata"]["lifecycle"],
-            retention_basis=basis,
-            expires_on=record["metadata"].get("expires_on"),
-            review_when=record["metadata"].get("review_when"),
-            remove_when=record["metadata"].get("remove_when"),
+        disposition = decide_record_disposition(
+            record, actual_boundary=boundary, retention_basis=basis
         )
         if disposition is None:
             projections.append(
