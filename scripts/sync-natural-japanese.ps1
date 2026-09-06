@@ -158,13 +158,15 @@ try {
     $skillDefinition = @'
 ---
 name: natural-japanese
-description: 一般的な業務文書、議事録、メール、ブログ、エッセイを自然で読みやすい日本語で作成・リライトし、文章のAIっぽさや自然さを診断・採点するときに使用する。通常の短いチャット回答、進捗・完了報告、単純なコマンド結果には使用しない。技術文書の論証・構成・Markdown表記は japanese-tech-writing-review を使用する。
+description: 一般的な業務文書、議事録、メール、ブログ、エッセイについて、自然な日本語への作成・リライト・診断・採点を明示的に依頼されたときに使用する。通常の開発報告や短いチャットへ自動適用しない。技術文書の論証・構成・Markdown表記は japanese-tech-writing-review を使用する。
 license: MIT
 ---
 
 # natural-japanese
 
 一般・業務文書を自然で読みやすい日本語に整える。短いチャット回答や作業報告は通常の会話・報告規則で書き、このSkillを起動しない。
+
+ユーザーが明示したwrite、リライト、score、文体調整だけを扱う。通常の開発作業、README更新、Issue作成、完了報告へlint、独立review、収束工程を自動で追加しない。明示されたquick/full、score、特定の品質工程は以下の契約どおり実行する。
 
 技術文書でも、文章の自然さだけを直す依頼にはこのSkillを使う。論証、章構成、Markdown表記を扱う場合は `japanese-tech-writing-review` を使う。両方が必要なら担当を分け、同じ観点を二重にレビューしない。
 
@@ -199,6 +201,20 @@ fullではlintに加え、構造の機械的確認と必要に応じた用語確
 '@
     $skillDefinition = $skillDefinition.Replace("`r`n", "`n").Replace("`n", [Environment]::NewLine)
     Set-Content -LiteralPath $skillDefinitionPath -Value $skillDefinition -Encoding utf8NoBOM
+
+    $agentsDirectory = Join-Path $staging "agents"
+    New-Item -ItemType Directory -Path $agentsDirectory -Force | Out-Null
+    $openAiYaml = @'
+interface:
+  display_name: "自然な日本語"
+  short_description: "一般文書の執筆・推敲・自然さ診断を明示依頼時に行う"
+  default_prompt: "Use $natural-japanese to rewrite this document in natural, readable Japanese with the requested quick or full workflow."
+
+policy:
+  allow_implicit_invocation: false
+'@
+    $openAiYaml = $openAiYaml.Replace("`r`n", "`n").Replace("`n", [Environment]::NewLine)
+    Set-Content -LiteralPath (Join-Path $agentsDirectory "openai.yaml") -Value $openAiYaml -Encoding utf8NoBOM
 
     $writeWorkflow = @'
 # Write workflow
@@ -354,7 +370,8 @@ License: MIT (see LICENSE)
 This directory is synchronized by scripts/sync-natural-japanese.ps1.
 Codex adaptations: removes the unsupported argument-hint frontmatter entry,
 routes technical-document structure and Markdown formatting to japanese-tech-writing-review,
-and provides a concise write/score router with local write and score workflow adjustments.
+provides a concise write/score router with local write and score workflow adjustments,
+and preserves explicit-only invocation through agents/openai.yaml.
 Local edits under this directory are replaced during synchronization.
 "@
     $notice = $notice.Replace("`r`n", "`n").Replace("`n", [Environment]::NewLine)

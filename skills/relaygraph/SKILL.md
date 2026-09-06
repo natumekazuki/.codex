@@ -1,11 +1,13 @@
 ---
 name: relaygraph
-description: Use RelayGraph in repositories with .relaygraph.yaml or *.relaygraph.yaml to inspect resource relationships, trace design/source/test impact, validate graph declarations, rebuild or query the cache, and create repository-specific graph rules for AI-assisted code navigation.
+description: Use RelayGraph in repositories that already contain .relaygraph.yaml or *.relaygraph.yaml to inspect resource relationships, trace design/source/test impact, validate declarations, and maintain graph rules. Bootstrap a repository only when RelayGraph adoption is explicitly requested.
 ---
 
 # RelayGraph
 
 Use RelayGraph to understand and validate Git-backed resource graphs before and after code, documentation, or sidecar changes.
+
+Activate this skill for work on an adopted RelayGraph repository or for an explicit RelayGraph adoption request. The absence of `.relaygraph.yaml` is not a reason to create graph files, sidecars, plugins, or a cache during ordinary repository exploration.
 
 ## Core Rules
 
@@ -18,14 +20,15 @@ Use RelayGraph to understand and validate Git-backed resource graphs before and 
 
 ## Workflow
 
-1. Detect whether the repository uses RelayGraph by checking for `.relaygraph.yaml`.
-2. If the repository has no `.relaygraph.yaml`, read `references/bootstrap-repo.md` before creating initial graph files.
-3. Read repository-local rules before creating sidecars, running `init`, or changing plugin vocabulary.
-4. If root config, plugin vocabulary, or graph granularity is unclear, read the relevant reference before editing.
-5. Trace the target file, feature root, or design document before editing.
-6. Read the related resources returned by RelayGraph.
-7. Make the requested change using existing repository conventions.
-8. Validate the graph after changes.
+1. Detect whether the repository uses RelayGraph by checking for `.relaygraph.yaml` or existing `*.relaygraph.yaml` sidecars.
+2. If no RelayGraph declarations exist, use ordinary repository tools unless the user explicitly requested adoption. For an explicit adoption request, read `references/bootstrap-repo.md` before creating initial graph files.
+3. If sidecars exist without a root `.relaygraph.yaml`, report the incomplete repository setup. Do not infer permission to bootstrap it.
+4. Read repository-local rules before creating sidecars, running `init`, or changing plugin vocabulary.
+5. If root config, plugin vocabulary, or graph granularity is unclear, read the relevant reference before editing.
+6. Trace the target file, feature root, or design document before editing.
+7. Read the related resources returned by RelayGraph.
+8. Make the requested change using existing repository conventions.
+9. Validate the graph after changes.
 
 ## Command Selection
 

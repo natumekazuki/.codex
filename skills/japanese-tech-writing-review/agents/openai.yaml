@@ -1,0 +1,7 @@
+interface:
+  display_name: "日本語技術文書レビュー"
+  short_description: "技術文書の論証・構成・Markdown表記を明示依頼時に整える"
+  default_prompt: "Use $japanese-tech-writing-review to revise this Japanese technical document for clear reasoning, structure, terminology, and Markdown."
+
+policy:
+  allow_implicit_invocation: false

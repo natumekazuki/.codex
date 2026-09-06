@@ -1,74 +1,57 @@
 ---
 name: review-test-value
-description: Python、TypeScript、C#の新規・変更testに隣接する`@test-value`を抽出し、コメントとtest本文が同じfailure modeを検出するか審査する。pytest・unittest、Jest・Vitest・Playwright、xUnit・NUnit・MSTestの価値レビューとreview packet生成に使う。runtime test collection、動的case展開、CI gate構築には使わない。
+description: Python、TypeScript、C#のtest新規追加・意味変更をGit差分から抽出し、専用Luna/Solで検証価値と本文整合を必須審査する。削除・移設の解消も扱う。既存checkの実行だけには起動しない。
 ---
 
 # Review Test Value
 
-構造化コメントとtest sourceの対応付けをscriptへ任せ、AIは抽出済みrecordだけを審査する。欠落した値や曖昧な結合を会話内で補完しない。
+構造化metadataとtest sourceの対応付け、入力固定、結果の集合・順序・hash検証はscriptが所有する。親は実際のsourceとaccepted contractを確認して保持根拠とriskを渡す。参照先を読まず、oracle.refの存在やmodelの自由出力だけで保持を承認しない。
 
-このfeature候補のextractor/packetはv2へ更新中であり、liveへ配布してはならない。下記はliveの旧workflowの記録であり、候補v2出力を旧審査へ渡す手順ではない。候補の直接検証と有効化条件は[runbook](../../docs/runbooks/activate-test-value-review.md)に従う。
+このcheckoutは候補であり、実モデルE2E・候補自身の審査・新規session確認が完了するまでliveへ配布しない。[有効化runbook](../../docs/runbooks/activate-test-value-review.md)で状態を確認する。以下は候補を明示実行する経路であり、旧単一審査へ戻すfallbackではない。
 
-二段階審査のruntime activationと新session smokeが完了するまで、この候補を標準実行経路には使用しない。`test_value_luna`と`test_value_sol`を必須roleとして起動せず、以下の現行workflowを使う。
+## testを増やす前の判断
 
-activation条件を満たした後に別途有効化する運用を妨げない。切替条件、隔離実行、aggregate gateは#42〜#45のscopeで扱い、このSkillでは変更しない。
+現在の要求・契約・具体的な不具合を根拠に、どの欠陥を検出し、assertionが何を直接観測するかを決める。正しい内部変更で壊れる実装詳細依存、既存checkと同じ欠陥の重複検出、同じ生成元による入力と期待値の循環を避ける。type、schema、static、build、smoke、browser、visual checkの方が直接的ならそちらを選ぶ。別のDesign Gateや提出物は要求しない。
 
-抽出CLIには`tomllib`を含むPython 3.11以降を使う。TypeScriptにはNode.jsと固定済みnpm依存、C#には.NET 8 SDKと固定済みNuGet依存を追加で使う。
+不要なtestは追加しない・減らす・適切なcheckへ移す結論を扱う。必要なnegative testや安全境界をabsenceという理由だけで捨てない。既存checkを実行するだけなら設計・価値審査を追加しない。
 
-## Workflow
+## 候補の実行
 
-1. repository instructionと対象pathを確認する。
-2. 対象言語とsource adapterの対応範囲を[references/source-adapters-v1.md](references/source-adapters-v1.md)で確認する。動的生成、runtime collectionとの一致が必要なtestはv1対象外として報告する。
-3. 価値コメントを書くか直す場合は、先に[references/comment-format-v1.md](references/comment-format-v1.md)を読む。
-4. TypeScriptまたはC#を初めて抽出する環境では、対応する依存を準備する。
+Python 3.11以降を使う。対象の選択はtask開始時のbaseからのGit modeとし、pathやrecordを都合よく選び直さない。対象外の未変更testを一括審査・移行しない。metadataを書く場合は[comment-format-v2](references/comment-format-v2.md)、対応宣言とGit選択は[source-adapters-v1](references/source-adapters-v1.md)と[git-selection-v1](references/git-selection-v1.md)を必要に応じて読む。
+
+TypeScript／C#の対象があり依存が未準備の場合だけ、対応するadapterを準備する。
 
 ```powershell
 npm ci --prefix <skill-dir>/scripts/adapters/typescript
 dotnet restore <skill-dir>/scripts/adapters/csharp/TestValue.CSharpExtractor.csproj
 ```
 
-5. 新規・意味変更testの審査では[references/git-selection-v1.md](references/git-selection-v1.md)を読み、task開始時に固定したbase commitから対象snapshotまでのGit差分で抽出する。対象pathやline rangeを手で選ばない。複数言語は言語ごとに実行を分ける。
+入口は`run_test_value_review.py`。root、task base、対象snapshot、SessionFolder内のtask専用state、native CLI、host evidenceを指定する。working treeが既定で、stagedは`--staged`、commit固定は`--head <commit>`を使う。審査のためだけにcommit・stage・base変更をしない。
+
+最初は同じ入口に`--prepare`を付け、`--host-evidence`を省いて現在のidentityとhost evidenceの雛形を取得する。この準備はmodelを呼ばない。雛形へ実際に確認した根拠を記入してから、同じ対象とstateで以下を実行する。hashやrecord集合を親が手計算し直さない。
 
 ```powershell
-python -X utf8 <skill-dir>/scripts/extract_test_values.py `
-  --root <repository-root> `
-  --changed-from <task-base-commit> `
-  --language python
+python -X utf8 <skill-dir>/scripts/run_test_value_review.py `
+  --root <repository-root> --changed-from <task-base> `
+  --state-dir <task-state-directory> --cli <native-codex-executable> `
+  --host-evidence <host-evidence-json>
 ```
 
-明示的なfile全体の審査またはmetadata migrationでは、repository rootと同一言語のsource pathを指定する従来modeを使う。
+host evidenceは現在のsnapshot・recordに結び付いたrisk評価、必要な限定context、実際に確認した保持根拠を渡す。sourceの内容・hash・意味判断を区別する。不足や競合を推測で埋めず、具体的な不足が返ったら確認する。各phaseのpacketを手組みしない。
 
-```powershell
-python -X utf8 <skill-dir>/scripts/extract_test_values.py `
-  --root <repository-root> `
-  <test-source-path> [<test-source-path> ...]
-```
+入口が全言語の抽出、独立したLuna metadata審査、固定済み結果を使うalignment、決定論的なrequired Sol、保持と既存resolution、全体gateを接続する。metadataがREDESIGNでもalignmentを省略しない。審査結果の正確な型は[output-v2](references/output-v2.md)、意味は[metadata](references/metadata-review-contract.md)／[alignment](references/alignment-review-contract.md)／[deep](references/deep-review-contract.md)／[routing](references/routing-policy.md)が所有する。
 
-6. exit `1`ではstdoutの`diagnostics`を読み、sourceまたはコメントを修正してから再実行する。抽出器を迂回してAI審査へ進まない。
-7. exit `2`ではstderrを読み、root、path、依存、I/Oを直す。信頼できる部分結果があるとみなさない。
-8. exit `0`の`tests`だけを[references/review-contract.md](references/review-contract.md)に従って審査する。
-9. JSON field、diagnostic、exit statusの確認が必要なら[references/output-v1.md](references/output-v1.md)を読む。
+## 完了条件と不足の扱い
 
-## Extraction Rules
+- `0 = PASS`: 全言語・必要な全phase/Sol・surviving record・DROP/MOVE義務が現在のsnapshotで揃った。
+- `1 = CHANGES_REQUIRED`: metadata／test／保持先に具体的な修正が必要。
+- `2 = BLOCKED`: 入力・依存・隔離・model・根拠等の不足により、信頼できる審査を完了できない。
 
-- 従来modeでは明示されたpathだけをscriptへ渡す。抽出器へ対象testの選択を推測させない。
-- Git modeでは対象pathとline rangeをGit差分選択器へ任せ、個別指定へ置き換えない。
-- 一回の呼び出しへ`.py`、`.ts` / `.tsx`、`.cs`を混在させない。
-- `metadata`、`source_text`、line locator、hashを抽出結果のまま扱う。
-- 通常コメントやdocstringを構造化metadataへ昇格しない。
-- `metadata: null`をAIが推定値で埋めない。
-- `coverage`をruntime runnerの収集結果として扱わない。
-- JSONを恒久artifactやsource of truthとして保存しない。必要なら同じsourceから再生成する。
+PASSとtest自体の実行成功は別の証拠である。抽出やvalidator単体のexit 0、空selection、削除だけ、消えたledgerを全体PASSにしない。元のREDESIGNをACCEPTへ書き換えず、根拠ある削除・移設の解消を別の結果として扱う。
 
-## Review Result
+専門workerはphaseごとに履歴を持たない独立CLIで実行し、metadata phaseへ本文・locator・親履歴・一般hookを渡さない。read-onlyという文言だけを入力隔離の証拠にしない。設定・起動記録と合成canaryの拒否を確認できない場合、packet送信前に停止する。親や汎用子の自己評価、別model、旧結果へのfallbackで補わない。
 
-test recordごとに次を返す。
-
-- `ACCEPT`: 抽出record内では価値コメントが反証可能で、本文のobservableが同じfailure modeを検出する。
-- `REDESIGN`: claim、oracle、failure mode、scope、distinctness、または本文との対応に具体的な欠陥がある。
-- `NEEDS_CONTEXT`: record外の根拠がなければrecord内の設計判定も確定できず、明示的な追加sourceが必要である。
-
-phase判定には`evidence`、`unverified`、必要なら`next_action`を添える。oracle本文が入力されていない場合は`oracle.ref`を必ず`unverified`へ残し、参照先の存在、claimの裏付け、非循環性を確認済みと表現しない。文章の巧拙だけを`REDESIGN`理由にしない。
+初期予算はworker同時1、通常audit10%、追加contextによるSol再実行最大1回。各実行の上限はLuna 5分、Sol 15分とする。Sol入力が800,000文字を超える場合だけ、固定済みの対象順で事前にbatch分割する。全batchの検証済み結果が揃わなければ全体PASSにしない。単独recordの予算超過や期限・cancel・途中失敗を黙って切り捨てず非成功とする。stateには既存resolutionの未解決義務を保持し、別taskや別snapshotの証拠を流用しない。
 
 ## Validation
 
@@ -116,13 +99,15 @@ python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py
 ```
 
-packet、result schema、routing、判定検証の実装や公開CLI契約を変更した場合に実行する。exit `0`の`tests`だけを審査し、exit `1`/`2`や`NEEDS_CONTEXT`を完了扱いにしない。現在のtest価値審査gateと`test_value_luna`/`test_value_sol`の役割は、このSkill変更で有効化・変更しない。
+packet、result schema、routing、判定検証の実装や公開CLI契約を変更した場合に実行する。exit `0`の`tests`だけを審査し、exit `1`/`2`や`NEEDS_CONTEXT`を完了扱いにしない。専門roleの入力境界と全体gateの確認は、候補実行の検証とは別に必要である。
 
-### worker有効化準備
+### workerとcoordinator
 
 ```powershell
 python -X utf8 -m unittest skills/review-test-value/scripts/test_preflight_review_worker.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_worker.py skills/review-test-value/scripts/test_run_test_value_review.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/preflight_review_worker.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/review_worker.py skills/review-test-value/scripts/run_test_value_review.py
 ```
 
-このpreflightはversion照会とreadiness報告だけを行い、workerを起動しない。`BLOCKED`を実モデル成功と扱わない。候補版の実行と継続条件は[有効化runbook](../../docs/runbooks/activate-test-value-review.md)を参照する。
+preflight_review_worker.pyはversion照会とreadiness報告だけを行う。review_worker.pyはWindows native CLI 0.153.4と既存ChatGPT Pro認証を対象に、管理入力の検査と合成canaryを通してからphaseを実行する。未確認のOS・CLI版・認証種別はpacket送信前に停止する。offline testや`BLOCKED`を実モデル成功と扱わない。候補版の実行と継続条件は[有効化runbook](../../docs/runbooks/activate-test-value-review.md)を参照する。

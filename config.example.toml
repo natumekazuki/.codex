@@ -1,12 +1,14 @@
 # Portable Codex user config example.
 # Keep the real config.toml local. Copy only the sections you want to merge.
 
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_reasoning_effort = "medium"
+service_tier = "default"
 personality = "pragmatic"
 project_doc_max_bytes = 131072
 
 [features]
+fast_mode = false
 unified_exec = true
 shell_snapshot = true
 apps = true
@@ -31,6 +33,12 @@ show-context-window-usage = true
 
 [desktop.open-in-target-preferences]
 global = "fileManager"
+
+[agents]
+max_concurrent_threads_per_session = 5
+max_depth = 1
+default_subagent_model = "gpt-5.6-sol"
+default_subagent_reasoning_effort = "medium"
 
 # WithMate installs the `withmate-memory` shim.
 # Keep this server optional so Codex can start when WithMate is unavailable;

@@ -1,12 +1,14 @@
 ---
 name: natural-japanese
-description: 一般的な業務文書、議事録、メール、ブログ、エッセイを自然で読みやすい日本語で作成・リライトし、文章のAIっぽさや自然さを診断・採点するときに使用する。通常の短いチャット回答、進捗・完了報告、単純なコマンド結果には使用しない。技術文書の論証・構成・Markdown表記は japanese-tech-writing-review を使用する。
+description: 一般的な業務文書、議事録、メール、ブログ、エッセイについて、自然な日本語への作成・リライト・診断・採点を明示的に依頼されたときに使用する。通常の開発報告や短いチャットへ自動適用しない。技術文書の論証・構成・Markdown表記は japanese-tech-writing-review を使用する。
 license: MIT
 ---
 
 # natural-japanese
 
 一般・業務文書を自然で読みやすい日本語に整える。短いチャット回答や作業報告は通常の会話・報告規則で書き、このSkillを起動しない。
+
+ユーザーが明示したwrite、リライト、score、文体調整だけを扱う。通常の開発作業、README更新、Issue作成、完了報告へlint、独立review、収束工程を自動で追加しない。明示されたquick/full、score、特定の品質工程は以下の契約どおり実行する。
 
 技術文書でも、文章の自然さだけを直す依頼にはこのSkillを使う。論証、章構成、Markdown表記を扱う場合は `japanese-tech-writing-review` を使う。両方が必要なら担当を分け、同じ観点を二重にレビューしない。
 

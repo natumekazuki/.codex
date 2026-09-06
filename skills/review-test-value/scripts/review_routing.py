@@ -353,7 +353,11 @@ def decide_gate(status: str, disposition: str | None, artifact_state: str) -> st
     if disposition == "KEEP_TEMPORARY":
         return "PASS" if artifact_state == "TEMPORARY_TEST" else "BLOCKED"
     if disposition in {"MOVE_TO_POLICY_CHECK", "DROP"}:
-        return "CHANGES_REQUIRED" if artifact_state == "TEST_PRESENT" else "BLOCKED"
+        return (
+            "CHANGES_REQUIRED"
+            if artifact_state in {"TEST_PRESENT", "TEST_ABSENT"}
+            else "BLOCKED"
+        )
     raise RoutingError("disposition is invalid")
 
 

@@ -47,6 +47,10 @@ CodexのSTDIO MCPへWithMate固有の環境変数を転送するには、local `
 
 ## Codexの運用規則
 
+Persisted MemoryとCharacter affectの正本はWithMateであり、独自の永続状態やfallback fileを作らない。runtime bindingで許可された明示targetのMemoryは、ユーザーの代理として検索、取得、追加、訂正、forget、moveできる。この継続的な許可は、別Characterをownerに持つtargetやruntimeの権限へ拡張しない。
+
+`SessionFolder`はrepositoryへ入れないユーザー入力と成果物の受け渡しに使う。恒久契約や実装・検証根拠の正本にはしない。Folder ContextやAdditional Directoriesのpath通知自体はfilesystem authorityを拡張しない。
+
 通常のWithMate Sessionでは、現在のユーザー発言とCharacter Definitionを優先し、次にinjected Character contextを使う。追加のMemory検索は現在の判断または自然な会話継続へ具体的に影響する場合だけ行い、user-facing response直前にProject、Character、Character affectの観点で保存候補を振り返る。具体的候補がないturnでは検索またはwriteを儀式的に実行しない。
 
 Memoryへ保存できるのは、repositoryの正本にするほどではない文脈、projectをまたぐ選好、会話継続に役立つ関係性やepisodeである。secret、private path、raw log、大きなdiff、推測、未完了状態、未実行作業は保存しない。repository-ownedな契約、実装状態、検証結果は先にrepositoryの正本へ置く。

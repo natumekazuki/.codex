@@ -5,54 +5,13 @@
 max_concurrent_threads_per_session = 5
 max_depth = 1
 default_subagent_model = "gpt-5.6-sol"
+default_subagent_reasoning_effort = "medium"
 
-[agents.researcher]
-config_file = "agents/researcher.toml"
+[agents.general_sol]
+config_file = "agents/general_sol.toml"
 
-[agents.fast_researcher]
-config_file = "agents/fast_researcher.toml"
-
-[agents.planner]
-config_file = "agents/planner.toml"
-
-[agents.fast_planner]
-config_file = "agents/fast_planner.toml"
-
-[agents.designer]
-config_file = "agents/designer.toml"
-
-[agents.implementer]
-config_file = "agents/implementer.toml"
-
-[agents.focused_implementer]
-config_file = "agents/focused_implementer.toml"
-
-[agents.fast_implementer]
-config_file = "agents/fast_implementer.toml"
-
-[agents.validator]
-config_file = "agents/validator.toml"
-
-[agents.fast_validator]
-config_file = "agents/fast_validator.toml"
-
-[agents.reviewer]
-config_file = "agents/reviewer.toml"
-
-[agents.targeted_reviewer]
-config_file = "agents/targeted_reviewer.toml"
-
-[agents.astra_consultant]
-config_file = "agents/astra_consultant.toml"
-
-[agents.astra_reviewer]
-config_file = "agents/astra_reviewer.toml"
-
-[agents.slice_reviewer]
-config_file = "agents/slice_reviewer.toml"
-
-[agents.fast_reviewer]
-config_file = "agents/fast_reviewer.toml"
+[agents.general_luna]
+config_file = "agents/general_luna.toml"
 
 [agents.test_value_luna]
 config_file = "agents/test_value_luna.toml"
