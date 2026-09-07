@@ -62,10 +62,10 @@ from validate_review_result import (
 )
 
 
-TASK_STATE_VERSION = "test-value-review-task-v1"
-GENERATION_VERSION = "test-value-review-generation-v1"
+TASK_STATE_VERSION = "test-value-review-task-v2"
+GENERATION_VERSION = "test-value-review-generation-v2"
 HOST_EVIDENCE_VERSION = "test-value-host-evidence-v1"
-RESULT_VERSION = "test-value-review-run-v1"
+RESULT_VERSION = "test-value-review-run-v3"
 AUDIT_PERCENT = 10
 BATCH_RECORD_LIMIT = 10
 BATCH_PACKET_CHAR_LIMIT = 800_000
@@ -104,6 +104,8 @@ TOOLCHAIN_SOURCE_PATHS = (
     "skills/review-test-value/scripts/validate_review_result.py",
     "skills/review-test-value/scripts/review_routing.py",
     "skills/review-test-value/scripts/review_resolution.py",
+    "skills/review-test-value/scripts/review_transport.py",
+    "skills/review-test-value/scripts/run_review_diagnostics.py",
     "skills/review-test-value/scripts/adapters/typescript/extract.mjs",
     "skills/review-test-value/scripts/adapters/typescript/package.json",
     "skills/review-test-value/scripts/adapters/typescript/package-lock.json",
@@ -906,7 +908,7 @@ def _execute_phase(
     evidence = execution.evidence
     if (
         not isinstance(evidence, dict)
-        or evidence.get("schema_version") != "review-worker-evidence-v1"
+        or evidence.get("schema_version") != "review-worker-evidence-v2"
         or evidence.get("phase") != phase
     ):
         raise CoordinatorBlocked("WORKER_EVIDENCE_INVALID", phase)
@@ -1117,7 +1119,7 @@ def _validate_batch_execution(envelope: dict[str, Any], global_packet: dict[str,
                 or proof["worker_evidence_hash"] != _canonical_hash(proof["worker_evidence"])):
                 raise ValueError("batch proof mismatch")
             evidence = proof["worker_evidence"]
-            if evidence.get("schema_version") != "review-worker-evidence-v1" or evidence.get("phase") != phase:
+            if evidence.get("schema_version") != "review-worker-evidence-v2" or evidence.get("phase") != phase:
                 raise ValueError("worker evidence identity mismatch")
             _validate_worker_toolchain(phase, evidence, toolchain_identity)
             validated = validate_phase_result(phase, proof["result"], packet["records"], packet.get("input_hash"))
@@ -1143,7 +1145,7 @@ def _routing_inputs(
             "record_id": record["record_id"],
             "metadata_hash": record["metadata_hash"],
             "source_hash": record["source_hash"],
-            "contract_version": "deep-review-v2",
+            "contract_version": "deep-review-v3",
             "metadata": record["metadata"],
             "metadata_verdict": record["metadata_review"]["verdict"],
             "alignment_verdict": review["verdict"],
@@ -1434,7 +1436,7 @@ def _validate_deep_batch_execution(
         evidence = batch["worker_evidence"]
         if (
             not isinstance(evidence, dict)
-            or evidence.get("schema_version") != "review-worker-evidence-v1"
+            or evidence.get("schema_version") != "review-worker-evidence-v2"
             or evidence.get("phase") != "deep"
             or batch["worker_evidence_hash"] != _canonical_hash(evidence)
         ):
@@ -1444,7 +1446,7 @@ def _validate_deep_batch_execution(
     if cursor != len(global_records):
         raise CoordinatorBlocked("STATE_INVALID", "deep batch partition is incomplete")
     merged = {
-        "review_contract_version": "deep-review-v2",
+        "review_contract_version": "deep-review-v3",
         "input_hash": global_packet["input_hash"],
         "reviews": merged_reviews,
     }
@@ -1530,11 +1532,13 @@ def _load_generation(state_dir: Path, descriptor: dict[str, Any]) -> dict[str, A
     ):
         raise CoordinatorBlocked("STATE_INVALID", "generation worker evidence is invalid")
     phase_evidence = worker_evidence[:2]
-    if any(
-        not isinstance(item, dict)
-        or item.get("schema_version") not in {"review-worker-evidence-v1", "phase-batch-execution-v1"}
-        or item.get("phase") != phase
-        for item, phase in zip(phase_evidence, ("metadata", "alignment"))
+    if (
+        not isinstance(phase_evidence[0], dict)
+        or phase_evidence[0].get("schema_version") not in {"review-worker-evidence-v2", "phase-batch-execution-v1"}
+        or phase_evidence[0].get("phase") != "metadata"
+        or not isinstance(phase_evidence[1], dict)
+        or phase_evidence[1].get("phase") != "alignment"
+        or phase_evidence[1].get("schema_version") not in {"review-worker-evidence-v2", "phase-batch-execution-v1"}
     ):
         raise CoordinatorBlocked("STATE_INVALID", "generation metadata/alignment evidence is incomplete")
     deep_required = any(
@@ -1546,12 +1550,28 @@ def _load_generation(state_dir: Path, descriptor: dict[str, Any]) -> dict[str, A
         for item in phase_evidence:
             phase = item["phase"]
             if item["schema_version"] == "phase-batch-execution-v1":
-                packet = aggregation["input"]["alignment_packet"]
-                if phase == "metadata":
-                    packet = {"review_contract_version": "metadata-review-v2", "records": [
-                        {key: record[key] for key in ("record_id", "metadata_format_version", "metadata", "metadata_hash")}
-                        for record in packet["records"]]}
-                _validate_batch_execution(item, packet, aggregation["input"][f"{phase}_result"], value["toolchain_identity"])
+                _validate_batch_execution(
+                    item,
+                    aggregation["input"]["alignment_packet"]
+                    if phase == "alignment"
+                    else {
+                        "review_contract_version": "metadata-review-v3",
+                        "records": [
+                            {
+                                key: record[key]
+                                for key in (
+                                    "record_id",
+                                    "metadata_format_version",
+                                    "metadata",
+                                    "metadata_hash",
+                                )
+                            }
+                            for record in aggregation["input"]["alignment_packet"]["records"]
+                        ],
+                    },
+                    aggregation["input"][f"{phase}_result"],
+                    value["toolchain_identity"],
+                )
             else:
                 _validate_worker_toolchain(phase, item, value["toolchain_identity"])
         if not deep_required:
@@ -1570,7 +1590,7 @@ def _load_generation(state_dir: Path, descriptor: dict[str, Any]) -> dict[str, A
             )
         elif len(deep_evidence) in {1, 2} and all(
             isinstance(item, dict)
-            and item.get("schema_version") == "review-worker-evidence-v1"
+            and item.get("schema_version") == "review-worker-evidence-v2"
             and item.get("phase") == "deep"
             for item in deep_evidence
         ):
@@ -2153,15 +2173,29 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if item["result"]["required"]
     }
     supplied_context = set(host["context_by_record"]) | set(host["retry_context_by_record"])
-    if not supplied_context.issubset(required):
+    immutable_context = {
+        item["record_id"]
+        for item in routing_manifest["records"]
+        if item["result"]["terminal"] and not item["result"]["required"]
+    }
+    if not supplied_context.issubset(required | immutable_context):
         raise CoordinatorBlocked("UNREQUESTED_CONTEXT", "context supplied for a record without required deep review")
+    # Validate supplied context for immutable records above so callers cannot
+    # smuggle unknown records through the coordinator, but project only
+    # required records into the deep packet.  Non-required immutable
+    # diagnostics are host-validated but are not model input.
+    deep_context = {
+        record_id: host["context_by_record"][record_id]
+        for record_id in required
+        if record_id in host["context_by_record"]
+    }
     deep_packet = build_deep_packet(
         alignment_packet,
         metadata_result,
         alignment_result,
         routing_manifest,
         workflow_context,
-        host["context_by_record"],
+        deep_context,
     )
     sol_result = None
     if required:

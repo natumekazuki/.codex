@@ -1,4 +1,4 @@
-"""Tests for the v2 codex exec output schemas."""
+"""Tests for the v3 codex exec output schemas."""
 
 from __future__ import annotations
 
@@ -48,14 +48,13 @@ def _valid_result(phase: str) -> dict:
                 "actual_boundary": "consumer",
                 "actual_observables": ["result"],
                 "overclaim": False,
-                "disposition_candidate": None,
             }
         )
     result = {
         "review_contract_version": {
-            "metadata": "metadata-review-v2",
-            "alignment": "alignment-review-v2",
-            "deep": "deep-review-v2",
+            "metadata": "metadata-review-v3",
+            "alignment": "alignment-review-v3",
+            "deep": "deep-review-v3",
         }[phase],
         "reviews": [review],
     }
@@ -115,6 +114,7 @@ class ReviewOutputSchemaTests(unittest.TestCase):
         records = [
             {
                 "record_id": _hash("a"),
+                "metadata_format_version": 2,
                 "metadata_hash": _hash("b"),
                 "metadata": {
                     "claim": "claim",
@@ -125,6 +125,7 @@ class ReviewOutputSchemaTests(unittest.TestCase):
             },
             {
                 "record_id": _hash("c"),
+                "metadata_format_version": 2,
                 "metadata_hash": _hash("d"),
                 "metadata": {"claim": "claim", "kind": "contract"},
             },
@@ -132,14 +133,12 @@ class ReviewOutputSchemaTests(unittest.TestCase):
         schema = _bound_phase_result_schema(
             "metadata",
             records,
-            {"review_contract_version": "metadata-review-v2", "records": records},
+            {"review_contract_version": "metadata-review-v3", "records": records},
         )
         result = {
-            "review_contract_version": "metadata-review-v2",
             "reviews": [
                 {
-                    "record_id": records[0]["record_id"],
-                    "metadata_hash": records[0]["metadata_hash"],
+                    "ordinal": 0,
                     "verdict": "VALID",
                     "evidence": [
                         {
@@ -151,8 +150,7 @@ class ReviewOutputSchemaTests(unittest.TestCase):
                     "next_action": None,
                 },
                 {
-                    "record_id": records[1]["record_id"],
-                    "metadata_hash": records[1]["metadata_hash"],
+                    "ordinal": 1,
                     "verdict": "VALID",
                     "evidence": [
                         {"fields": ["claim", "kind"], "finding": "SELF_CONTAINED_CLAIM"}

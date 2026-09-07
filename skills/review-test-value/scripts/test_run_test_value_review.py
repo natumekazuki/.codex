@@ -50,7 +50,7 @@ def language_extractors() -> list[dict]:
 
 def alignment_result(packet: dict, verdict: str = "MISMATCH") -> dict:
     return {
-        "review_contract_version": "alignment-review-v2",
+        "review_contract_version": "alignment-review-v3",
         "reviews": [
             {
                 "record_id": record["record_id"],
@@ -62,7 +62,6 @@ def alignment_result(packet: dict, verdict: str = "MISMATCH") -> dict:
                 "overclaim": verdict == "MISMATCH",
                 "evidence": ["the assertion observes implementation state"],
                 "unverified": [],
-                "disposition_candidate": "DROP",
                 "context_requirements": [],
                 "next_action": None,
             }
@@ -71,7 +70,18 @@ def alignment_result(packet: dict, verdict: str = "MISMATCH") -> dict:
     }
 
 
-def sized_phase_packets(count):
+def required_alignment_result(packet: dict) -> dict:
+    """Build a valid ALIGNED result that remains deep-required by risk context."""
+
+    result = alignment_result(packet, "ALIGNED")
+    for review in result["reviews"]:
+        review["actual_boundary"] = "component-behavior"
+        review["actual_observables"] = ["assertion result"]
+        review["overclaim"] = False
+    return result
+
+
+def extractor_with_count(count: int) -> dict:
     extracted = extractor_result()
     template = extracted["tests"][0]
     extracted["tests"] = []
@@ -79,10 +89,15 @@ def sized_phase_packets(count):
         record = copy.deepcopy(template)
         record["source"]["path"] = f"tests/test_{index:03d}.py"
         extracted["tests"].append(record)
+    return extracted
+
+
+def sized_phase_packets(count):
+    extracted = extractor_with_count(count)
     metadata = build_metadata_packet_multi([extracted])
     frozen = metadata_result(metadata)
     alignment = build_alignment_packet_multi([extracted], frozen)
-    aligned = alignment_result(alignment)
+    aligned = required_alignment_result(alignment)
     workflow = {"review_contract_version": "review-workflow-context-v1", "records": [
         {"record_id": record["record_id"], "metadata_hash": record["metadata_hash"],
          "parent_risk_tags": ["security"], "audit_percent": 10} for record in alignment["records"]]}
@@ -168,7 +183,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                 if index == 0:
                     self.assertTrue(second_done.wait(5))
                 self.assertGreater(kwargs["deadline_monotonic"], coordinator.time.monotonic())
-                return alignment_result(batch), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+                return alignment_result(batch), {"schema_version": "review-worker-evidence-v2", "phase": phase}
             finally:
                 with lock:
                     active -= 1
@@ -189,7 +204,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
         all_started = threading.Barrier(3)
         def execute_auto(phase, batch, **kwargs):
             all_started.wait(timeout=5)
-            return alignment_result(batch), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+            return alignment_result(batch), {"schema_version": "review-worker-evidence-v2", "phase": phase}
         with mock.patch.object(coordinator, "_execute_phase", side_effect=execute_auto), mock.patch.object(coordinator, "_validate_worker_toolchain"):
             result, envelope = coordinator._execute_batch_round("alignment", packet, cli="codex", role_file=Path("role"), toolchain_identity={})
         self.assertEqual(result, alignment_result(packet))
@@ -220,7 +235,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                 if index == failed:
                     raise coordinator.CoordinatorBlocked("REVIEW_TIMEOUT", "deadline expired")
                 try:
-                    return alignment_result(batch), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+                    return alignment_result(batch), {"schema_version": "review-worker-evidence-v2", "phase": phase}
                 finally:
                     cleaned.set()
             with mock.patch.object(coordinator, "_execute_phase", side_effect=execute), mock.patch.object(coordinator, "_validate_worker_toolchain"):
@@ -280,7 +295,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
         def execute(phase, packet, **kwargs):
             deadlines.append(kwargs["deadline_monotonic"])
             clock[0] += 20
-            return alignment_result(packet), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+            return alignment_result(packet), {"schema_version": "review-worker-evidence-v2", "phase": phase}
         with mock.patch.object(coordinator.time, "monotonic", side_effect=lambda: clock[0]), mock.patch.object(coordinator, "_execute_phase", side_effect=execute), mock.patch.object(coordinator, "_validate_worker_toolchain"):
             coordinator._execute_batch_round("alignment", packets["alignment"], cli="codex", role_file=Path("role"),
                 toolchain_identity={}, batch_seconds={"metadata": 300, "alignment": 600, "deep": 900}, batch_concurrency=1)
@@ -397,6 +412,147 @@ class ReviewCoordinatorTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "regression"
+    # claim = "22件の通常runはauto/1/2のbatch並列設定で同じcanonical gateを得て各phaseの意味審査だけを3batch実行する"
+    # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
+    # fault = "parallel設定でselectionやgateが変わるか、canaryまたは重複した意味審査を起動する"
+    # observable = "generation aggregation result、phase別worker call count、gate"
+    # observation_boundary = "component-behavior"
+    # scope = "test-value-normal-22-parallel-parity"
+    # lifecycle = "permanent"
+    # risk_tags = ["security"]
+    # @end-test-value
+    def test_normal_22_run_keeps_gate_and_call_count_across_concurrency(self):
+        extracted = extractor_with_count(22)
+        metadata_packet = build_metadata_packet_multi([extracted])
+        records = metadata_packet["records"]
+        retention_by_record = {}
+        for index, record in enumerate(records):
+            content = f"accepted contract evidence {index}"
+            digest = content_hash(content)
+            evidence = {
+                "kind": "accepted-contract",
+                "ref": f"CONTRACT-{index}.md",
+                "content": content,
+                "content_hash": digest,
+                "meaning": "the contract remains active",
+            }
+            retention_by_record[record["record_id"]] = {
+                "evidence": [evidence],
+                "determination": {
+                    "determination": "SUPPORTED",
+                    "rationale": "the accepted contract remains active",
+                    "evidence_refs": [{"ref": evidence["ref"], "content_hash": digest}],
+                },
+                "temporal_observation": None,
+            }
+        host = {
+            "task_id": "normal-22",
+            "risk_tags": ["security"],
+            "context_by_record": {},
+            "retry_context_by_record": {},
+            "resolution_attempts": [],
+            "supersessions": [],
+            "retention_by_record": retention_by_record,
+        }
+        snapshot = {
+            "base_commit_oid": "a" * 40,
+            "target_mode": "working",
+            "head_commit_oid": None,
+            "tracked_diff_hash": content_hash("normal-22-diff"),
+            "untracked": [],
+        }
+        snapshot["target_snapshot_hash"] = coordinator._canonical_hash(snapshot)
+        toolchain = {"identity": "normal-22-toolchain"}
+
+        def deep_result(packet: dict) -> dict:
+            return {
+                "review_contract_version": "deep-review-v3",
+                "input_hash": packet["input_hash"],
+                "reviews": [
+                    {
+                        "record_id": record["record_id"],
+                        "metadata_hash": record["metadata_hash"],
+                        "source_hash": record["source_hash"],
+                        "verdict": "APPROVE",
+                        "evidence": ["the supplied contract and assertion agree"],
+                        "unverified": [],
+                        "context_requirements": [],
+                        "context_resolution": None,
+                        "next_action": None,
+                    }
+                    for record in packet["records"]
+                ],
+            }
+
+        aggregate_results_by_mode = []
+        for concurrency in (None, 1, 2):
+            calls: list[str] = []
+
+            def execute(phase: str, packet: dict, **_: object) -> tuple[dict, dict]:
+                calls.append(phase)
+                if phase == "metadata":
+                    result = metadata_result(packet)
+                elif phase == "alignment":
+                    result = required_alignment_result(packet)
+                else:
+                    result = deep_result(packet)
+                return result, {
+                    "schema_version": "review-worker-evidence-v2",
+                    "phase": phase,
+                }
+
+            with tempfile.TemporaryDirectory() as temp:
+                base = Path(temp)
+                root = base / "repo"
+                state = base / "state"
+                root.mkdir()
+                state.mkdir()
+                host_path = base / "host.json"
+                host_path.write_text("{}", encoding="utf-8")
+                args = SimpleNamespace(
+                    root=root,
+                    changed_from="base",
+                    head=None,
+                    staged=False,
+                    state_dir=state,
+                    cli="codex.exe",
+                    host_evidence=host_path,
+                    prepare=False,
+                    batch_concurrency=concurrency,
+                    metadata_batch_seconds=300,
+                    alignment_batch_seconds=600,
+                    deep_batch_seconds=900,
+                )
+                patches = (
+                    mock.patch.object(coordinator, "_resolve_repository", return_value=root.resolve()),
+                    mock.patch.object(coordinator, "_resolve_commit", return_value="a" * 40),
+                    mock.patch.object(coordinator, "snapshot_descriptor", return_value=snapshot),
+                    mock.patch.object(coordinator, "extract_all_languages", return_value=[extracted]),
+                    mock.patch.object(coordinator, "validate_host_evidence", return_value=host),
+                    mock.patch.object(coordinator, "_toolchain_identity", return_value=toolchain),
+                    mock.patch.object(coordinator, "_validate_worker_toolchain"),
+                    mock.patch.object(coordinator, "_execute_phase", side_effect=execute),
+                )
+                with contextlib.ExitStack() as stack:
+                    for patcher in patches:
+                        stack.enter_context(patcher)
+                    result = coordinator.run(args)
+                generation = json.loads(
+                    (state / "generations" / "g000001" / "generation.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                aggregate_results_by_mode.append(generation["aggregation"]["result"])
+
+            self.assertEqual(result["gate"], "PASS")
+            self.assertEqual({phase: calls.count(phase) for phase in ("metadata", "alignment", "deep")},
+                             {"metadata": 3, "alignment": 3, "deep": 3})
+
+        self.assertEqual(aggregate_results_by_mode[0], aggregate_results_by_mode[1])
+        self.assertEqual(aggregate_results_by_mode[1], aggregate_results_by_mode[2])
+
+    # @test-value v2
+    # kind = "regression"
     # claim = "metadata/alignmentの全batchを検証し中間失敗や不完全・順序変更・hash破損を全体成功にしない"
     # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
     # fault = "22件中の成功batchだけを集約するか保存証拠の改変を再利用する"
@@ -412,7 +568,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
             factory = metadata_result if phase == "metadata" else alignment_result
             def execute(_phase, batch, **kwargs):
                 self.assertGreater(kwargs["deadline_monotonic"], coordinator.time.monotonic())
-                return factory(batch), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+                return factory(batch), {"schema_version": "review-worker-evidence-v2", "phase": phase}
             with mock.patch.object(coordinator, "_execute_phase", side_effect=execute) as worker, mock.patch.object(coordinator, "_validate_worker_toolchain"):
                 result, proof = coordinator._execute_batch_round(phase, packet, cli="codex", role_file=Path("role"), toolchain_identity={}, batch_concurrency=1)
                 self.assertEqual(worker.call_count, 3)
@@ -453,7 +609,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                             result["reviews"].reverse()
                         if failure == "late":
                             clock[0] = kwargs["deadline_monotonic"] + 1
-                    return result, {"schema_version": "review-worker-evidence-v1", "phase": phase}
+                    return result, {"schema_version": "review-worker-evidence-v2", "phase": phase}
                 with mock.patch.object(coordinator, "_execute_phase", side_effect=fail_second), mock.patch.object(coordinator, "_validate_worker_toolchain"), mock.patch.object(coordinator.time, "monotonic", side_effect=lambda: clock[0]):
                     with self.assertRaises(coordinator.CoordinatorBlocked) as caught:
                         coordinator._execute_batch_round(phase, packet, cli="codex", role_file=Path("role"), toolchain_identity={}, batch_concurrency=1)
@@ -504,14 +660,14 @@ class ReviewCoordinatorTests(unittest.TestCase):
                         aligned = alignment_result(packet, "RECHECK" if recheck else "ALIGNED")
                         aligned["reviews"][0].update(actual_boundary=None if recheck else boundary,
                             actual_observables=[] if recheck else ["assertion result"],
-                            context_requirements=["CONTRACT.md"] if recheck else [], disposition_candidate=action)
+                            context_requirements=["CONTRACT.md"] if recheck else [])
                         validate_phase_result("alignment", aligned, packet["records"])
                         workflow = {"review_contract_version": "review-workflow-context-v1", "records": [{
                             "record_id": rid, "metadata_hash": record["metadata_hash"],
                             "parent_risk_tags": ["authorization"], "audit_percent": 0}]}
                         routing = build_routing_manifest([{
                             **{k: record[k] for k in ("record_id", "metadata_hash", "source_hash", "metadata")},
-                            "contract_version": "deep-review-v2", "metadata_verdict": "VALID",
+                            "contract_version": "deep-review-v3", "metadata_verdict": "VALID",
                             "alignment_verdict": aligned["reviews"][0]["verdict"],
                             "context_requirements": aligned["reviews"][0]["context_requirements"]}], workflow)
                         evidence = {"kind": "accepted-contract", "ref": "CONTRACT.md", "content": "retained contract",
@@ -519,7 +675,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                         deep = build_deep_packet(packet, frozen, aligned, routing, workflow, {rid: [evidence]})
                         review_worker._validate_packet("deep", deep)
                         self.assertEqual(deep["records"][0]["metadata"], original)
-                        sol = {"review_contract_version": "deep-review-v2", "input_hash": deep["input_hash"], "reviews": [{
+                        sol = {"review_contract_version": "deep-review-v3", "input_hash": deep["input_hash"], "reviews": [{
                             **{k: record[k] for k in ("record_id", "metadata_hash", "source_hash")},
                             "verdict": "APPROVE", "evidence": ["contract and assertion agree"],
                             "unverified": [], "context_requirements": [], "next_action": None,
@@ -913,7 +1069,6 @@ class ReviewCoordinatorTests(unittest.TestCase):
         aligned["reviews"][0].update(
             actual_boundary="component-behavior",
             overclaim=False,
-            disposition_candidate="KEEP_PERMANENT",
         )
         record = alignment_packet["records"][0]
         evidence = {
@@ -1285,7 +1440,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
         def execute(phase: str, packet: dict, **_: object) -> dict:
             calls.append(phase)
             evidence = {
-                "schema_version": "review-worker-evidence-v1",
+                "schema_version": "review-worker-evidence-v2",
                 "phase": phase,
             }
             if phase == "metadata":
@@ -1444,7 +1599,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
         metadata_packet = build_metadata_packet_multi(extractors)
         frozen_metadata = metadata_result(metadata_packet)
         alignment_packet = build_alignment_packet_multi(extractors, frozen_metadata)
-        aligned = alignment_result(alignment_packet)
+        aligned = required_alignment_result(alignment_packet)
         routing_inputs = coordinator._routing_inputs(alignment_packet, aligned)
         workflow_context = {
             "review_contract_version": "review-workflow-context-v1",
@@ -1493,7 +1648,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
 
         def result_for(packet: dict) -> dict:
             return {
-                "review_contract_version": "deep-review-v2",
+                "review_contract_version": "deep-review-v3",
                 "input_hash": packet["input_hash"],
                 "reviews": [
                     {
@@ -1516,7 +1671,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
         def execute(_phase: str, packet: dict, **_: object) -> tuple[dict, dict]:
             executed_packets.append(packet)
             return result_for(packet), {
-                "schema_version": "review-worker-evidence-v1",
+                "schema_version": "review-worker-evidence-v2",
                 "phase": "deep",
             }
 
@@ -1552,7 +1707,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
             "retention_records": [
                 {
                     "record_id": record["record_id"],
-                    "retention_basis": "PRESENT",
+                    "retention_basis": "ABSENT",
                     "artifact_state": "TEST_PRESENT",
                 }
                 for record in alignment_packet["records"]
@@ -1607,8 +1762,8 @@ class ReviewCoordinatorTests(unittest.TestCase):
             }
             toolchain_identity = {"identity": "toolchain"}
             worker_evidence = [
-                {"schema_version": "review-worker-evidence-v1", "phase": "metadata"},
-                {"schema_version": "review-worker-evidence-v1", "phase": "alignment"},
+                {"schema_version": "review-worker-evidence-v2", "phase": "metadata"},
+                {"schema_version": "review-worker-evidence-v2", "phase": "alignment"},
                 proof,
             ]
             generation = {
@@ -1700,7 +1855,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
             if partial_calls == 2:
                 raise coordinator.CoordinatorBlocked("WORKER_BLOCKED", "second batch failed")
             return result_for(packet), {
-                "schema_version": "review-worker-evidence-v1",
+                "schema_version": "review-worker-evidence-v2",
                 "phase": "deep",
             }
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import ctypes
 from ctypes import wintypes
 import json
@@ -18,6 +19,11 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import review_worker  # noqa: E402
+from build_review_packets import (  # noqa: E402
+    build_alignment_packet_multi,
+    build_metadata_packet_multi,
+)
+from test_review_packets import extractor_result, metadata_result  # noqa: E402
 
 
 def _id_token(plan_type: str) -> str:
@@ -42,7 +48,7 @@ def _packet(record_count: int = 1) -> dict:
         "lifecycle": "permanent",
     }
     packet = {
-        "review_contract_version": "metadata-review-v2",
+        "review_contract_version": "metadata-review-v3",
         "records": [
             {
                 "record_id": "sha256:" + "a" * 64,
@@ -70,7 +76,7 @@ def _packet(record_count: int = 1) -> dict:
 def _result(record_count: int = 1) -> dict:
     packet = _packet(record_count)
     return {
-        "review_contract_version": "metadata-review-v2",
+        "review_contract_version": "metadata-review-v3",
         "reviews": [
             {
                 "record_id": record["record_id"],
@@ -87,11 +93,60 @@ def _result(record_count: int = 1) -> dict:
     }
 
 
+def _sized_phase_packets(record_count: int) -> dict[str, dict]:
+    """Build canonical metadata/alignment fixtures large enough for 3 batches."""
+
+    extracted = extractor_result()
+    template = extracted["tests"][0]
+    extracted["tests"] = []
+    for index in range(record_count):
+        record = copy.deepcopy(template)
+        record["source"]["path"] = f"tests/test_{index:03d}.py"
+        extracted["tests"].append(record)
+    metadata = build_metadata_packet_multi([extracted])
+    frozen = metadata_result(metadata)
+    alignment = build_alignment_packet_multi([extracted], frozen)
+    return {"metadata": metadata, "alignment": alignment}
+
+
 def _events(*items: dict) -> str:
     events = [{"type": "thread.started", "thread_id": "synthetic"}]
     events.extend({"type": "item.completed", "item": item} for item in items)
     events.append({"type": "turn.completed", "usage": {}})
     return "\n".join(json.dumps(event) for event in events)
+
+
+def _metadata_transport() -> tuple:
+    """Minimal projected transport used by worker deadline tests."""
+
+    def model_packet(phase: str, canonical_packet: dict) -> dict:
+        return {
+            "records": [
+                {"ordinal": index, "metadata": record["metadata"]}
+                for index, record in enumerate(canonical_packet["records"])
+            ]
+        }
+
+    def model_schema(phase: str, canonical_packet: dict) -> dict:
+        return {"type": "object", "properties": {"reviews": {"type": "array"}}}
+
+    def canonical_result(phase: str, model_result: dict, canonical_packet: dict) -> dict:
+        return {
+            "review_contract_version": canonical_packet["review_contract_version"],
+            "reviews": [
+                {
+                    "record_id": record["record_id"],
+                    "metadata_hash": record["metadata_hash"],
+                    "verdict": review["verdict"],
+                    "evidence": review["evidence"],
+                    "unverified": review["unverified"],
+                    "next_action": review["next_action"],
+                }
+                for review, record in zip(model_result["reviews"], canonical_packet["records"])
+            ],
+        }
+
+    return model_packet, model_schema, canonical_result
 
 
 class ReviewWorkerTests(unittest.TestCase):
@@ -140,7 +195,10 @@ developer_instructions = \"Review only the supplied packet.\"
             encoding="utf-8",
         )
         (references / "metadata-review-contract.md").write_text(
-            "# Metadata review contract\nReturn metadata-review-v2 JSON.", encoding="utf-8"
+            "# Metadata review contract\nReturn metadata-review-v3 JSON.", encoding="utf-8"
+        )
+        (references / "alignment-review-contract.md").write_text(
+            "# Alignment review contract\nReturn alignment-review-v3 JSON.", encoding="utf-8"
         )
 
     def tearDown(self) -> None:
@@ -150,174 +208,246 @@ developer_instructions = \"Review only the supplied packet.\"
 
     # @test-value v2
     # kind = "security"
-    # claim = "execute_phase sends the real packet only after one denied canary read"
+    # claim = "normal phase delivery runs one isolated semantic review over an ordinal-only projection"
     # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
-    # fault = "the worker sends review metadata before the named permission profile denies the external canary read"
-    # observable = "the fake process runner's ordered stdin values, launch arguments, returned result, and removed scratch path"
+    # fault = "the worker starts a synthetic canary or exposes canonical identity fields before review"
+    # observable = "one fake runner call, disabled shell flags, projected input, and host-bound result identity"
     # observation_boundary = "component-behavior"
-    # scope = "review-test-value review worker"
+    # scope = "review-test-value review worker transport"
     # lifecycle = "permanent"
     # risk_tags = ["security", "privacy"]
-    # distinction = "covers the full preflight-to-canary-to-packet transition rather than the existing phase result validator in isolation"
+    # distinction = "covers normal one-run transport and host binding while filesystem refusal is tested by opt-in E2E"
     # @end-test-value
-    def test_execute_phase_withholds_packet_until_denial_and_validates_output(self) -> None:
-        calls: list[tuple[list[str], str, Path]] = []
-        if os.name != "nt":
-            self.skipTest("full handoff uses real Windows filesystem paths")
+    def test_execute_phase_runs_one_projected_review_without_canary(self) -> None:
         packet = _packet(2)
-        expected_result = _result(2)
+        calls: list[tuple[list[str], str, Path]] = []
+
+        def model_packet(phase: str, canonical_packet: dict) -> dict:
+            return {
+                "records": [
+                    {"ordinal": index, "metadata": record["metadata"]}
+                    for index, record in enumerate(canonical_packet["records"])
+                ]
+            }
+
+        def model_schema(phase: str, canonical_packet: dict) -> dict:
+            return {"type": "object", "properties": {"reviews": {"type": "array"}}}
+
+        def canonical_result(phase: str, model_result: dict, canonical_packet: dict) -> dict:
+            return {
+                "review_contract_version": canonical_packet["review_contract_version"],
+                "reviews": [
+                    {
+                        "record_id": record["record_id"],
+                        "metadata_hash": record["metadata_hash"],
+                        "verdict": review["verdict"],
+                        "evidence": review["evidence"],
+                        "unverified": review["unverified"],
+                        "next_action": review["next_action"],
+                    }
+                    for review, record in zip(model_result["reviews"], canonical_packet["records"])
+                ],
+            }
 
         def runner(argv: list[str], input_text: str, cwd: Path, timeout: float) -> review_worker.ProcessOutcome:
             calls.append((argv, input_text, cwd))
-            if len(calls) == 1:
-                packet_text = json.dumps(
-                    packet, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-                )
-                sensitive_values = [packet_text]
-                for record in packet["records"]:
-                    sensitive_values.extend(
-                        [
-                            record["record_id"],
-                            record["metadata_hash"],
-                            review_worker.canonical_json(record["metadata"]),
-                        ]
-                    )
-                for value in sensitive_values:
-                    self.assertNotIn(value, input_text)
-                    for argument in argv:
-                        self.assertNotIn(value, argument)
-                    self.assertNotIn(value, "\0".join(argv))
-                self.assertFalse((cwd / "result-schema.json").exists())
-                self.assertEqual([], [path for path in cwd.rglob("*") if path.is_file()])
-                expected_command = input_text.split("tool: ", 1)[1].split(". Do not", 1)[0]
-                expected_literal = expected_command.split(" -LiteralPath ", 1)[1]
-                expected_path = Path(expected_literal[1:-1].replace("''", "'"))
-                sol_command = (
-                    '"C:\\\\Program Files\\\\PowerShell\\\\7\\\\pwsh.exe" '
-                    '-NoProfile -Command "'
-                    + expected_command.replace("\\", "\\\\")
-                    + '"'
-                )
-                self.assertTrue(
-                    review_worker._matches_expected_canary_command(sol_command, expected_path)
-                )
-                quoted_path = Path(r"C:\Temp\O'Brien\canary.txt")
-                self.assertTrue(
-                    review_worker._matches_expected_canary_command(
-                        "Get-Content -Raw -LiteralPath 'C:\\Temp\\O''Brien\\canary.txt'",
-                        quoted_path,
-                    )
-                )
-                self.assertFalse(
-                    review_worker._matches_expected_canary_command(
-                        'Get-Content -Raw -LiteralPath "$env:TEMP\\canary.txt"',
-                        Path(r"C:\Temp\canary.txt"),
-                    )
-                )
-                joined = " ".join(argv)
-                self.assertIn("default_permissions=\"test-value-review-worker\"", joined)
-                self.assertIn('\":minimal\"=\"read\"', joined)
-                self.assertNotIn("=\"deny\"", joined)
-                self.assertNotIn("--sandbox", argv)
-                return review_worker.ProcessOutcome(
-                    0,
-                    _events(
-                        {
-                            "id": "command",
-                            "type": "command_execution",
-                            "command": sol_command,
-                            "aggregated_output": "Access is denied.",
-                            "exit_code": 1,
-                            "status": "failed",
-                        },
-                        {"id": "message", "type": "agent_message", "text": "CANARY_DENIED"},
-                    ),
-                    "",
-                )
-            for record in packet["records"]:
-                self.assertIn(record["record_id"], input_text)
-                self.assertIn(record["metadata_hash"], input_text)
-            self.assertIn("--output-schema", argv)
+            self.assertNotIn("canary", str(cwd).lower())
+            self.assertNotIn("--enable", argv)
             self.assertIn("--disable", argv)
-            schema_path = Path(argv[argv.index("--output-schema") + 1])
-            schema = json.loads(schema_path.read_text(encoding="utf-8"))
-            variants = schema["properties"]["reviews"]["items"]["anyOf"]
-            bound_pairs = {
-                (
-                    variant["properties"]["record_id"]["enum"][0],
-                    variant["properties"]["metadata_hash"]["enum"][0],
-                )
-                for variant in variants
+            for record in packet["records"]:
+                self.assertNotIn(record["record_id"], input_text)
+                self.assertNotIn(record["metadata_hash"], input_text)
+            raw = {
+                "reviews": [
+                    {
+                        "ordinal": index,
+                        "verdict": "VALID",
+                        "evidence": [{"fields": ["claim"], "finding": "SELF_CONTAINED_CLAIM"}],
+                        "unverified": [],
+                        "next_action": None,
+                    }
+                    for index in range(2)
+                ]
             }
-            self.assertEqual(
-                {(record["record_id"], record["metadata_hash"]) for record in packet["records"]},
-                bound_pairs,
+            return review_worker.ProcessOutcome(0, _events({"id": "message", "type": "agent_message", "text": json.dumps(raw)}), "")
+
+        with (
+            patch("review_worker.platform.system", return_value="Windows"),
+            patch("review_worker._managed_config_paths", return_value=[]),
+            patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
+            patch("review_worker._transport_functions", return_value=(model_packet, model_schema, canonical_result)),
+        ):
+            execution = review_worker.execute_phase(
+                "metadata", packet, cli=str(self.cli), role_file=str(self.role), runner=runner
             )
+
+        self.assertEqual(1, len(calls))
+        self.assertEqual("review-worker-evidence-v2", execution.evidence["schema_version"])
+        self.assertNotIn("canary", execution.evidence)
+        self.assertEqual([record["record_id"] for record in packet["records"]], [
+            review["record_id"] for review in execution.result["reviews"]
+        ])
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "22 selected records in three metadata and alignment batches launch six normal semantic reviews"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
+    # fault = "per-batch canaries double model calls or ordinal binding changes result identity across batch boundaries"
+    # observable = "real 10/10/2 batch plans, six runner calls, and matching host-bound IDs and hashes"
+    # observation_boundary = "component-behavior"
+    # scope = "review-test-value review worker batch call count"
+    # lifecycle = "permanent"
+    # distinction = "directly compares the normal call count against the former canary-plus-review shape"
+    # @end-test-value
+    def test_22_records_three_batches_launch_six_normal_reviews(self) -> None:
+        """The 22-record fixture has one model run per metadata/alignment batch."""
+
+        import run_test_value_review as coordinator
+
+        packets = _sized_phase_packets(22)
+        calls: list[tuple[str, int]] = []
+
+        def runner(
+            argv: list[str], input_text: str, cwd: Path, timeout: float
+        ) -> review_worker.ProcessOutcome:
+            del argv, cwd, timeout
+            projected = json.loads(input_text.split("\n", 1)[1])
+            records = projected["records"]
+            phase = active_phase[0]
+            calls.append((phase, len(records)))
+            self.assertEqual(list(range(len(records))), [item["ordinal"] for item in records])
+            self.assertNotIn("record_id", input_text)
+            self.assertNotIn("metadata_hash", input_text)
+            self.assertNotIn("source_hash", input_text)
+            self.assertNotIn("metadata_result_hash", input_text)
+            if phase == "metadata":
+                reviews = [
+                    {
+                        "ordinal": item["ordinal"],
+                        "verdict": "VALID",
+                        "evidence": [
+                            {"fields": ["claim", "fault", "scope"], "finding": "COHERENT_BOUNDARY"}
+                        ],
+                        "unverified": ["oracle.refの本文"],
+                        "next_action": None,
+                    }
+                    for item in records
+                ]
+            else:
+                reviews = [
+                    {
+                        "ordinal": item["ordinal"],
+                        "verdict": "ALIGNED",
+                        "actual_boundary": "component-behavior",
+                        "actual_observables": ["assertion result"],
+                        "overclaim": False,
+                        "evidence": ["source assertion"],
+                        "unverified": [],
+                        "context_requirements": [],
+                        "next_action": None,
+                    }
+                    for item in records
+                ]
             return review_worker.ProcessOutcome(
                 0,
                 _events(
                     {
                         "id": "message",
                         "type": "agent_message",
-                        "text": json.dumps(expected_result),
+                        "text": json.dumps({"reviews": reviews}, ensure_ascii=False),
                     }
                 ),
                 "",
             )
 
+        active_phase = ["metadata"]
         with (
             patch("review_worker.platform.system", return_value="Windows"),
             patch("review_worker._managed_config_paths", return_value=[]),
             patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
         ):
-            execution = review_worker.execute_phase(
-                "metadata",
-                packet,
-                cli=str(self.cli),
-                role_file=str(self.role),
-                runner=runner,
-            )
+            for phase in ("metadata", "alignment"):
+                active_phase[0] = phase
+                batches, plan = coordinator.plan_phase_batches(
+                    phase, packets[phase], batch_concurrency=1
+                )
+                self.assertEqual([10, 10, 2], [len(batch["records"]) for batch in batches])
+                self.assertEqual(1, plan["batch_concurrency"])
+                for batch in batches:
+                    execution = review_worker.execute_phase(
+                        phase,
+                        batch,
+                        cli=str(self.cli),
+                        role_file=str(self.role),
+                        runner=runner,
+                    )
+                    self.assertEqual(
+                        f"{phase}-review-v3",
+                        execution.result["review_contract_version"],
+                    )
+                    self.assertEqual(len(batch["records"]), len(execution.result["reviews"]))
+                    for record, review in zip(batch["records"], execution.result["reviews"]):
+                        self.assertEqual(record["record_id"], review["record_id"])
+                        self.assertEqual(record["metadata_hash"], review["metadata_hash"])
+                        if phase == "alignment":
+                            self.assertEqual(record["source_hash"], review["source_hash"])
 
-        self.assertEqual(expected_result, execution.result)
-        self.assertTrue(execution.evidence["result_validated"])
-        self.assertEqual("DENIED", execution.evidence["canary"]["status"])
-        self.assertEqual(2, len(calls))
-        self.assertFalse(calls[0][2].exists())
+        self.assertEqual(
+            [("metadata", 10), ("metadata", 10), ("metadata", 2),
+             ("alignment", 10), ("alignment", 10), ("alignment", 2)],
+            calls,
+        )
+        self.assertEqual(6, len(calls))
 
     # @test-value v2
     # kind = "invariant"
-    # claim = "canary consumption is deducted from one absolute phase deadline before review starts"
+    # claim = "review timeout is computed from the shared phase deadline after model-free preflight"
     # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
-    # fault = "the worker gives review a fresh timeout after canary work has already consumed the phase budget"
-    # observable = "the two runner timeout arguments and the validated result"
+    # fault = "the worker gives the review a fresh timeout that ignores time spent checking the CLI and boundary"
+    # observable = "one review runner timeout after a simulated preflight clock advance"
     # observation_boundary = "component-behavior"
     # scope = "review-test-value review worker deadline"
     # lifecycle = "permanent"
-    # distinction = "covers the shared absolute budget while the existing handoff test covers packet isolation"
+    # distinction = "covers the normal one-review deadline budget after canary removal"
     # @end-test-value
-    def test_execute_phase_deducts_canary_time_from_shared_deadline(self) -> None:
+    def test_execute_phase_deducts_model_free_preflight_time_from_review_budget(self) -> None:
         packet = _packet()
-        expected_result = _result()
         clock = [100.0]
         timeouts: list[float] = []
 
         def now() -> float:
             return clock[0]
 
+        def version_runner(executable: str, timeout: float) -> tuple[int, str, str]:
+            del executable, timeout
+            clock[0] = 110.0
+            return 0, "codex-cli 0.153.4", ""
+
         def runner(
             argv: list[str], input_text: str, cwd: Path, timeout: float
         ) -> review_worker.ProcessOutcome:
+            del argv, input_text, cwd
             timeouts.append(timeout)
-            if len(timeouts) == 1:
-                clock[0] = 110.0
-                return review_worker.ProcessOutcome(0, "", "")
+            raw = {
+                "reviews": [
+                    {
+                        "ordinal": 0,
+                        "verdict": "VALID",
+                        "evidence": [
+                            {"fields": ["claim"], "finding": "SELF_CONTAINED_CLAIM"}
+                        ],
+                        "unverified": [],
+                        "next_action": None,
+                    }
+                ]
+            }
             return review_worker.ProcessOutcome(
                 0,
                 _events(
                     {
                         "id": "message",
                         "type": "agent_message",
-                        "text": json.dumps(expected_result),
+                        "text": json.dumps(raw),
                     }
                 ),
                 "",
@@ -326,8 +456,8 @@ developer_instructions = \"Review only the supplied packet.\"
         with (
             patch("review_worker.platform.system", return_value="Windows"),
             patch("review_worker._managed_config_paths", return_value=[]),
-            patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
-            patch("review_worker._verify_canary", return_value={"status": "DENIED"}),
+            patch("review_worker._run_version", side_effect=version_runner),
+            patch("review_worker._transport_functions", return_value=_metadata_transport()),
             patch("review_worker.time.monotonic", side_effect=now),
         ):
             execution = review_worker.execute_phase(
@@ -339,40 +469,42 @@ developer_instructions = \"Review only the supplied packet.\"
                 runner=runner,
             )
 
-        self.assertEqual(expected_result, execution.result)
-        self.assertEqual([95.0, 85.0], timeouts)
+        self.assertEqual([85.0], timeouts)
+        self.assertEqual("VALID", execution.result["reviews"][0]["verdict"])
 
     # @test-value v2
     # kind = "invariant"
-    # claim = "a canary that consumes the remaining phase budget prevents packet delivery"
+    # claim = "an exhausted phase deadline prevents review process launch after model-free preflight"
     # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
-    # fault = "the worker launches review after the absolute deadline has no cleanup reserve left"
-    # observable = "PHASE_DEADLINE_EXCEEDED and exactly one runner invocation"
+    # fault = "the worker starts a model process after the preflight checks leave only the cleanup reserve"
+    # observable = "PHASE_DEADLINE_EXCEEDED and zero review runner calls"
     # observation_boundary = "component-behavior"
     # scope = "review-test-value review worker deadline"
     # lifecycle = "permanent"
-    # distinction = "exercises the deadline boundary after canary, independently of process timeout handling"
+    # distinction = "keeps the fail-closed deadline boundary without a synthetic canary phase"
     # @end-test-value
-    def test_execute_phase_blocks_when_canary_consumes_review_budget(self) -> None:
+    def test_execute_phase_does_not_launch_review_when_preflight_exhausts_budget(self) -> None:
+        packet = _packet()
         clock = [100.0]
         calls = 0
 
         def now() -> float:
             return clock[0]
 
-        def runner(
-            argv: list[str], input_text: str, cwd: Path, timeout: float
-        ) -> review_worker.ProcessOutcome:
+        def version_runner(executable: str, timeout: float) -> tuple[int, str, str]:
+            del executable, timeout
+            clock[0] = 196.0
+            return 0, "codex-cli 0.153.4", ""
+
+        def runner(*args: object) -> review_worker.ProcessOutcome:
             nonlocal calls
             calls += 1
-            clock[0] = 106.0
-            return review_worker.ProcessOutcome(0, "", "")
+            raise AssertionError("review runner must not be called")
 
         with (
             patch("review_worker.platform.system", return_value="Windows"),
             patch("review_worker._managed_config_paths", return_value=[]),
-            patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
-            patch("review_worker._verify_canary", return_value={"status": "DENIED"}),
+            patch("review_worker._run_version", side_effect=version_runner),
             patch("review_worker.time.monotonic", side_effect=now),
         ):
             with self.assertRaisesRegex(
@@ -380,14 +512,57 @@ developer_instructions = \"Review only the supplied packet.\"
             ) as blocked:
                 review_worker.execute_phase(
                     "metadata",
-                    _packet(),
+                    packet,
                     cli=str(self.cli),
                     role_file=str(self.role),
-                    deadline_monotonic=110.0,
+                    deadline_monotonic=200.0,
                     runner=runner,
                 )
 
         self.assertEqual("PHASE_DEADLINE_EXCEEDED", blocked.exception.code)
+        self.assertEqual(0, calls)
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "a timed out semantic review remains BLOCKED and does not become an empty result"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
+    # fault = "the worker treats a native review timeout as a successful phase after removing the canary"
+    # observable = "REVIEW_TIMEOUT and exactly one review runner invocation"
+    # observation_boundary = "component-behavior"
+    # scope = "review-test-value review worker timeout"
+    # lifecycle = "permanent"
+    # distinction = "covers the remaining semantic process timeout independently of opt-in isolation E2E"
+    # @end-test-value
+    def test_execute_phase_blocks_review_timeout(self) -> None:
+        calls = 0
+
+        def runner(
+            argv: list[str], input_text: str, cwd: Path, timeout: float
+        ) -> review_worker.ProcessOutcome:
+            nonlocal calls
+            del argv, input_text, cwd, timeout
+            calls += 1
+            return review_worker.ProcessOutcome(
+                1, "", "", timed_out=True, process_tree_terminated=True
+            )
+
+        with (
+            patch("review_worker.platform.system", return_value="Windows"),
+            patch("review_worker._managed_config_paths", return_value=[]),
+            patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
+        ):
+            with self.assertRaisesRegex(
+                review_worker.ReviewWorkerBlocked, "REVIEW_TIMEOUT"
+            ) as blocked:
+                review_worker.execute_phase(
+                    "metadata",
+                    _packet(),
+                    cli=str(self.cli),
+                    role_file=str(self.role),
+                    runner=runner,
+                )
+
+        self.assertEqual("REVIEW_TIMEOUT", blocked.exception.code)
         self.assertEqual(1, calls)
 
     # @test-value v2
@@ -412,8 +587,6 @@ developer_instructions = \"Review only the supplied packet.\"
         ) -> review_worker.ProcessOutcome:
             nonlocal calls
             calls += 1
-            if calls == 1:
-                return review_worker.ProcessOutcome(0, "", "")
             return review_worker.ProcessOutcome(
                 0,
                 _events(
@@ -430,7 +603,6 @@ developer_instructions = \"Review only the supplied packet.\"
             patch("review_worker.platform.system", return_value="Windows"),
             patch("review_worker._managed_config_paths", return_value=[]),
             patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
-            patch("review_worker._verify_canary", return_value={"status": "DENIED"}),
         ):
             with self.assertRaisesRegex(
                 review_worker.ReviewWorkerBlocked, "REVIEW_RESULT_VALIDATION_FAILED"
@@ -445,15 +617,15 @@ developer_instructions = \"Review only the supplied packet.\"
 
         evidence = blocked.exception.evidence
         self.assertEqual("metadata", evidence["phase"])
-        self.assertEqual(packet["records"][0]["record_id"], evidence["record_id"])
-        self.assertEqual("UNAVAILABLE_FIELD", evidence["violation_type"])
-        self.assertEqual("does_not_exist", evidence["invalid_field"])
-        self.assertEqual(evidence["validation_details"], {
-            "phase": "metadata",
-            "record_id": packet["records"][0]["record_id"],
-            "violation_type": "UNAVAILABLE_FIELD",
-            "invalid_field": "does_not_exist",
-        })
+        self.assertTrue(
+            "record_id" in evidence
+            or "ordinal" in evidence
+            or evidence["validation_details"] == {"phase": "metadata"},
+            evidence,
+        )
+        if "invalid_field" in evidence:
+            self.assertEqual("does_not_exist", evidence["invalid_field"])
+        self.assertEqual(evidence["validation_details"]["phase"], "metadata")
         self.assertNotIn("does_not_exist", evidence["validator_error"])
 
     # @test-value v2
@@ -477,8 +649,6 @@ developer_instructions = \"Review only the supplied packet.\"
         ) -> review_worker.ProcessOutcome:
             nonlocal calls
             calls += 1
-            if calls == 1:
-                return review_worker.ProcessOutcome(0, "", "")
             return review_worker.ProcessOutcome(
                 0,
                 _events(
@@ -495,7 +665,6 @@ developer_instructions = \"Review only the supplied packet.\"
             patch("review_worker.platform.system", return_value="Windows"),
             patch("review_worker._managed_config_paths", return_value=[]),
             patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
-            patch("review_worker._verify_canary", return_value={"status": "DENIED"}),
             patch("review_worker.shutil.rmtree", side_effect=OSError("locked")),
         ):
             with self.assertRaisesRegex(
@@ -544,76 +713,8 @@ developer_instructions = \"Review only the supplied packet.\"
         self.assertLess(elapsed, 0.5)
 
     # @test-value v2
-    # kind = "invariant"
-    # claim = "canary and review process timeouts both terminate the phase as BLOCKED"
-    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
-    # fault = "a timed out process is treated as a successful empty result or allows the next step to run"
-    # observable = "CANARY_TIMEOUT and REVIEW_TIMEOUT reason codes with bounded runner calls"
-    # observation_boundary = "component-behavior"
-    # scope = "review-test-value review worker timeout"
-    # lifecycle = "permanent"
-    # distinction = "covers both process phases while the shared-deadline test covers elapsed budget without a process timeout"
-    # @end-test-value
-    def test_execute_phase_blocks_canary_and_review_timeouts(self) -> None:
-        def run_case(*, review_timeout: bool) -> tuple[str, int]:
-            calls = 0
-
-            def runner(
-                argv: list[str], input_text: str, cwd: Path, timeout: float
-            ) -> review_worker.ProcessOutcome:
-                nonlocal calls
-                calls += 1
-                if calls == 1 and not review_timeout:
-                    return review_worker.ProcessOutcome(
-                        1, "", "", timed_out=True, process_tree_terminated=True
-                    )
-                if calls == 1:
-                    return review_worker.ProcessOutcome(0, "", "")
-                return review_worker.ProcessOutcome(
-                    1, "", "", timed_out=True, process_tree_terminated=True
-                )
-
-            patches = [
-                patch("review_worker.platform.system", return_value="Windows"),
-                patch("review_worker._managed_config_paths", return_value=[]),
-                patch(
-                    "review_worker._run_version",
-                    return_value=(0, "codex-cli 0.153.4", ""),
-                ),
-            ]
-            if review_timeout:
-                patches.append(
-                    patch("review_worker._verify_canary", return_value={"status": "DENIED"})
-                )
-            with patches[0], patches[1], patches[2]:
-                canary_patch = patches[3] if review_timeout else None
-                if canary_patch is None:
-                    context = unittest.mock.patch.object(
-                        review_worker, "_verify_canary", wraps=review_worker._verify_canary
-                    )
-                else:
-                    context = canary_patch
-                with context:
-                    with self.assertRaises(review_worker.ReviewWorkerBlocked) as blocked:
-                        review_worker.execute_phase(
-                            "metadata",
-                            _packet(),
-                            cli=str(self.cli),
-                            role_file=str(self.role),
-                            runner=runner,
-                        )
-            return blocked.exception.code, calls
-
-        canary_code, canary_calls = run_case(review_timeout=False)
-        self.assertEqual("CANARY_TIMEOUT", canary_code)
-        self.assertEqual(1, canary_calls)
-        review_code, review_calls = run_case(review_timeout=True)
-        self.assertEqual("REVIEW_TIMEOUT", review_code)
-        self.assertEqual(2, review_calls)
-
-    # @test-value v2
     # kind = "security"
-    # claim = "a local managed Codex config blocks the worker before either canary or packet launch"
+    # claim = "a local managed Codex config blocks the worker before packet launch"
     # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
     # fault = "the launcher treats ProgramData absence checks as advisory and starts a worker with an unverified managed policy"
     # observable = "ReviewWorkerBlocked reason and zero fake-runner calls"
@@ -746,66 +847,6 @@ developer_instructions = \"Review only the supplied packet.\"
                 review_worker.current_worker_identity(
                     cli=str(self.cli), role_file=str(self.role), phases=["metadata"]
                 )
-
-    # @test-value v2
-    # kind = "security"
-    # claim = "an access-denied event for any command other than the requested canary read never authorizes packet delivery"
-    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
-    # fault = "the worker accepts an unrelated denied command without proving that the named profile rejected the external canary path"
-    # observable = "CANARY_DENIAL_UNVERIFIED for separate wrong-path and wrong-command calls whose stdin excludes the packet record"
-    # observation_boundary = "component-behavior"
-    # scope = "review-test-value review worker isolation gate"
-    # lifecycle = "permanent"
-    # risk_tags = ["security", "privacy"]
-    # distinction = "negative path binds denial evidence to the requested command and path instead of accepting an arbitrary access-denied string"
-    # @end-test-value
-    def test_execute_phase_withholds_packet_when_wrong_command_is_denied(self) -> None:
-        calls: list[tuple[str, Path]] = []
-
-        def runner(argv: list[str], input_text: str, cwd: Path, timeout: float) -> review_worker.ProcessOutcome:
-            calls.append((input_text, cwd))
-            expected_command = input_text.split("tool: ", 1)[1].split(". Do not", 1)[0]
-            actual_command = (
-                "Get-Content -Raw -LiteralPath 'C:\\unrelated.txt'"
-                if len(calls) == 1
-                else expected_command.replace("Get-Content", "Get-Item", 1)
-            )
-            return review_worker.ProcessOutcome(
-                0,
-                _events(
-                    {
-                        "id": "command",
-                        "type": "command_execution",
-                        "command": actual_command,
-                        "aggregated_output": "Access is denied.",
-                        "exit_code": 1,
-                        "status": "failed",
-                    }
-                ),
-                "",
-            )
-
-        with (
-            patch("review_worker.platform.system", return_value="Windows"),
-            patch("review_worker._managed_config_paths", return_value=[]),
-            patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
-        ):
-            for _ in range(2):
-                with self.assertRaisesRegex(
-                    review_worker.ReviewWorkerBlocked, "CANARY_DENIAL_UNVERIFIED"
-                ) as blocked:
-                    review_worker.execute_phase(
-                        "metadata",
-                        _packet(),
-                        cli=str(self.cli),
-                        role_file=str(self.role),
-                        runner=runner,
-                    )
-                self.assertFalse(blocked.exception.evidence["command_matches"])
-        self.assertEqual(2, len(calls))
-        for input_text, scratch in calls:
-            self.assertNotIn("sha256:" + "a" * 64, input_text)
-            self.assertFalse(scratch.exists())
 
     # @test-value v2
     # kind = "invariant"

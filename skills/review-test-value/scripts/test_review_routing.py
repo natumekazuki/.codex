@@ -51,6 +51,24 @@ class ReviewRoutingTests(unittest.TestCase):
                     ),
                     expected,
                 )
+        # Immutable terminal outcomes do not become NEEDS_CONTEXT when a
+        # risk/audit-selected diagnostic deep review was not run.
+        self.assertEqual(
+            aggregate_status(
+                "REDESIGN", "ALIGNED", sol_required=True, sol_verdict=None
+            ),
+            "REDESIGN",
+        )
+        self.assertEqual(
+            aggregate_status(
+                "NEEDS_CONTEXT", "MISMATCH", sol_required=True, sol_verdict=None
+            ),
+            "REDESIGN",
+        )
+        # A RECHECK can still establish boundary/resolution, so it remains a
+        # required deep review even when metadata is already REDESIGN.
+        with self.assertRaises(RoutingError):
+            aggregate_status("REDESIGN", "RECHECK", sol_required=False, sol_verdict=None)
         with self.assertRaises(RoutingError):
             aggregate_status("VALID", "RECHECK", sol_required=False, sol_verdict=None)
 
@@ -75,7 +93,7 @@ class ReviewRoutingTests(unittest.TestCase):
             route_record(
                 record_id="sha256:" + "1" * 64,
                 metadata_hash="sha256:" + "2" * 64,
-                contract_version="deep-review-v2",
+                contract_version="deep-review-v3",
                 metadata={"kind": "contract"},
                 parent_risk_context={
                     "record_id": "sha256:" + "1" * 64,
@@ -91,7 +109,7 @@ class ReviewRoutingTests(unittest.TestCase):
             route_record(
                 record_id="sha256:" + "1" * 64,
                 metadata_hash="sha256:" + "2" * 64,
-                contract_version="deep-review-v2",
+                contract_version="deep-review-v3",
                 metadata={"kind": "contract"},
                 parent_risk_context={
                     "record_id": "sha256:" + "8" * 64,
@@ -106,10 +124,10 @@ class ReviewRoutingTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "contract"
-    # claim = "Solは不確定または高リスクrecordへrequiredとなり低リスクの明白なREDESIGNだけではrequiredにならない"
+    # claim = "Solは不確定または変更可能な高リスクrecordへrequiredとなり、immutable terminalやauditだけではrequiredにならない"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # fault = "追加contextが必要なrecordをLunaだけで閉じるか明白な低リスク欠陥を不要にSolへ送る"
-    # observable = "route_recordのrequired、reasons、risk_tags"
+    # fault = "追加contextが必要なrecordをLunaだけで閉じるか、immutable terminalまたはauditだけのrecordを不要にSolへ送る"
+    # observable = "route_recordのrequired、reasons、risk_tags、terminal"
     # observation_boundary = "component-behavior"
     # scope = "test-value-sol-routing"
     # lifecycle = "permanent"
@@ -118,7 +136,7 @@ class ReviewRoutingTests(unittest.TestCase):
         common = {
             "record_id": "sha256:" + "4" * 64,
             "metadata_hash": "sha256:" + "6" * 64,
-            "contract_version": "deep-review-v2",
+            "contract_version": "deep-review-v3",
             "parent_risk_context": None,
             "context_requirements": [],
             "audit_percent": 0,
@@ -135,17 +153,55 @@ class ReviewRoutingTests(unittest.TestCase):
             metadata_verdict="NEEDS_CONTEXT",
             alignment_verdict="RECHECK",
         )
+        redesign_recheck = route_record(
+            **common,
+            metadata={"kind": "contract"},
+            metadata_verdict="REDESIGN",
+            alignment_verdict="RECHECK",
+        )
         high_risk = route_record(
             **common,
             metadata={"kind": "security"},
             metadata_verdict="REDESIGN",
             alignment_verdict="MISMATCH",
         )
+        high_risk_uncertain = route_record(
+            **common,
+            metadata={"kind": "security"},
+            metadata_verdict="VALID",
+            alignment_verdict="ALIGNED",
+        )
+        audit_only = route_record(
+            **{**common, "audit_percent": 100},
+            metadata={"kind": "contract"},
+            metadata_verdict="VALID",
+            alignment_verdict="ALIGNED",
+        )
+        metadata_context_after_mismatch = route_record(
+            **common,
+            metadata={"kind": "contract"},
+            metadata_verdict="NEEDS_CONTEXT",
+            alignment_verdict="MISMATCH",
+        )
 
         self.assertFalse(clear_defect["required"])
+        self.assertTrue(clear_defect["terminal"])
         self.assertTrue(uncertain["required"])
-        self.assertTrue(high_risk["required"])
+        self.assertFalse(uncertain["terminal"])
+        self.assertTrue(redesign_recheck["required"])
+        self.assertFalse(redesign_recheck["terminal"])
+        self.assertFalse(high_risk["required"])
+        self.assertTrue(high_risk["terminal"])
+        self.assertTrue(high_risk_uncertain["required"])
+        self.assertFalse(high_risk_uncertain["terminal"])
+        self.assertFalse(audit_only["required"])
+        self.assertFalse(audit_only["terminal"])
+        self.assertTrue(audit_only["audit_selected"])
+        self.assertEqual(audit_only["reasons"], [])
+        self.assertFalse(metadata_context_after_mismatch["required"])
+        self.assertTrue(metadata_context_after_mismatch["terminal"])
         self.assertIn("security", high_risk["risk_tags"])
+        self.assertIn("security", high_risk_uncertain["risk_tags"])
 
     # @test-value v2
     # kind = "invariant"
@@ -232,13 +288,13 @@ class ReviewRoutingTests(unittest.TestCase):
     # @end-test-value
     def test_deterministic_audit_is_stable_and_respects_extremes(self):
         record_id = "sha256:" + "0" * 64
-        selected = deterministic_audit(record_id, "deep-review-v2", 92)
+        selected = deterministic_audit(record_id, "deep-review-v3", 97)
 
         self.assertTrue(selected)
-        self.assertFalse(deterministic_audit(record_id, "deep-review-v2", 91))
-        self.assertEqual(selected, deterministic_audit(record_id, "deep-review-v2", 92))
-        self.assertFalse(deterministic_audit(record_id, "deep-review-v2", 0))
-        self.assertTrue(deterministic_audit(record_id, "deep-review-v2", 100))
+        self.assertFalse(deterministic_audit(record_id, "deep-review-v3", 96))
+        self.assertEqual(selected, deterministic_audit(record_id, "deep-review-v3", 97))
+        self.assertFalse(deterministic_audit(record_id, "deep-review-v3", 0))
+        self.assertTrue(deterministic_audit(record_id, "deep-review-v3", 100))
 
 
 if __name__ == "__main__":

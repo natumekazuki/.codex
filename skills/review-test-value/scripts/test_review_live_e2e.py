@@ -177,7 +177,7 @@ class LiveReviewE2ETests(unittest.TestCase):
             self.assertEqual(code, {"PASS": 0, "CHANGES_REQUIRED": 1, "BLOCKED": 2}[result["gate"]])
             if result["gate"] == "BLOCKED":
                 # Only a model-stage timeout/result failure is acceptable as an
-                # observed terminal contract. Startup/canary failures are not E2E.
+                # observed terminal contract. Startup failures are not E2E.
                 self.assertTrue(set(result["reason_codes"]) <= {"REVIEW_TIMEOUT", "REVIEW_RESULT_VALIDATION_FAILED", "AGGREGATE_BLOCKED"})
                 if "AGGREGATE_BLOCKED" in result["reason_codes"]:
                     self.assertEqual([r["record_id"] for r in result["records"]], ids)

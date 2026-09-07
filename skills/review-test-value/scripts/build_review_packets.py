@@ -82,7 +82,7 @@ def build_metadata_packet_multi(
                 metadata_record,
             )
     records = [item[1] for item in sorted(records_by_id.values(), key=lambda item: item[0])]
-    return {"review_contract_version": "metadata-review-v2", "records": records}
+    return {"review_contract_version": "metadata-review-v3", "records": records}
 
 
 def build_alignment_packet_multi(
@@ -102,7 +102,7 @@ def build_alignment_packet_multi(
     for extractor_result in extractor_results:
         local_metadata = build_metadata_packet(extractor_result)
         local_result = {
-            "review_contract_version": "metadata-review-v2",
+            "review_contract_version": "metadata-review-v3",
             "reviews": [reviews_by_id[item["record_id"]] for item in local_metadata["records"]],
         }
         local_alignment = build_alignment_packet(extractor_result, local_result)
@@ -111,7 +111,7 @@ def build_alignment_packet_multi(
                 raise PacketError("extractor_results contain a duplicate record_id")
             records_by_id[record["record_id"]] = record
     packet = {
-        "review_contract_version": "alignment-review-v2",
+        "review_contract_version": "alignment-review-v3",
         "metadata_result_hash": result_hash(metadata_result),
         "records": [records_by_id[item["record_id"]] for item in metadata_packet["records"]],
     }
@@ -230,7 +230,7 @@ def build_metadata_packet(extractor_result: dict[str, Any]) -> dict[str, Any]:
         )
     _require_unique(packet_records, "record_id")
     return {
-        "review_contract_version": "metadata-review-v2",
+        "review_contract_version": "metadata-review-v3",
         "records": packet_records,
     }
 
@@ -271,7 +271,7 @@ def build_alignment_packet(
             }
         )
     packet = {
-        "review_contract_version": "alignment-review-v2",
+        "review_contract_version": "alignment-review-v3",
         "metadata_result_hash": result_hash(metadata_result),
         "records": packet_records,
     }
@@ -347,7 +347,7 @@ def build_deep_packet(
             }
         )
     packet = {
-        "review_contract_version": "deep-review-v2",
+        "review_contract_version": "deep-review-v3",
         "metadata_result_hash": alignment_packet["metadata_result_hash"],
         "records": deep_records,
     }
@@ -365,7 +365,7 @@ def project_phase_batch(
     expected_keys = {"review_contract_version", "records"}
     if phase == "alignment":
         expected_keys.add("metadata_result_hash")
-    if set(global_packet) != expected_keys or global_packet["review_contract_version"] != f"{phase}-review-v2":
+    if set(global_packet) != expected_keys or global_packet["review_contract_version"] != f"{phase}-review-v3":
         raise PacketError("global phase packet has unexpected shape")
     records = global_packet["records"]
     if not isinstance(records, list) or not contiguous_records:
@@ -377,14 +377,14 @@ def project_phase_batch(
     packet = {"review_contract_version": global_packet["review_contract_version"],
               "records": contiguous_records}
     if phase == "alignment":
-        frozen = {"review_contract_version": "metadata-review-v2",
+        frozen = {"review_contract_version": "metadata-review-v3",
                   "reviews": [item["metadata_review"] for item in records]}
         try:
             validate_alignment_packet(global_packet, frozen)
         except ResultValidationError as exc:
             raise PacketError(str(exc)) from exc
         packet["metadata_result_hash"] = result_hash({
-            "review_contract_version": "metadata-review-v2",
+            "review_contract_version": "metadata-review-v3",
             "reviews": [item["metadata_review"] for item in contiguous_records],
         })
     return packet
@@ -402,7 +402,7 @@ def project_deep_batch(
         "input_hash",
     }:
         raise PacketError("global deep packet has unexpected keys")
-    if global_packet["review_contract_version"] != "deep-review-v2":
+    if global_packet["review_contract_version"] != "deep-review-v3":
         raise PacketError("global deep packet contract version is invalid")
     global_records = global_packet["records"]
     if not isinstance(global_records, list) or not isinstance(contiguous_records, list) or not contiguous_records:

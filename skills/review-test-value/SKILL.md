@@ -43,7 +43,17 @@ python -X utf8 <skill-dir>/scripts/run_test_value_review.py `
 
 host evidenceは現在のsnapshot・recordに結び付いたrisk評価、必要な限定context、実際に確認した保持根拠を渡す。sourceの内容・hash・意味判断を区別する。不足や競合を推測で埋めず、具体的な不足が返ったら確認する。各phaseのpacketを手組みしない。
 
-入口が全言語の抽出、独立したLuna metadata審査、固定済み結果を使うalignment、決定論的なrequired deep review、保持と既存resolution、全体gateを接続する。metadataがREDESIGNでもalignmentを省略しない。審査結果の正確な型は[output-v2](references/output-v2.md)、意味は[metadata](references/metadata-review-contract.md)／[alignment](references/alignment-review-contract.md)／[deep](references/deep-review-contract.md)／[routing](references/routing-policy.md)が所有する。
+入口が全言語の抽出、独立したLuna metadata審査、固定済み結果を使うalignment、決定論的なrequired deep review、保持と既存resolution、全体gateを接続する。alignmentはactual boundaryとDROP／MOVEの必要性を確定するため、metadataがREDESIGNでも実行する。現入力にはresolution不要をmetadataだけで証明する根拠がない。alignment後の固定済みREDESIGN／MISMATCHはhost-owned terminal判定で通常deepから除外する。審査結果の正確な型は[output-v2](references/output-v2.md)、意味は[metadata](references/metadata-review-contract.md)／[alignment](references/alignment-review-contract.md)／[deep](references/deep-review-contract.md)／[routing](references/routing-policy.md)が所有する。
+
+## LLMとscriptの責務
+
+LLMはmetadataの自己完結性・反証可能性・oracle循環・境界整合、sourceのactual observableとmetadataの対応、bounded contextによる未確定事項や高リスクrecordの意味判断を行う。抽出、schema、identity、hash、Git transition、batch／deadline、routing、audit selection、retention、resolution、final gateはscriptが所有する。
+
+canonical packet・result・generation・execution proofはfull identityとhashを保持する。model-visible transportはbatch内の0始まりordinalと意味判断fieldだけを送る。metadataへsourceやlocatorを送らず、alignmentでsourceを追加し、deepだけに検証済みbounded contextを渡す。hostのopaque ID・hash・contract versionはモデルへ復唱させない。モデルはordinalと意味判断を返し、hostがordinalの集合・順序・型を検証してrecord ID、hash、contract versionを付与する。deepのcontext evidenceもcontext ordinalからrefとcontent_hashを付与する。欠落・重複・範囲外・順序違反はvalidation errorであり、推測で結合しない。
+
+alignmentの`disposition_candidate`は廃止し、dispositionはroutingとfinal aggregationだけが決定する。metadata／alignment／deep／finalのcanonical review contractはv3、task／generationはv2とし、旧stateや旧resultを新形式へ推測変換しない。metadataコメントと宣言抽出のv2形式は維持する。
+
+metadataだけを理由にalignmentを省くと、実際のboundaryがdeclaration／implementationだった場合のMOVE／DROP義務を失うため、推測で省略しない。alignment後の固定済み`REDESIGN`／`MISMATCH`をriskやauditだけでdeepへ送らない。actual boundaryの解決が必要な`RECHECK`などは残し、skipped phaseのモデル結果は生成しない。通常gateのdeep requiredは未確定事項・bounded context要求・明示riskに限定する。10% auditと全phaseの追加診断は独立artifactへ出し、失敗はvalidation gapとして報告する。元の通常gateやresolution stateを変更しない。実行方法は有効化runbookに従う。
 
 ## 完了条件と不足の扱い
 
@@ -53,7 +63,7 @@ host evidenceは現在のsnapshot・recordに結び付いたrisk評価、必要�
 
 PASSとtest自体の実行成功は別の証拠である。抽出やvalidator単体のexit 0、空selection、削除だけ、消えたledgerを全体PASSにしない。元のREDESIGNをACCEPTへ書き換えず、根拠ある削除・移設の解消を別の結果として扱う。
 
-専門workerはphaseごとに履歴を持たない独立CLIで実行し、metadata phaseへ本文・locator・親履歴・一般hookを渡さない。read-onlyという文言だけを入力隔離の証拠にしない。設定・起動記録と合成canaryの拒否を確認できない場合、packet送信前に停止する。親や汎用子の自己評価、別model、旧結果へのfallbackで補わない。
+専門workerはphaseごとに履歴を持たない独立CLIで実行し、metadata phaseへ本文・locator・親履歴・一般hookを渡さない。read-onlyという文言だけを入力隔離の証拠にしない。通常runではmodel-free preflightで設定・起動条件・identityを検証し、不一致ならpacket送信前に停止する。filesystemの実拒否は有効化・CLI version変更・permission設定変更時のopt-in E2Eで確認する。各batchの合成canary用LLM runは起動しない。親や汎用子の自己評価、別model、旧結果へのfallbackで補わない。
 
 全phaseでLuna/maxを使い、metadata／alignmentは`test_value_luna`、deepは`test_value_deep`を別runで呼ぶ。追加contextでも判断できなければNEEDS_CONTEXTを親へ返し、Solや他modelへ自動昇格しない。
 
@@ -65,9 +75,9 @@ metadata、alignment、deepは同じbatch policyを使う。coordinatorは固定
 - recordを削除、縮小、順序変更して上限へ合わせない。単独recordが文字数上限を超える場合は対象を残したまま`BLOCKED`とする。
 - 同じselection、canonical packet、policyからは同じbatch境界と同じ相対deadline offsetを得る。absolute monotonic anchorは実行ごとに異なる。
 
-各batchのdefault時間予算はmetadataが300秒、alignmentが600秒、deepが900秒であり、canary（最大120秒）とcleanup（最大5秒）を含む。同一phaseではrecord順の連続batchをwaveにし、wave内を同時に開始する。`--batch-concurrency auto`（default）は`C=N`、正の整数の明示指定は`C=min(指定値,N)`とし、wave内の全workerがcleanupまで終えた直後に次waveを開始する。意図的な待機は挟まず、metadata→alignment→deepはphase単位で順次実行する。phase planのmonotonic startを`P`、batch予算を`B`、0始まりのbatch indexを`i`、解決済み同時実行数を`C`、batch開始を`S_i`とすると、workerへ渡すbatch deadlineは`min(S_i + B, P + (floor(i/C) + 1) × B)`、`N` batchのphase全体deadline offsetは`ceil(N/C) × B + 10秒`とする。workerはcanary、review、cleanupで一つのmonotonicな絶対deadlineを共有し、reviewへ渡せるのはcanaryで消費した時間を差し引いた残り時間だけとする。git抽出、host evidence準備、依存準備などplan実行前の処理をこの上限へ含めるとは表現しない。
+各batchのdefault時間予算はmetadataが300秒、alignmentが600秒、deepが900秒であり、model-free preflight、意味審査1 run、cleanup（最大5秒）を含む。同一phaseではrecord順の連続batchをwaveにし、wave内を同時に開始する。`--batch-concurrency auto`（default）は`C=N`、正の整数の明示指定は`C=min(指定値,N)`とし、wave内の全workerがcleanupまで終えた直後に次waveを開始する。意図的な待機は挟まず、metadata→alignment→deepはphase単位で順次実行する。phase planのmonotonic startを`P`、batch予算を`B`、0始まりのbatch indexを`i`、解決済み同時実行数を`C`、batch開始を`S_i`とすると、workerへ渡すbatch deadlineは`min(S_i + B, P + (floor(i/C) + 1) × B)`、`N` batchのphase全体deadline offsetは`ceil(N/C) × B + 10秒`とする。workerはpreflight、review、cleanupで一つのmonotonicな絶対deadlineを共有し、reviewへ渡せるのはpreflightの経過時間とcleanupの予約分を差し引いた残り時間だけとする。git抽出、host evidence準備、依存準備などplan実行前の処理をこの上限へ含めるとは表現しない。
 
-`--batch-concurrency`は`auto`（default）または1以上の整数を受け付ける。明示的な上限がbatch数より小さい場合だけwaveを分ける。同一phaseのwaveが失敗したら次waveを開始せず、開始済みの兄弟workerのcleanupを待つ。`BLOCKED`は入力indexが最小の失敗を決定論的に返し、`completed_batches`は同じwaveの兄弟を含む検証済み成功数を数える。通常auditは10%、deepの既存retryは最大1回とし、並列度の自動調整、batch workerの追加retry、model fallbackは行わない。local executor／runtimeのspawn失敗はsanitizedな`BATCH_EXECUTION_FAILED`として`BLOCKED`にする。alignment planはmetadata packetとその依存resultをfreezeした後、deep planはmetadata／alignmentとroutingをfreezeした後に確定する。phase全体の集約では、全batchのrecord ID、metadata／source hash、件数、順序、結果の完全性を検証する。欠落、重複、順序不整合、timeout、cleanup失敗を含む一つの非成功も成功batchだけでPASSへ集約しない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、最初の失敗は`last-failure.json`へ、既存の失敗がある場合は`failure-<hash>.json`へ診断を残し、以前の記録を上書きしない。validator failureのsanitized detailsにはpacket本文を含めず、少なくともphase、record ID、違反種別、不正fieldを残す。
+`--batch-concurrency`は`auto`（default）または1以上の整数を受け付ける。明示的な上限がbatch数より小さい場合だけwaveを分ける。同一phaseのwaveが失敗したら次waveを開始せず、開始済みの兄弟workerのcleanupを待つ。`BLOCKED`は入力indexが最小の失敗を決定論的に返し、`completed_batches`は同じwaveの兄弟を含む検証済み成功数を数える。10% auditは通常gateから分離した明示診断で実行する。通常deepの既存retryは最大1回とし、並列度の自動調整、batch workerの追加retry、model fallbackは行わない。local executor／runtimeのspawn失敗はsanitizedな`BATCH_EXECUTION_FAILED`として`BLOCKED`にする。alignment planはmetadata packetとその依存resultをfreezeした後、deep planはmetadata／alignmentとroutingをfreezeした後に確定する。phase全体の集約では、全batchのrecord ID、metadata／source hash、件数、順序、結果の完全性を検証する。欠落、重複、順序不整合、timeout、cleanup失敗を含む一つの非成功も成功batchだけでPASSへ集約しない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、最初の失敗は`last-failure.json`へ、既存の失敗がある場合は`failure-<hash>.json`へ診断を残し、以前の記録を上書きしない。validator failureのsanitized detailsにはpacket本文を含めず、少なくともphase、record ID、違反種別、不正fieldを残す。
 
 workerは`multi_agent`を無効にした独立native CLIを起動し、`spawn_agent`のsubagent枠やcapacity signalを使わない。親のsubagent枠を理由に並列度を自動で下げる連携はなく、timeoutやworker failureも同様に`BLOCKED`として扱う。
 
@@ -116,11 +126,13 @@ python -m pip install -r skills/review-test-value/scripts/requirements-test.txt
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_packets.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_result_schema.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_output_schema.py
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_transport.py skills/review-test-value/scripts/test_review_diagnostics.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_routing.py
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_resolution.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/build_review_packets.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/review_routing.py
 python -X utf8 -m py_compile skills/review-test-value/scripts/validate_review_result.py
+python -X utf8 -m py_compile skills/review-test-value/scripts/review_transport.py skills/review-test-value/scripts/run_review_diagnostics.py
 ```
 
 packet、result schema、routing、判定検証の実装や公開CLI契約を変更した場合に実行する。exit `0`の`tests`だけを審査し、exit `1`/`2`や`NEEDS_CONTEXT`を完了扱いにしない。専門roleの入力境界と全体gateの確認は、候補実行の検証とは別に必要である。
@@ -134,4 +146,4 @@ python -X utf8 -m py_compile skills/review-test-value/scripts/preflight_review_w
 python -X utf8 -m py_compile skills/review-test-value/scripts/review_worker.py skills/review-test-value/scripts/run_test_value_review.py
 ```
 
-preflight_review_worker.pyはversion照会とreadiness報告だけを行う。review_worker.pyはWindows native CLI 0.153.4と既存ChatGPT Pro認証を対象に、管理入力の検査と合成canaryを通してからphaseを実行する。未確認のOS・CLI版・認証種別はpacket送信前に停止する。offline testや`BLOCKED`を実モデル成功と扱わない。候補版の実行と継続条件は[有効化runbook](../../docs/runbooks/activate-test-value-review.md)を参照する。
+preflight_review_worker.pyはversion照会とreadiness報告だけを行う。review_worker.pyはWindows native CLI 0.153.4と既存ChatGPT Pro認証を対象に、管理入力をmodel-freeで検査してから意味審査1 runを実行する。合成filesystem denial probeは明示的な隔離E2Eだけで実行する。未確認のOS・CLI版・認証種別はpacket送信前に停止する。offline testや`BLOCKED`を実モデル成功と扱わない。候補版の実行と継続条件は[有効化runbook](../../docs/runbooks/activate-test-value-review.md)を参照する。

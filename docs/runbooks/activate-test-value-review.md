@@ -6,7 +6,7 @@
 
 activeな必須gateへ切り替える条件は次のとおりである。
 
-1. 固定した一つのselection全体（手動で1件ずつに分割しない）を、Windows native CLI `0.153.4`、既存ChatGPT Pro認証、Luna/maxの実モデルで22件以上審査する。全batchを集約した終了契約が、規定のphase deadline内に`PASS`、`CHANGES_REQUIRED`、`BLOCKED`のいずれかを返すことを確認する。
+1. 下記opt-in隔離E2Eを実行し、続いて固定した一つのselection全体（手動で1件ずつに分割しない）を、Windows native CLI `0.153.4`、既存ChatGPT Pro認証、Luna/maxの実モデルで22件以上審査する。全batchを集約した終了契約が、規定のphase deadline内に`PASS`、`CHANGES_REQUIRED`、`BLOCKED`のいずれかを返すことを確認する。
 2. このcandidateの変更自身を、同じreview契約とtask baseから自己審査する。offline test、合成canary、`BLOCKED`の返却は実モデルE2Eの代わりにしない。
 3. 新規Codex sessionでSkillの読込、candidateの明示起動、実効roleと入力隔離を確認する。
 4. 上記の証拠と回帰checkを揃え、実際のregistryでactiveへ変更する。active登録、hook／AGENTS／Skillの条件文、runbookの状態記述は同じ変更で更新する。
@@ -25,15 +25,15 @@ metadata、alignment、deepは同じbatch policyを使う。coordinatorはselect
 | 1 batchの入力サイズ | canonical packetのUnicode文字数で最大800,000文字。prompt wrapper、system instruction、実行時の追加文は数えない |
 | 境界 | record数とcanonical packet文字数の両方を満たす最大の連続範囲。単独recordが文字数上限を超えた場合は対象を削らず`BLOCKED` |
 | batch順 | selectionのrecord順を維持し、欠落・重複・順序変更を許さない |
-| batch時間 | metadataは300秒、alignmentは600秒、deepは900秒。canary最大120秒、cleanup最大5秒を含む |
+| batch時間 | metadataは300秒、alignmentは600秒、deepは900秒。model-free preflight、意味審査1 run、cleanup最大5秒を含む |
 | phase全体 | `ceil(N / C) × B + 固定10秒`。`N`はbatch数、`C`は解決済み同時実行数、`B`はphaseのbatch時間 |
 | worker同時実行 | `--batch-concurrency auto`（default）は`C=N`、正の整数は`C=min(指定値,N)` |
-| audit | 10% |
+| audit | 10%。通常gateから分離した明示診断のみ |
 | deep retry | 最大1回 |
 
 workerへ渡すbatch deadlineは、coordinatorのphase plan開始時に取得したmonotonic anchorからの絶対deadlineである。同一phaseではrecord順の連続batchをwaveに分け、wave内のworkerを同時に開始し、全workerのcleanup直後に次waveへ進む。phase planのstartを`P`、batch予算を`B`、batch `i`（0始まり）、解決済み同時実行数を`C`、batch開始を`S_i`とすると、batch deadlineは`min(S_i + B, P + (floor(i / C) + 1) × B)`、phase全体のdeadline offsetは`ceil(N / C) × B + 10秒`とする。同じselection、canonical packet、policyからこのrelative offsetを決定論的に計算する。monotonic anchorそのものは実行ごとに異なるため、異なるrunの絶対時刻を比較しない。metadata→alignment→deepはphase単位で順次実行する。phaseの時計はplan実行開始から進み、git抽出、host evidence準備、依存準備などplan前の処理をphase deadlineへ含めるとは表現しない。
 
-一つのbatchではcanary、review、cleanupが同じmonotonic deadlineを共有する。canaryの経過時間を差し引いた残り時間だけをreviewへ渡し、canaryからreviewへの切替でdeadlineを延長しない。deadline到達時は所有process treeとscratchを終了・削除し、cleanupの終了確認に失敗した場合も成功扱いにせず、専用reason codeを持つ`BLOCKED`にする。local executor／runtimeのspawn失敗もsanitizedな`BATCH_EXECUTION_FAILED`として`BLOCKED`にする。waveが失敗したら後続waveを開始せず、開始済みの兄弟workerのcleanupを待つ。`BLOCKED`は入力indexが最小の失敗を返し、`completed_batches`は同じwaveの兄弟を含む検証済み成功数を数える。
+一つのbatchではmodel-free preflight、review、cleanupが同じmonotonic deadlineを共有する。preflightの経過時間とcleanup予約分を差し引いた残り時間だけをreviewへ渡し、deadlineを延長しない。通常runの各batchは意味審査1 runだけを起動し、合成canaryを起動しない。deadline到達時は所有process treeとscratchを終了・削除し、cleanupの終了確認に失敗した場合も成功扱いにせず、専用reason codeを持つ`BLOCKED`にする。local executor／runtimeのspawn失敗もsanitizedな`BATCH_EXECUTION_FAILED`として`BLOCKED`にする。waveが失敗したら後続waveを開始せず、開始済みの兄弟workerのcleanupを待つ。`BLOCKED`は入力indexが最小の失敗を返し、`completed_batches`は同じwaveの兄弟を含む検証済み成功数を数える。
 
 metadata packetをfreezeしてからmetadataのbatch planを確定し、metadata resultをfreezeしてからalignment planを確定する。deep planはmetadata／alignment resultとroutingをfreezeしてから確定する。全batchについてrecord ID、metadata／source hash、件数、順序、結果の完全性を集約時に検証する。一つでもbatchが失敗、timeout、cleanup失敗、欠落、重複、順序不整合になれば、成功batchだけで全体を`PASS`にしない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、最初の失敗は`last-failure.json`へ、既存の失敗がある場合は`failure-<hash>.json`へ診断を残し、以前の記録を上書きしない。validator failureはpacket本文や機密情報を返さず、sanitized detailsにphase、record ID、違反種別、不正fieldを含める。
 
@@ -51,7 +51,7 @@ python -X utf8 skills/review-test-value/scripts/run_test_value_review.py `
   --batch-concurrency auto
 ```
 
-`--prepare`にも同じ秒数と`--batch-concurrency`を渡す。22 recordsが3batchのalignmentでは、defaultのauto（`C=3`）のoffsetは`ceil(3 / 3) × 600 + 10 = 610秒`、明示`--batch-concurrency 1`の逐次offsetは`3 × 600 + 10 = 1,810秒`である。autoでは1 wave、明示上限がbatch数より小さい場合だけwaveを分け、wave内の全workerのcleanup後に余分な待機を挟まず次waveへ進む。時間予算はcanary・review・cleanupで共有する。
+`--prepare`にも同じ秒数と`--batch-concurrency`を渡す。22 recordsが3batchのalignmentでは、defaultのauto（`C=3`）のoffsetは`ceil(3 / 3) × 600 + 10 = 610秒`、明示`--batch-concurrency 1`の逐次offsetは`3 × 600 + 10 = 1,810秒`である。autoでは1 wave、明示上限がbatch数より小さい場合だけwaveを分け、wave内の全workerのcleanup後に余分な待機を挟まず次waveへ進む。時間予算はmodel-free preflight・review・cleanupで共有する。
 
 指定した全phaseの値をtask manifestの`execution_policy`／`execution_policy_hash`、各計画の`batch_seconds`／解決済み`batch_concurrency`／`execution_policy_hash`／`plan_hash`へ固定する。`auto`はexecution policyでは`null`としてhashし、planには実行時の解決値を保存する。generationのtoolchain identityにもpolicyを含める。policyの異なる既存state、またはpolicy未記録の旧stateは`STATE_EXECUTION_POLICY_MISMATCH`で停止し、計画も失敗記録も変更しない。再計画は新しいstate directoryで明示実行する方式に限定する。元のstateや未解決義務を消して完了扱いにはしない。
 
@@ -63,9 +63,47 @@ Luna/maxによるmetadata／alignmentと必要なdeep reviewは、それぞれ�
 
 metadata phaseは正規metadataだけを受け取る。本文・locator・親履歴・別phase・ログ・Memory・MCPから補完できないよう、user／project／managed config、AGENTS、Skill、hook、tool、network、shellの自動入力と読取経路を確認する。`--ignore-user-config`だけで全入力が消えるとは仮定しない。管理者の安全policyは維持し、必要な境界を確認できない場合はpacket送信前に`BLOCKED`とする。
 
-対応範囲はWindows native CLI `0.153.4`、既存ChatGPT Pro認証に限定する。管理configの存在、未確認の認証種別・CLI版では送信前に停止する。認証は既存CLIのChatGPTログインを使い、auth.jsonのコピーや新たな課金APIを導入しない。入力はstdin等のdataとして渡す。正式な起動設定・CLI identityと合成canaryの強制読取拒否を確認し、存在しないJSONL fieldをpreflightの要件にしない。
+対応範囲はWindows native CLI `0.153.4`、既存ChatGPT Pro認証に限定する。管理configの存在、未確認の認証種別・CLI版では送信前に停止する。認証は既存CLIのChatGPTログインを使い、auth.jsonのコピーや新たな課金APIを導入しない。入力はstdin等のdataとして渡す。通常runはstrict config、無効化tool、network deny、空scratch、非注入設定とCLI／role／contract／auth identityをmodel-freeで確認する。shell／unified execを無効化し、stdin packetと固定developer contract以外からrepository情報を取得させない。filesystemの実拒否は別のopt-in E2Eで確認する。
 
 保存schemaの`sol_result`等とtoolchainの`workers.sol`はdeep phaseの既存識別子であり、Solを呼ぶ設定ではない。role・contractのhashが変わるため、旧modelのgenerationを新構成の実行証拠として再利用しない。
+
+## 意味審査・隔離確認・品質診断の分離
+
+通常batchはmodel-free preflightと意味審査1回で構成する。canonical artifactにはfull identityを残し、model-visible input/outputでは0始まりのbatch ordinalを使う。hostがordinalの集合・順序とschemaを検証し、record ID、hash、contract versionを付与する。context evidenceはrecord内context ordinalからrefとhashへ結び付ける。公開review contractはv3、task／generationはv2であり、旧stateの変換・暗黙再利用はしない。新しいstate directoryで固定selection全件を実行し、旧stateと未解決義務の記録を残す。
+
+隔離の実効性はcandidate有効化、CLI version変更、permission設定変更時に一度、次の明示E2Eで確認する。通常batchからは呼ばない。stdoutをcheckout外の新しい証跡ファイルへ保存する。
+
+```powershell
+python -X utf8 skills/review-test-value/scripts/review_worker.py `
+  --isolation-e2e --phase metadata --cli <native-codex-executable> `
+  --role-file agents/test_value_luna.toml --timeout-seconds 180 `
+  > <new-isolation-evidence-json>
+```
+
+成功は対象の外部probe fileへの読取りが拒否され、所有process treeとscratchのcleanupを確認できた場合だけとする。任意のexit 1や無関係な拒否を成功にしない。失敗証跡はcommandの正規化種別、denial reason、event種別を持ち、raw command、secret、private path、packet本文を含めない。隔離E2Eの成功と意味審査の精度は別々に記録する。
+
+低リスク10% auditは通常gateのdeep requiredへ含めない。公開済みgenerationを明示して、別の新しいoutput directoryへ診断する。
+
+```powershell
+python -X utf8 skills/review-test-value/scripts/run_review_diagnostics.py `
+  --state-dir <completed-task-state-directory> --generation-id g000001 `
+  --cli <native-codex-executable> --output-dir <new-audit-directory> --mode audit
+```
+
+全phaseの追加診断には同じ入口の`--mode all-phases`を使う。元のsnapshot・selection・toolchainの一致を検証してから再評価し、通常gateでterminalになったrecordも診断対象へ含める。audit selectionはrecord IDとcontract versionから決定論的に10%を選ぶ。診断失敗は`VALIDATION_GAP`と終了code 2で記録し、元generationのgate・resolution stateを書き換えない。対象が0件ならLLMを呼ばない。audit／追加診断を通常gateの代わりに使わない。
+
+22件・3batchでmetadataとalignmentが必要な場合、旧構成は意味審査6回とcanary6回、現構成は意味審査6回のみとなる。alignment後のterminal deep省略と通常auditの分離はさらに呼出し対象を減らす。call数・model-visible packet文字数・wall-clock・canonical gateは同じfixtureと意味判定で比較し、offline stubの所要時間を実モデルの速度やtoken消費量として報告しない。Windows実モデルでは隔離E2E、各意味審査、cleanup、terminal gateを別々に確認し、新規sessionからも再実行する。本変更だけではactive化しない。
+
+### 22件のoffline比較
+
+同じ22件・固定意味判定を旧tree `14230c182037dffeb22e8e7404fe9e29a3be4b4d` とv3で比較した。下表のrun数はstubで確認したworker呼出し数に各workerの審査／probe契約を適用した予定数であり、実モデルを起動した実測値ではない。packet文字数は各batchのmodel-visible JSONの合計（developer instruction・schema・canary promptを除く）。
+
+| fixture | 旧LLM run予定数 | v3 LLM run予定数 | 旧packet文字数 | v3 packet文字数 | gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 低リスク、旧audit対象3件 | 14 | 6 | 47,150 | 27,292 | 両方PASS |
+| 全22件に明示security risk | 18 | 9 | 85,829 | 55,356 | 両方PASS |
+
+`auto`／明示1／明示2で、全件のcanonical意味判定とgateは一致した。autoのhost-only実行時間は低リスク約0.063→0.056秒、高リスク約0.085→0.099秒だった。stubの計測であり、LLMのwall-clock短縮やtoken消費量の保証には使わない。実モデル比較、candidate自身の専門審査、新規session確認は未完了。
 
 ## 履歴（有効化の証拠ではない）
 
@@ -77,7 +115,7 @@ metadata phaseは正規metadataだけを受け取る。本文・locator・親履
 
 ## 完了契約
 
-candidateの一回の入口で、task baseとsnapshot固定、全対象言語の抽出、metadata／alignment、決定論的なrequired deep review、hostが実際に確認した保持根拠、既存ledgerのDROP／MOVE解消、全体gateを接続する。metadataが`REDESIGN`でもalignmentを省略しない。元の判定は固定し、削除・移設後の解消を別の結果として扱う。
+candidateの一回の入口で、task baseとsnapshot固定、全対象言語の抽出、metadata／alignment、決定論的なrequired deep review、hostが実際に確認した保持根拠、既存ledgerのDROP／MOVE解消、全体gateを接続する。alignmentはactual boundaryと削除・移設resolutionの必要性を確定するため、metadataがREDESIGNでも残す。metadata-only入力ではresolution不要を証明できない。alignmentで境界が確定したREDESIGN／MISMATCHはroutingのhost-owned terminal判定で通常deepから除外する。元の判定は固定し、削除・移設後の解消を別の結果として扱う。
 
 全言語・全batch・現在のrecord・未解決義務が揃って初めて`PASS`とする。空selection、消えたledger、別snapshotのreceipt、構文validatorの正常終了を全体PASSにしない。終了契約は0=`PASS`、1=`CHANGES_REQUIRED`、2=`BLOCKED`。実行不能、不正JSON／hash、timeout／cancel、途中失敗は非成功として伝える。
 
@@ -93,7 +131,7 @@ stateの書込みが途中で終わり未公開generationが残った場合は�
 
 既存の直接checkは[SkillのValidation](../../skills/review-test-value/SKILL.md#validation)を使う。offlineの成功と、Windows／CLI／modelを特定した実モデルE2Eを分ける。旧preflightはversionとroleのreadinessを返すだけで、exit 2の`BLOCKED`は成功ではない。
 
-candidateの回帰checkでは、batch境界、解決済み`C`、record／hash／順序の集約、canaryからreviewへの残り時間、process treeとscratchのcleanup、schema variantとsanitized validation diagnostics、途中batchの失敗を確認する。22件以上のselectionを一つの固定runでWindows native CLIへ渡し、手動分割なしに規定のphase deadline内で終了契約を得る。1件、上限ちょうど、上限超過、22件、100件、および文字数境界のoffline fixtureは、実モデルE2Eの代わりにしない。
+candidateの回帰checkでは、batch境界、解決済み`C`、record／hash／順序の集約、model-free preflightからreviewへの残り時間、process treeとscratchのcleanup、schema variantとsanitized validation diagnostics、途中batchの失敗を確認する。22件以上のselectionを一つの固定runでWindows native CLIへ渡し、手動分割なしに規定のphase deadline内で終了契約を得る。1件、上限ちょうど、上限超過、22件、100件、および文字数境界のoffline fixtureは、実モデルE2Eの代わりにしない。
 
 22件のport入力検証fixtureは、coordinatorへ`--alignment-batch-seconds 600 --batch-concurrency auto`を明示指定し、alignmentのphase offset 610秒とbatch 0の完了まで検証する。Windowsで既存のChatGPT Pro認証を用い、次のopt-in実行で再現する。通常CIではモデルを呼ばない。fixture自体の22件のassertion、抽出、`10 + 10 + 2`の分割はofflineで確認できるが、このcheckoutではauto並列の実モデルrunは未実施である。
 
@@ -105,7 +143,7 @@ python -X utf8 -m unittest skills/review-test-value/scripts/test_review_live_e2e
 
 指定先はcheckout外の絶対pathとする。実行ごとにfixture repository・state・`e2e-summary.json`を保持する。新規Codex sessionから同じコマンドを実行し、各runのplanとterminal gateを比較する。このopt-in E2Eは`--batch-concurrency auto`を固定し、小さい22件fixtureの各phase最大3batch、deep retryなしを前提に、外側watchdogを`(300 + 10) + (600 + 10) + (900 + 10) + 180 = 2,010秒`とする。180秒はGit／preflight／最終保存の固定余裕であり、workerのdeadlineを延長しない。各runでは実際に生成されたphase planの時間合計とも照合する。preflight・canaryだけの失敗やskipを実モデルE2E成功と扱わず、モデル審査後の`BLOCKED`も品質確認・有効化の完了とは区別する。auto並列のWindows実モデルE2Eはこのcheckoutでは未実施であり、candidateは引き続き必須gateにしない。
 
-Luna/maxの実効起動を全phaseで確認し、循環したoracle、本文以上の過大主張、mockによるSUTの置換、必要contextの欠落を誤承認しないか、正常例とともに確認する。所要時間・利用量も記録し、旧Sol構成と同等の精度や週枠削減を未測定のまま保証しない。
+Luna/maxの実効起動を全phaseで確認し、循環したoracle、本文以上の過大主張、mockによるSUTの置換、必要contextの欠落を誤承認しないか、正常例とともに確認する。所要時間・利用量も記録し、旧per-batch canary構成と同等の精度や週枠削減を未測定のまま保証しない。
 
 candidateの22件以上の実モデルE2E、candidate自身の審査、新規sessionでの読込確認、registryの実効状態確認が揃っていないため、現時点では切替を保留する。条件が揃った場合だけ、registryのactive登録と本runbookの「現在の状態」を同じ変更で更新し、必須gateとして公開する。未確認のOS／runtimeには成功を広げない。
 

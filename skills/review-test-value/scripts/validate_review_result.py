@@ -83,7 +83,7 @@ NEGATIVE_METADATA_FINDINGS = {
 
 PHASE_SPECS = {
     "metadata": {
-        "version": "metadata-review-v2",
+        "version": "metadata-review-v3",
         "verdicts": {"VALID", "REDESIGN", "NEEDS_CONTEXT"},
         "keys": {
             "record_id",
@@ -95,7 +95,7 @@ PHASE_SPECS = {
         },
     },
     "alignment": {
-        "version": "alignment-review-v2",
+        "version": "alignment-review-v3",
         "verdicts": {"ALIGNED", "MISMATCH", "RECHECK"},
         "keys": {
             "record_id",
@@ -107,13 +107,12 @@ PHASE_SPECS = {
             "overclaim",
             "evidence",
             "unverified",
-            "disposition_candidate",
             "context_requirements",
             "next_action",
         },
     },
     "deep": {
-        "version": "deep-review-v2",
+        "version": "deep-review-v3",
         "verdicts": {"APPROVE", "REDESIGN", "NEEDS_CONTEXT"},
         "keys": {
             "record_id",
@@ -138,11 +137,11 @@ _REDACTED = "REDACTED"
 
 
 def phase_result_schema(phase: str) -> dict[str, Any]:
-    """Build the codex exec output schema for one v2 review phase.
+    """Build the canonical host result schema for one semantic review phase.
 
-    This schema describes the result shape and local field constraints. Packet
-    identity, review order, hashes, and frozen-result comparisons remain the
-    responsibility of ``validate_phase_result``.
+    Transport code projects this host-owned schema to an ordinal-only model
+    schema. Packet identity, review order, hashes, and frozen-result
+    comparisons remain the responsibility of ``validate_phase_result``.
     """
     try:
         spec = PHASE_SPECS[phase]
@@ -198,16 +197,6 @@ def phase_result_schema(phase: str) -> dict[str, Any]:
                 },
                 "actual_observables": string_list,
                 "overclaim": {"type": "boolean"},
-                "disposition_candidate": {
-                    "type": ["string", "null"],
-                    "enum": [
-                        "KEEP_PERMANENT",
-                        "KEEP_TEMPORARY",
-                        "MOVE_TO_POLICY_CHECK",
-                        "DROP",
-                        None,
-                    ],
-                },
             }
         )
     elif phase == "deep":
@@ -357,7 +346,7 @@ def validate_alignment_packet(
         "records",
     }:
         raise ResultValidationError("alignment packet has unexpected keys")
-    if packet["review_contract_version"] != "alignment-review-v2":
+    if packet["review_contract_version"] != "alignment-review-v3":
         raise ResultValidationError("alignment packet contract version is invalid")
     records = packet["records"]
     if not isinstance(records, list):
@@ -394,7 +383,7 @@ def validate_deep_packet(
         "records",
     }:
         raise ResultValidationError("deep packet has unexpected keys")
-    if packet["review_contract_version"] != "deep-review-v2":
+    if packet["review_contract_version"] != "deep-review-v3":
         raise ResultValidationError("deep packet contract version is invalid")
     if packet["metadata_result_hash"] != alignment_packet["metadata_result_hash"]:
         raise ResultValidationError("deep packet metadata_result_hash does not match alignment")
@@ -540,7 +529,7 @@ def aggregate_results(value: dict[str, Any]) -> dict[str, Any]:
     except (KeyError, TypeError, ValueError) as exc:
         raise ResultValidationError(str(exc)) from exc
     return {
-        "review_contract_version": "review-final-v2",
+        "review_contract_version": "review-final-v3",
         "records": final_records,
         "gate": aggregate_gate([record["gate"] for record in final_records]),
     }
@@ -797,9 +786,6 @@ def _validate_alignment(review: dict[str, Any], expected: dict[str, Any]) -> Non
             )
     if review["verdict"] == "MISMATCH" and (actual_boundary is None or not observables):
         raise ResultValidationError("MISMATCH review requires a boundary and observables")
-    candidates = {"KEEP_PERMANENT", "KEEP_TEMPORARY", "MOVE_TO_POLICY_CHECK", "DROP", None}
-    if review["disposition_candidate"] not in candidates:
-        raise ResultValidationError("disposition_candidate is invalid")
     if review["verdict"] in {"ALIGNED", "MISMATCH"} and not review["evidence"]:
         raise ResultValidationError("completed alignment verdict requires evidence")
     if review["verdict"] == "RECHECK" and not review["context_requirements"]:

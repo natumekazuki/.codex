@@ -1,23 +1,38 @@
-# Review Routing Policy v1
+# Review Routing Policy v2
 
 ## Deep routing
 
-次のいずれかに該当するrecordはLuna/maxのdeep reviewをrequiredにする。
+通常gateのdeep reviewは、後続の意味審査がgate、actual boundaryまたは削除・移設
+resolutionを変更できるrecordだけをrequiredにする。次の条件を満たす場合に
+requiredにする。
 
 - Phase 1が`NEEDS_CONTEXT`
 - Phase 2が`RECHECK`
 - Phase 2がbounded contextを要求する
 - metadataの`kind = "security"`
 - metadataまたは親workflowのrisk tagが空でない
-- deterministic audit対象
+
+Phase 1が`REDESIGN`でも、metadataだけを根拠にPhase 2を省略しない。Phase 2は
+actual boundaryとDROP／MOVE resolutionを確定できるため、全recordで実行対象に
+する。Phase 2の結果が固定された後、hostが`terminal = true`を付与できるのは、
+Phase 2が`RECHECK`でない状態でPhase 1が`REDESIGN`、またはPhase 2が`MISMATCH`
+のrecordだけである。terminal recordはrisk tagやaudit選択があっても通常gateの
+deep reviewへ送らない。`REDESIGN`と`RECHECK`の組み合わせは、deep reviewが
+actual boundaryまたは必要なresolutionを確定できるため例外としてrequiredに
+できる。metadataが`NEEDS_CONTEXT`でもPhase 2が`MISMATCH`なら、alignmentが
+boundaryを確定したterminal recordとして扱う。
+
+deterministic auditは通常gateのrequired条件ではない。audit選択は独立artifact
+のための決定論的な`audit_selected`信号として保持し、auditのfailureや未実行を
+対象recordの通常gateへ伝播させない。
 
 risk tagは`security`、`authentication`、`authorization`、`billing`、`irreversible-data-loss`、`privacy`だけを認める。metadataと親workflowのtagは和集合にし、metadataから親tagを解除できない。親workflowのrisk contextはrouting manifestとは独立した`review-workflow-context-v1` artifactとして`record_id`と`metadata_hash`へ固定する。未知のtag、型不一致、record IDまたはhash不一致はrouting前に拒否する。
 
-high-riskでもaudit対象でもない明白な`REDESIGN`または`MISMATCH`だけを理由にdeepへ送らない。required agentがunavailableなら親agentは代行せず、`NEEDS_CONTEXT`、`BLOCKED`とする。
+required agentがunavailableなら親agentは代行せず、`NEEDS_CONTEXT`、`BLOCKED`とする。
 
-audit selectionは`record_id`とcontract versionのSHA-256を100で割った剰余が`audit_percent`未満かで決める。同じ入力は常に同じ結果になる。候補版のaudit計算には`deep-review-v2`を渡す。routing manifestとworkflow context自体のshape/versionはv1のままとする。
+audit selectionは`record_id`とcontract versionのSHA-256を100で割った剰余が`audit_percent`未満かで決める。同じ入力は常に同じ結果になる。候補版のaudit計算には`deep-review-v3`を渡す。workflow context自体のshape/versionはv1のままとする。
 
-`review_routing.py`のinputは`records`と`workflow_context`を持つJSON objectとする。各routing recordは`record_id`、`metadata_hash`、`source_hash`、`contract_version`、`metadata`、Phase 1とPhase 2のverdict、`context_requirements`を持つ。`workflow_context`は`review_contract_version = "review-workflow-context-v1"`と同順の`records`を持ち、各entryは`record_id`、`metadata_hash`、`parent_risk_tags`、`audit_percent`だけを持つ。outputのrouting manifestは`review_contract_version = "review-routing-v1"`と同順の`records`を持ち、各entryへrecord identity、workflow contextのhash、routing resultを固定する。
+`review_routing.py`のinputは`records`と`workflow_context`を持つJSON objectとする。各routing recordは`record_id`、`metadata_hash`、`source_hash`、`contract_version`、`metadata`、Phase 1とPhase 2のverdict、`context_requirements`を持つ。`workflow_context`は`review_contract_version = "review-workflow-context-v1"`と同順の`records`を持ち、各entryは`record_id`、`metadata_hash`、`parent_risk_tags`、`audit_percent`だけを持つ。outputのrouting manifestは`review_contract_version = "review-routing-v2"`と同順の`records`を持ち、各entryへrecord identity、workflow contextのhash、routing resultを固定する。routing resultの`terminal`はalignment後にhostが付与するcanonical stateであり、model outputではない。`audit_selected`はselectionを表すが、`required`や`reasons`へauditだけの理由を追加しない。
 
 deep packet builderとfinal aggregatorは、alignment packet、固定済みPhase 1 result artifact、Phase 2 result、manifestとは独立したworkflow contextからrouting resultを再計算する。alignment packetの`metadata_result_hash`と埋め込みreviewを元artifactへ照合する。record ID、metadata hash、source hash、verdict、context requirement、workflow context hash、risk context、audit選択、required判定のいずれかが一致しないmanifestを拒否する。callerが渡した`sol_required` booleanだけでdeep reviewやgateを省略しない。
 
@@ -25,7 +40,7 @@ deep packet builderとfinal aggregatorは、alignment packet、固定済みPhase
 
 ## Status
 
-ADR-0022の優先表をそのまま適用する。未完了・schema不正、required deep reviewerのunavailable・schema不正・`NEEDS_CONTEXT`を最優先で`NEEDS_CONTEXT`とする。deep reviewerは固定済みの`REDESIGN`または`MISMATCH`を救済しない。
+ADR-0022の優先表を、host-owned `terminal`の先行確定と組み合わせて適用する。`terminal = true`のPhase 1 `REDESIGN`またはPhase 2 `MISMATCH`は、required deep reviewerが未実行でも`REDESIGN`を維持する。その他のrequired deep reviewerのunavailable・schema不正・`NEEDS_CONTEXT`は`NEEDS_CONTEXT`とする。deep reviewerは固定済みの`REDESIGN`または`MISMATCH`を救済しない。
 
 ## Disposition
 
@@ -51,4 +66,4 @@ resolution ledgerと元test削除後の`PASS`はactivation changeで有効化す
 
 final aggregatorのinputは完全な`alignment_packet`、同じrecord集合と順序の固定済み`metadata_result`と`alignment_result`、検証対象のcanonical `deep_packet`、独立した`workflow_routing_context`、検証対象の`routing_manifest`、required record集合とdeep packet hashへ結合した`sol_result`または未実行を表す`null`、同じrecord集合と順序の`retention_records`だけを持つ。正規artifactをrecordごとに分割しない。metadata verdict、alignment verdict、deep required、deep verdict、actual boundary、metadataを独立したscalarとして再入力しない。
 
-required recordに対応するdeep resultがない場合、またはdeep verdictが`NEEDS_CONTEXT`の場合は、dispositionを計算せず`NEEDS_CONTEXT / null / BLOCKED`へ短絡する。
+`terminal = false`のrequired recordに対応するdeep resultがない場合、またはdeep verdictが`NEEDS_CONTEXT`の場合は、dispositionを計算せず`NEEDS_CONTEXT / null / BLOCKED`へ短絡する。`terminal = true`の`REDESIGN`または`MISMATCH`はdeep resultの有無より先に`REDESIGN`を確定する。

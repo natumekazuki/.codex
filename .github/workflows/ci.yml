@@ -50,6 +50,9 @@ jobs:
           skills/review-test-value/scripts/test_review_output_schema.py
           skills/review-test-value/scripts/test_preflight_review_worker.py
           skills/review-test-value/scripts/test_review_worker.py
+          skills/review-test-value/scripts/test_review_isolation_e2e.py
+          skills/review-test-value/scripts/test_review_transport.py
+          skills/review-test-value/scripts/test_review_diagnostics.py
           skills/review-test-value/scripts/test_run_test_value_review.py
           skills/review-test-value/scripts/test_review_publication.py
           skills/review-test-value/scripts/test_review_routing.py
@@ -66,6 +69,8 @@ jobs:
           skills/review-test-value/scripts/validate_review_result.py
           skills/review-test-value/scripts/preflight_review_worker.py
           skills/review-test-value/scripts/review_worker.py
+          skills/review-test-value/scripts/review_transport.py
+          skills/review-test-value/scripts/run_review_diagnostics.py
           skills/review-test-value/scripts/run_test_value_review.py
           skills/review-test-value/scripts/review_resolution.py
 

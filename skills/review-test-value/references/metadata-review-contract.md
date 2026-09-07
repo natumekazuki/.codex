@@ -1,4 +1,4 @@
-# Metadata Review Contract v2
+# Metadata Review Contract v3
 
 ## Purpose
 
@@ -6,14 +6,23 @@ Phase 1は、test sourceを見ずに`@test-value` metadataが自己完結した�
 
 ## Input
 
-packetは`review_contract_version = "metadata-review-v2"`と`records`を持つ。各recordは次だけを持つ。
+hostはcanonical packetとしてrecord identity、metadata hash、contract versionを保持する。modelへ渡すtransport projectionは次の形だけを持つ。
 
-- `record_id`: locatorとmetadata hashから決定論的に作るopaque ID
-- `metadata_format_version`: 現在のtestは`2`。正常なGit削除元に限り`1`。
-- `metadata`
-- `metadata_hash`
+```json
+{
+  "records": [
+    {
+      "ordinal": 0,
+      "metadata_format_version": 2,
+      "metadata": {"...": "..."}
+    }
+  ]
+}
+```
 
-packetへsource path、line、symbol、source text、source hash、assertion summary、production source、oracle本文、実行証拠を含めない。未知のkey、重複record、metadata hash不一致はAI審査前に拒否する。
+`ordinal`はbatch内の0始まりの位置である。metadata phaseのmodel inputにはsource locator、source本文、record identity、hash、contract versionを含めない。hostはcanonical packetをmodel inputへそのまま転送せず、未知のkey、重複record、metadata hash不一致をmodel呼出し前に拒否する。
+
+canonical packetの`metadata_format_version`、`metadata`、identity、hashはhost artifactの責務である。現在のtestは`2`で、正常なGit削除元に限り`1`を使う。`metadata`の値に書かれたSHA-256らしい文字列は意味内容として保持する。
 
 ## Review
 
@@ -33,13 +42,13 @@ test本文があれば判断できる、という理由で不足を補完しな�
 
 ## Output
 
+model outputは次の形だけを返す。
+
 ```json
 {
-  "review_contract_version": "metadata-review-v2",
   "reviews": [
     {
-      "record_id": "sha256:...",
-      "metadata_hash": "sha256:...",
+      "ordinal": 0,
       "verdict": "VALID",
       "evidence": [
         {
@@ -54,7 +63,7 @@ test本文があれば判断できる、という理由で不足を補完しな�
 }
 ```
 
-`verdict`は`VALID`、`REDESIGN`、`NEEDS_CONTEXT`のいずれかとする。`metadata_hash`は入力recordと一致させる。`evidence`はmetadata field pathと定義済みfindingだけを持つ構造化objectの配列とし、自由文やsource fieldを根拠として受理しない。`NEEDS_CONTEXT`は`unverified`と`next_action`へ必要な追加sourceを具体的に示す。全recordを一度ずつ返し、追加・欠落・重複を認めない。
+`verdict`は`VALID`、`REDESIGN`、`NEEDS_CONTEXT`のいずれかとする。`evidence`はmetadata field pathと定義済みfindingだけを持つ構造化objectの配列とし、自由文やsource fieldを根拠として受理しない。`NEEDS_CONTEXT`は`unverified`と`next_action`へ必要な追加sourceを具体的に示す。全recordを一度ずつ、入力順のordinalで返す。ordinalの欠落、重複、範囲外、順序変更、booleanや非整数はhostが拒否する。hostは検証済みordinalと入力順からrecord identity、metadata hash、contract versionを付与してcanonical resultを構築する。modelへこれらを復唱させない。
 
 `finding`は`SELF_CONTAINED_CLAIM`、`CONCRETE_FAULT`、`COHERENT_BOUNDARY`、`LIFECYCLE_ALIGNED`、`ORACLE_DECLARED`、`CLAIM_NOT_FALSIFIABLE`、`FAULT_NOT_SPECIFIC`、`BOUNDARY_INCONSISTENT`、`ORACLE_CIRCULAR`のいずれかとする。`fields`は入力metadataに存在するtop-level field、`oracle.type`、`oracle.ref`だけを参照できる。`VALID`と`REDESIGN`は一件以上の`evidence`を必要とする。
 

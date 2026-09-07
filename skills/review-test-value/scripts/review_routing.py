@@ -12,7 +12,10 @@ from typing import Any
 from extract_test_values import OBSERVATION_BOUNDARIES as BOUNDARIES, RISK_TAGS
 
 
-ROUTING_MANIFEST_VERSION = "review-routing-v1"
+# Routing eligibility changed when deterministic audit selection was separated
+# from the blocking deep-review gate.  A v1 manifest must not be reinterpreted
+# under the new policy.
+ROUTING_MANIFEST_VERSION = "review-routing-v2"
 WORKFLOW_CONTEXT_VERSION = "review-workflow-context-v1"
 ROUTING_INPUT_KEYS = {
     "record_id",
@@ -59,6 +62,22 @@ def deterministic_audit(record_id: str, contract_version: str, audit_percent: in
     return int.from_bytes(digest, "big") % 100 < audit_percent
 
 
+def _immutable_terminal(*, metadata_verdict: str, alignment_verdict: str) -> bool:
+    """Return whether later semantic review cannot change this record's outcome.
+
+    This predicate is evaluated after the alignment result is fixed.  A
+    metadata redesign or an alignment mismatch is terminal once alignment has
+    established the actual boundary.  ``RECHECK`` is the explicit exception:
+    it can still supply the boundary or a required DROP/MOVE resolution, even
+    when metadata already has a redesign verdict.  Metadata alone must never
+    be used to skip alignment.
+    """
+
+    return alignment_verdict != "RECHECK" and (
+        metadata_verdict == "REDESIGN" or alignment_verdict == "MISMATCH"
+    )
+
+
 def route_record(
     *,
     record_id: str,
@@ -94,41 +113,32 @@ def route_record(
         parent_risk_tags = parent_risk_context["risk_tags"]
     risk_tags = merge_risk_tags(metadata.get("risk_tags", []), parent_risk_tags, kind=metadata.get("kind", ""))
     audit_selected = deterministic_audit(record_id, contract_version, audit_percent)
-    reasons = []
-    if metadata_verdict == "NEEDS_CONTEXT":
-        reasons.append("metadata-needs-context")
-    if alignment_verdict == "RECHECK":
-        reasons.append("alignment-recheck")
-    if context_requirements:
-        reasons.append("bounded-context-required")
-    if risk_tags:
-        reasons.append("high-risk")
-    if audit_selected:
-        reasons.append("deterministic-audit")
+    terminal = _immutable_terminal(
+        metadata_verdict=metadata_verdict, alignment_verdict=alignment_verdict
+    )
+    reasons: list[str] = []
+
+    # Audit selection is deliberately an independent, deterministic signal for
+    # the opt-in audit artifact.  It never makes a record required for the
+    # normal deep-review gate.
+    if not terminal:
+        if metadata_verdict == "NEEDS_CONTEXT":
+            reasons.append("metadata-needs-context")
+        if alignment_verdict == "RECHECK":
+            reasons.append("alignment-recheck")
+        if context_requirements:
+            reasons.append("bounded-context-required")
+        if risk_tags:
+            reasons.append("high-risk")
     required = bool(reasons)
-    if (
-        not risk_tags
-        and not audit_selected
-        and metadata_verdict == "REDESIGN"
-        and alignment_verdict != "RECHECK"
-        and not context_requirements
-    ):
-        required = False
-        reasons = []
-    if (
-        not risk_tags
-        and not audit_selected
-        and alignment_verdict == "MISMATCH"
-        and metadata_verdict != "NEEDS_CONTEXT"
-        and not context_requirements
-    ):
-        required = False
-        reasons = []
     return {
         "required": required,
         "reasons": reasons,
         "risk_tags": risk_tags,
         "audit_selected": audit_selected,
+        # Host-owned canonical state.  Diagnostics may consume this flag, but
+        # it is never model output and is only available after alignment.
+        "terminal": terminal,
     }
 
 
@@ -162,7 +172,7 @@ def validate_workflow_context(
         if entry["metadata_hash"] != record.get("metadata_hash"):
             raise RoutingError("workflow metadata_hash does not match record")
         _risk_tag_set(entry["parent_risk_tags"], "parent risk_tags")
-        deterministic_audit(entry["record_id"], "deep-review-v2", entry["audit_percent"])
+        deterministic_audit(entry["record_id"], "deep-review-v3", entry["audit_percent"])
     return entries
 
 
@@ -183,8 +193,8 @@ def build_routing_manifest(
         seen_ids.add(record_id)
         metadata_hash = _hash_string(record["metadata_hash"], "metadata_hash")
         source_hash = _hash_string(record["source_hash"], "source_hash")
-        if record["contract_version"] != "deep-review-v2":
-            raise RoutingError("contract_version must be deep-review-v2")
+        if record["contract_version"] != "deep-review-v3":
+            raise RoutingError("contract_version must be deep-review-v3")
         if not isinstance(record["metadata"], dict):
             raise RoutingError("metadata must be an object")
         result = route_record(
@@ -248,7 +258,7 @@ def validate_routing_manifest(
             raise RoutingError("routing metadata_hash does not match alignment packet")
         if entry["source_hash"] != record.get("source_hash"):
             raise RoutingError("routing source_hash does not match alignment packet")
-        if entry["contract_version"] != "deep-review-v2":
+        if entry["contract_version"] != "deep-review-v3":
             raise RoutingError("routing contract_version is invalid")
         if entry["workflow_context_hash"] != workflow_context_hash(workflow_entry):
             raise RoutingError("routing workflow context hash does not match fixed input")
@@ -285,6 +295,16 @@ def aggregate_status(
         return "NEEDS_CONTEXT"
     if alignment_verdict not in {"ALIGNED", "MISMATCH", "RECHECK"}:
         return "NEEDS_CONTEXT"
+
+    # A fixed redesign or mismatch is already a final change request once the
+    # alignment phase has a boundary.  Do this before validating a deep result:
+    # risk and audit routing must never turn an immutable terminal record into
+    # NEEDS_CONTEXT merely because no diagnostic review was run.
+    if _immutable_terminal(
+        metadata_verdict=metadata_verdict, alignment_verdict=alignment_verdict
+    ):
+        return "REDESIGN"
+
     if metadata_verdict == "NEEDS_CONTEXT" or alignment_verdict == "RECHECK":
         if not sol_required:
             raise RoutingError("uncertain initial verdict requires deep review")

@@ -9,7 +9,10 @@ SCRIPTS = Path(__file__).resolve().parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from build_review_packets import canonical_json, sha256_text  # noqa: E402
+from build_review_packets import (  # noqa: E402
+    canonical_json,
+    sha256_text,
+)
 from review_routing import build_routing_manifest  # noqa: E402
 from validate_review_result import (  # noqa: E402
     ResultValidationError,
@@ -31,7 +34,7 @@ def alignment_record():
 def alignment_result(verdict="ALIGNED"):
     record = alignment_record()
     return {
-        "review_contract_version": "alignment-review-v2",
+        "review_contract_version": "alignment-review-v3",
         "reviews": [
             {
                 **{key: record[key] for key in ("record_id", "metadata_hash", "source_hash")},
@@ -41,7 +44,6 @@ def alignment_result(verdict="ALIGNED"):
                 "overclaim": False,
                 "evidence": ["assertionはfinal record gateを読む"],
                 "unverified": [],
-                "disposition_candidate": "KEEP_PERMANENT",
                 "context_requirements": ["helper.py"] if verdict == "RECHECK" else [],
                 "next_action": None,
             }
@@ -63,6 +65,7 @@ def aggregation_input(
     actual_boundary="component-behavior",
     metadata_boundary=None,
     expires_on=None,
+    audit_percent=0,
 ):
     declared_boundary = metadata_boundary or actual_boundary or "component-behavior"
     metadata = {
@@ -120,7 +123,7 @@ def aggregation_input(
         ),
     }
     metadata_result = {
-        "review_contract_version": "metadata-review-v2",
+        "review_contract_version": "metadata-review-v3",
         "reviews": [metadata_review],
     }
     record = {
@@ -140,37 +143,53 @@ def aggregation_input(
         source_hash=identity["source_hash"],
         actual_boundary=actual_boundary,
     )
-    routing_records = [
-        {
-            **identity,
-            "contract_version": "deep-review-v2",
-            "metadata": metadata,
-            "metadata_verdict": metadata_verdict,
-            "alignment_verdict": alignment_verdict,
-            "context_requirements": alignment_review["context_requirements"],
-        }
-    ]
-    workflow_context = {
-        "review_contract_version": "review-workflow-context-v1",
-        "records": [
-            {
-                "record_id": identity["record_id"],
-                "metadata_hash": identity["metadata_hash"],
-                "parent_risk_tags": parent_risk_tags or [],
-                "audit_percent": 0,
-            }
-        ],
-    }
-    manifest = build_routing_manifest(routing_records, workflow_context)
-    alignment_packet = {
-        "review_contract_version": "alignment-review-v2",
+    full_alignment_packet = {
+        "review_contract_version": "alignment-review-v3",
         "metadata_result_hash": result_hash(metadata_result),
         "records": [record],
     }
-    route = manifest["records"][0]["result"]
+    # Metadata REDESIGN still goes through alignment.  Alignment owns the
+    # actual boundary, including the historical deletion DROP/MOVE decision;
+    # routing can then omit an immutable terminal record from deep review.
+    alignment_packet = full_alignment_packet
+    reviewed_records = alignment_packet["records"]
+    reviewed_reviews = []
+    routing_records = []
+    workflow_entries = []
+    for reviewed_record in reviewed_records:
+        reviewed_review = copy.deepcopy(alignment_review)
+        reviewed_reviews.append(reviewed_review)
+        routing_records.append(
+            {
+                "record_id": reviewed_record["record_id"],
+                "metadata_hash": reviewed_record["metadata_hash"],
+                "source_hash": reviewed_record["source_hash"],
+                "contract_version": "deep-review-v3",
+                "metadata": reviewed_record["metadata"],
+                "metadata_verdict": reviewed_record["metadata_review"]["verdict"],
+                "alignment_verdict": reviewed_review["verdict"],
+                "context_requirements": reviewed_review["context_requirements"],
+            }
+        )
+        workflow_entries.append(
+            {
+                "record_id": reviewed_record["record_id"],
+                "metadata_hash": reviewed_record["metadata_hash"],
+                "parent_risk_tags": parent_risk_tags or [],
+                # Audit selection is an independent artifact signal. It never
+                # makes a normal deep review required.
+                "audit_percent": audit_percent,
+            }
+        )
+    workflow_context = {
+        "review_contract_version": "review-workflow-context-v1",
+        "records": workflow_entries,
+    }
+    manifest = build_routing_manifest(routing_records, workflow_context)
     deep_records = []
     context = []
-    if alignment_verdict == "RECHECK":
+    route = manifest["records"][0]["result"] if manifest["records"] else None
+    if route is not None and alignment_verdict == "RECHECK":
         content = "helper returns the final record gate"
         context = [
             {
@@ -180,10 +199,10 @@ def aggregation_input(
                 "content_hash": sha256_text(content),
             }
         ]
-    if route["required"]:
+    if route is not None and route["required"]:
         deep_records.append(
             {
-                **copy.deepcopy(record),
+                **copy.deepcopy(reviewed_records[0]),
                 "alignment_review": copy.deepcopy(alignment_review),
                 "routing_reasons": route["reasons"],
                 "risk_tags": route["risk_tags"],
@@ -194,7 +213,7 @@ def aggregation_input(
             }
         )
     deep_packet_content = {
-        "review_contract_version": "deep-review-v2",
+        "review_contract_version": "deep-review-v3",
         "metadata_result_hash": alignment_packet["metadata_result_hash"],
         "records": deep_records,
     }
@@ -203,14 +222,17 @@ def aggregation_input(
         "input_hash": result_hash(deep_packet_content),
     }
     sol_result = None
-    if sol_verdict is not None:
+    if sol_verdict is not None and route is not None and route["required"]:
         needs_context = sol_verdict == "NEEDS_CONTEXT"
         sol_result = {
-            "review_contract_version": "deep-review-v2",
+            "review_contract_version": "deep-review-v3",
             "input_hash": deep_packet["input_hash"],
             "reviews": [
                 {
-                    **identity,
+                    **{
+                        key: reviewed_records[0][key]
+                        for key in ("record_id", "metadata_hash", "source_hash")
+                    },
                     "verdict": sol_verdict,
                     "evidence": [] if needs_context else ["deep review evidence"],
                     "unverified": [],
@@ -238,15 +260,15 @@ def aggregation_input(
         "metadata_result": metadata_result,
         "deep_packet": deep_packet,
         "alignment_result": {
-            "review_contract_version": "alignment-review-v2",
-            "reviews": [alignment_review],
+            "review_contract_version": "alignment-review-v3",
+            "reviews": reviewed_reviews,
         },
         "workflow_routing_context": workflow_context,
         "routing_manifest": manifest,
         "sol_result": sol_result,
         "retention_records": [
             {
-                "record_id": identity["record_id"],
+                "record_id": record["record_id"],
                 "retention_basis": retention_basis,
                 "artifact_state": artifact_state,
             }
@@ -255,6 +277,30 @@ def aggregation_input(
 
 
 class ReviewResultSchemaTests(unittest.TestCase):
+    def test_metadata_redesign_keeps_alignment_and_skips_immutable_deep(self):
+        value = aggregation_input(metadata_verdict="REDESIGN")
+        self.assertEqual(len(value["alignment_packet"]["records"]), 1)
+        self.assertEqual(len(value["alignment_result"]["reviews"]), 1)
+        self.assertFalse(value["routing_manifest"]["records"][0]["result"]["required"])
+        self.assertEqual(value["deep_packet"]["records"], [])
+        self.assertIsNone(value["sol_result"])
+        result = aggregate_results(value)
+        self.assertEqual(result["records"][0]["status"], "REDESIGN")
+        self.assertEqual(result["records"][0]["disposition"], "KEEP_PERMANENT")
+        self.assertEqual(result["records"][0]["gate"], "CHANGES_REQUIRED")
+        self.assertEqual(result["gate"], "CHANGES_REQUIRED")
+
+    def test_deterministic_audit_does_not_require_blocking_deep_review(self):
+        value = aggregation_input(audit_percent=100)
+        route = value["routing_manifest"]["records"][0]["result"]
+        self.assertTrue(route["audit_selected"])
+        self.assertFalse(route["required"])
+        self.assertEqual(value["deep_packet"]["records"], [])
+        self.assertIsNone(value["sol_result"])
+        result = aggregate_results(value)
+        self.assertEqual(result["records"][0]["status"], "ACCEPT")
+        self.assertEqual(result["records"][0]["gate"], "PASS")
+
     # @test-value v2
     # kind = "contract"
     # claim = "Phase 1のVALIDは肯定的findingだけを持ちREDESIGNは具体的な否定的findingを持つ"
@@ -516,7 +562,10 @@ class ReviewResultSchemaTests(unittest.TestCase):
                 }
             )
         )
-        with self.assertRaisesRegex(ResultValidationError, "unexpected record"):
+        with self.assertRaisesRegex(
+            ResultValidationError,
+            "review contains an unexpected record|metadata result does not cover alignment records",
+        ):
             aggregate_results(reused_phase1)
 
         scalar_input = {
@@ -543,7 +592,13 @@ class ReviewResultSchemaTests(unittest.TestCase):
     # lifecycle = "permanent"
     # @end-test-value
     def test_aggregate_rejects_rewritten_phase1_review(self):
-        value = aggregation_input(metadata_verdict="REDESIGN")
+        # Keep this record in the reviewed partition so the test exercises
+        # frozen Phase 1 binding rather than the host terminal path.
+        value = aggregation_input(
+            metadata_verdict="REDESIGN",
+            lifecycle="characterization",
+            expires_on="2026-12-31",
+        )
         record = value["alignment_packet"]["records"][0]
         record["metadata_review"]["verdict"] = "VALID"
         review = value["alignment_result"]["reviews"][0]
@@ -553,7 +608,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v2",
+                    "contract_version": "deep-review-v3",
                     "metadata": record["metadata"],
                     "metadata_verdict": "VALID",
                     "alignment_verdict": review["verdict"],
@@ -631,7 +686,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
             next_action=None,
         )
         deep = {
-            "review_contract_version": "deep-review-v2",
+            "review_contract_version": "deep-review-v3",
             "input_hash": "sha256:" + "4" * 64,
             "reviews": [
                 {
@@ -809,7 +864,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
             "record_id": record["record_id"],
             "metadata_hash": record["metadata_hash"],
             "source_hash": record["source_hash"],
-            "contract_version": "deep-review-v2",
+            "contract_version": "deep-review-v3",
             "metadata": record["metadata"],
             "metadata_verdict": record["metadata_review"]["verdict"],
             "alignment_verdict": review["verdict"],
@@ -832,7 +887,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v2",
+                    "contract_version": "deep-review-v3",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": review["verdict"],
@@ -888,7 +943,7 @@ class ReviewResultSchemaTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v2",
+                    "contract_version": "deep-review-v3",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": review["verdict"],

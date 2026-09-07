@@ -61,7 +61,7 @@ def extractor_result():
 
 def metadata_result(packet, verdict="VALID"):
     return {
-        "review_contract_version": "metadata-review-v2",
+        "review_contract_version": "metadata-review-v3",
         "reviews": [
             {
                 "record_id": record["record_id"],
@@ -98,6 +98,42 @@ def extractor_result_with_two_records():
 
 
 class ReviewPacketTests(unittest.TestCase):
+    def test_metadata_redesign_records_remain_on_alignment_for_resolution(self):
+        extracted = extractor_result()
+        packet = build_metadata_packet(extracted)
+        redesign = metadata_result(packet, verdict="REDESIGN")
+        full = build_alignment_packet(extracted, redesign)
+
+        # Metadata REDESIGN cannot decide whether alignment will establish a
+        # DROP/MOVE resolution, so the complete source packet remains frozen
+        # for Phase 2. Routing may later skip deep after alignment is known.
+        self.assertEqual(len(full["records"]), 1)
+        self.assertEqual(
+            full["records"][0]["metadata_review"],
+            redesign["reviews"][0],
+        )
+
+        boundary_redesign = copy.deepcopy(extracted)
+        boundary_redesign["tests"][0]["metadata"]["observation_boundary"] = "declaration"
+        boundary_redesign["tests"][0]["metadata_hash"] = sha256_text(
+            canonical_json(boundary_redesign["tests"][0]["metadata"])
+        )
+        boundary_packet = build_metadata_packet(boundary_redesign)
+        boundary_review = metadata_result(boundary_packet, verdict="REDESIGN")
+        boundary_review["reviews"][0]["evidence"] = [
+            {"fields": ["observation_boundary"], "finding": "BOUNDARY_INCONSISTENT"}
+        ]
+        boundary_full = build_alignment_packet(boundary_redesign, boundary_review)
+        self.assertEqual(len(boundary_full["records"]), 1)
+
+        deleted = copy.deepcopy(extracted)
+        before = deleted["tests"].pop()
+        deleted["transitions"] = [{"kind": "DELETED", "before": before, "after": None}]
+        deleted_packet = build_metadata_packet(deleted)
+        deleted_review = metadata_result(deleted_packet, verdict="REDESIGN")
+        deleted_full = build_alignment_packet(deleted, deleted_review)
+        self.assertEqual(len(deleted_full["records"]), 1)
+
     # @test-value v2
     # kind = "invariant"
     # claim = "packet builderはGit transition順にafterまたは削除前beforeをPhase 1へ投影する"
@@ -230,7 +266,7 @@ class ReviewPacketTests(unittest.TestCase):
     # kind = "security"
     # claim = "packet builderはv1 extractor結果を審査入力へ変換せずv2を要求する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # fault = "v1 recordをmetadata-review-v2 packetへ混入して旧形式の評価を続行する"
+    # fault = "v1 recordをmetadata-review-v3 packetへ混入して旧形式の評価を続行する"
     # observable = "build_metadata_packetが返すPacketError"
     # observation_boundary = "component-behavior"
     # scope = "metadata-review-packet-version"
@@ -257,7 +293,7 @@ class ReviewPacketTests(unittest.TestCase):
     def test_metadata_packet_excludes_all_source_material(self):
         packet = build_metadata_packet(extractor_result())
 
-        self.assertEqual(packet["review_contract_version"], "metadata-review-v2")
+        self.assertEqual(packet["review_contract_version"], "metadata-review-v3")
         self.assertEqual(
             set(packet["records"][0]),
             {"record_id", "metadata_format_version", "metadata", "metadata_hash"},
@@ -316,15 +352,15 @@ class ReviewPacketTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "contract"
-    # claim = "Phase 1がREDESIGNのrecordもPhase 2 packetへ同じmetadata resultとsource hashを保って含める"
+    # claim = "metadata REDESIGN recordはDROP/MOVE解決の可能性があるためPhase 2へ保持する"
     # oracle = { type = "adr", ref = "ADR-0022" }
-    # fault = "REDESIGN recordをPhase 2から省略してactual boundaryと保持先候補を判定できなくする"
-    # observable = "alignment packetのrecord集合とfrozen metadata review"
+    # fault = "actual boundaryと削除resolutionを確認する前にREDESIGN recordをalignmentから欠落させる"
+    # observable = "alignment packetのrecordとfrozen metadata review"
     # observation_boundary = "component-behavior"
     # scope = "alignment-review-packet"
     # lifecycle = "permanent"
     # @end-test-value
-    def test_alignment_packet_keeps_redesign_records_and_frozen_result(self):
+    def test_alignment_packet_keeps_redesign_source_and_metadata_review(self):
         extracted = extractor_result()
         phase1 = build_metadata_packet(extracted)
         frozen = metadata_result(phase1, verdict="REDESIGN")
@@ -352,7 +388,7 @@ class ReviewPacketTests(unittest.TestCase):
         alignment = build_alignment_packet(extracted, fixed_metadata_result)
         record = alignment["records"][0]
         alignment_result = {
-            "review_contract_version": "alignment-review-v2",
+            "review_contract_version": "alignment-review-v3",
             "reviews": [
                 {
                     "record_id": record["record_id"],
@@ -364,7 +400,6 @@ class ReviewPacketTests(unittest.TestCase):
                     "overclaim": False,
                     "evidence": [],
                     "unverified": [],
-                    "disposition_candidate": None,
                     "context_requirements": ["ADR-0022"],
                     "next_action": "ADRを確認する",
                 }
@@ -387,7 +422,7 @@ class ReviewPacketTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v2",
+                    "contract_version": "deep-review-v3",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": "RECHECK",
@@ -434,7 +469,7 @@ class ReviewPacketTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v2",
+                    "contract_version": "deep-review-v3",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": "RECHECK",
@@ -460,7 +495,7 @@ class ReviewPacketTests(unittest.TestCase):
                     "record_id": record["record_id"],
                     "metadata_hash": record["metadata_hash"],
                     "source_hash": record["source_hash"],
-                    "contract_version": "deep-review-v2",
+                    "contract_version": "deep-review-v3",
                     "metadata": record["metadata"],
                     "metadata_verdict": record["metadata_review"]["verdict"],
                     "alignment_verdict": "RECHECK",

@@ -33,4 +33,4 @@ source locator、LF正規化、canonical JSONとSHA-256、決定論的な順序�
 
 exit `0`は抽出errorなし、`1`は修正可能なsource/metadata diagnostic、`2`は信頼できる結果を構築できないCLI、環境、I/O等の失敗である。`TEST_VALUE_V2_REQUIRED`は両modeでerrorとする。空の抽出結果とexit `0`は、coordinatorの未解決義務やresolutionの完了を意味しない。
 
-metadata/alignment/deep/finalの審査契約はv2である。旧resultのshape推測や自動読替えは行わない。標準有効化の条件は[有効化runbook](../../../docs/runbooks/activate-test-value-review.md)を参照する。
+metadata/alignment/deep/finalの審査契約はv3である。宣言抽出の本v2形式とは別versionとして扱う。旧resultのshape推測や自動読替えは行わない。標準有効化の条件は[有効化runbook](../../../docs/runbooks/activate-test-value-review.md)を参照する。
