@@ -1,7 +1,7 @@
 name = "test_value_luna"
-description = "Bootstrap-only two-phase @test-value reviewer; do not activate before enforced metadata-only isolation and new-session smoke."
+description = "Luna/max metadata and alignment reviewer; do not activate before enforced metadata-only isolation and new-session smoke."
 model = "gpt-5.6-luna"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "max"
 sandbox_mode = "read-only"
 developer_instructions = '''
 You are the two-phase Luna reviewer for review-test-value.

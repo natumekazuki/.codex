@@ -287,12 +287,12 @@ def aggregate_status(
         return "NEEDS_CONTEXT"
     if metadata_verdict == "NEEDS_CONTEXT" or alignment_verdict == "RECHECK":
         if not sol_required:
-            raise RoutingError("uncertain Luna verdict requires Sol")
+            raise RoutingError("uncertain initial verdict requires deep review")
     if sol_required:
         if sol_verdict not in {"APPROVE", "REDESIGN"}:
             return "NEEDS_CONTEXT"
     elif sol_verdict is not None:
-        raise RoutingError("Sol verdict is not allowed when Sol is not required")
+        raise RoutingError("deep verdict is not allowed when deep review is not required")
     if metadata_verdict == "REDESIGN":
         return "REDESIGN"
     if alignment_verdict == "MISMATCH":

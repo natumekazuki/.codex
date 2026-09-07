@@ -70,7 +70,7 @@ class PreflightReviewWorkerTests(unittest.TestCase):
     def test_requested_model_and_effort_are_read_from_role(self):
         for role_name, model, effort in (
             ("test_value_luna", "gpt-5.6-luna", "medium"),
-            ("test_value_sol", "gpt-5.6-sol", "xhigh"),
+            ("test_value_deep", "gpt-5.6-sol", "xhigh"),
         ):
             with self.subTest(role=role_name):
                 declaration = ROLE.replace("test_value_luna", role_name).replace(

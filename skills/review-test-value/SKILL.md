@@ -1,6 +1,6 @@
 ---
 name: review-test-value
-description: Python、TypeScript、C#のtest新規追加・意味変更をGit差分から抽出し、専用Luna/Solで検証価値と本文整合を必須審査する。削除・移設の解消も扱う。既存checkの実行だけには起動しない。
+description: Python、TypeScript、C#のtest新規追加・意味変更をGit差分から抽出し、専用Luna/maxで検証価値と本文整合を必須審査する。削除・移設の解消も扱う。既存checkの実行だけには起動しない。
 ---
 
 # Review Test Value
@@ -39,11 +39,11 @@ python -X utf8 <skill-dir>/scripts/run_test_value_review.py `
 
 host evidenceは現在のsnapshot・recordに結び付いたrisk評価、必要な限定context、実際に確認した保持根拠を渡す。sourceの内容・hash・意味判断を区別する。不足や競合を推測で埋めず、具体的な不足が返ったら確認する。各phaseのpacketを手組みしない。
 
-入口が全言語の抽出、独立したLuna metadata審査、固定済み結果を使うalignment、決定論的なrequired Sol、保持と既存resolution、全体gateを接続する。metadataがREDESIGNでもalignmentを省略しない。審査結果の正確な型は[output-v2](references/output-v2.md)、意味は[metadata](references/metadata-review-contract.md)／[alignment](references/alignment-review-contract.md)／[deep](references/deep-review-contract.md)／[routing](references/routing-policy.md)が所有する。
+入口が全言語の抽出、独立したLuna metadata審査、固定済み結果を使うalignment、決定論的なrequired deep review、保持と既存resolution、全体gateを接続する。metadataがREDESIGNでもalignmentを省略しない。審査結果の正確な型は[output-v2](references/output-v2.md)、意味は[metadata](references/metadata-review-contract.md)／[alignment](references/alignment-review-contract.md)／[deep](references/deep-review-contract.md)／[routing](references/routing-policy.md)が所有する。
 
 ## 完了条件と不足の扱い
 
-- `0 = PASS`: 全言語・必要な全phase/Sol・surviving record・DROP/MOVE義務が現在のsnapshotで揃った。
+- `0 = PASS`: 全言語・必要な全phase/deep review・surviving record・DROP/MOVE義務が現在のsnapshotで揃った。
 - `1 = CHANGES_REQUIRED`: metadata／test／保持先に具体的な修正が必要。
 - `2 = BLOCKED`: 入力・依存・隔離・model・根拠等の不足により、信頼できる審査を完了できない。
 
@@ -51,7 +51,9 @@ PASSとtest自体の実行成功は別の証拠である。抽出やvalidator単
 
 専門workerはphaseごとに履歴を持たない独立CLIで実行し、metadata phaseへ本文・locator・親履歴・一般hookを渡さない。read-onlyという文言だけを入力隔離の証拠にしない。設定・起動記録と合成canaryの拒否を確認できない場合、packet送信前に停止する。親や汎用子の自己評価、別model、旧結果へのfallbackで補わない。
 
-初期予算はworker同時1、通常audit10%、追加contextによるSol再実行最大1回。各実行の上限はLuna 5分、Sol 15分とする。Sol入力が800,000文字を超える場合だけ、固定済みの対象順で事前にbatch分割する。全batchの検証済み結果が揃わなければ全体PASSにしない。単独recordの予算超過や期限・cancel・途中失敗を黙って切り捨てず非成功とする。stateには既存resolutionの未解決義務を保持し、別taskや別snapshotの証拠を流用しない。
+全phaseでLuna/maxを使い、metadata／alignmentは`test_value_luna`、deepは`test_value_deep`を別runで呼ぶ。追加contextでも判断できなければNEEDS_CONTEXTを親へ返し、Solや他modelへ自動昇格しない。
+
+初期予算はworker同時1、通常audit10%、追加contextによるdeep再実行最大1回。各実行の上限はmetadata／alignment 5分、deep 15分とする。deep入力が800,000文字を超える場合だけ、固定済みの対象順で事前にbatch分割する。全batchの検証済み結果が揃わなければ全体PASSにしない。単独recordの予算超過や期限・cancel・途中失敗を黙って切り捨てず非成功とする。stateには既存resolutionの未解決義務を保持し、別taskや別snapshotの証拠を流用しない。
 
 ## Validation
 
