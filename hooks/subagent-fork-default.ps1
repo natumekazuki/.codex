@@ -9,21 +9,16 @@ $arguments = $event.tool_input
 if ($arguments -isnot [System.Collections.IDictionary]) {
     throw 'Expected spawn_agent arguments to be a JSON object.'
 }
-$hasForkTurns = $arguments.Contains('fork_turns')
 $isAstraParent = $event.model -match '^gpt-6-astra(?:-|$)'
 $isAstraTarget = $arguments.agent_type -eq 'general_astra' -or $arguments.model -match '^gpt-6-astra(?:-|$)'
-$inheritsParent = $arguments.fork_turns -eq 'all'
-if ($isAstraParent -and ($isAstraTarget -or $inheritsParent)) {
+if ($isAstraParent -and $isAstraTarget) {
     @{
         hookSpecificOutput = @{
             hookEventName = 'PreToolUse'
             permissionDecision = 'deny'
-            permissionDecisionReason = 'An Astra parent must not spawn an Astra child. Use Luna or Sol with fork_turns none or a bounded turn count.'
+            permissionDecisionReason = 'An Astra parent must not spawn an Astra child. Use Luna or Sol.'
         }
     } | ConvertTo-Json -Depth 100 -Compress
-    exit 0
-}
-if ($hasForkTurns) {
     exit 0
 }
 $arguments['fork_turns'] = 'none'
