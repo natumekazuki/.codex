@@ -93,6 +93,124 @@ def sized_phase_packets(count):
 class ReviewCoordinatorTests(unittest.TestCase):
     # @test-value v2
     # kind = "regression"
+    # claim = "phase別CLI予算を計画とhashに固定し同じpacketの時間変更を区別する"
+    # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
+    # fault = "alignmentが固定300秒のままか変更した予算がplanやhashへ伝播しない"
+    # observable = "CLI defaults/明示値、各phaseのbatch_seconds、1810秒offsetとplan hash"
+    # observation_boundary = "component-behavior"
+    # scope = "phase-timeout-policy"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_phase_cli_budgets_are_independent_and_change_plan_identity(self):
+        argv = ["--root", ".", "--changed-from", "base", "--state-dir", ".", "--cli", "codex"]
+        parser = coordinator.build_parser()
+        packets = sized_phase_packets(22)
+        for flags, expected in (([], {"metadata": 300, "alignment": 600, "deep": 900}),
+            (["--metadata-batch-seconds", "120", "--alignment-batch-seconds", "720", "--deep-batch-seconds", "1800"],
+             {"metadata": 120, "alignment": 720, "deep": 1800})):
+            args = parser.parse_args(argv + flags)
+            values = {phase: getattr(args, f"{phase}_batch_seconds") for phase in expected}
+            self.assertEqual(values, expected)
+            for phase, packet in packets.items():
+                _, plan = coordinator.plan_phase_batches(phase, packet, batch_seconds=values)
+                self.assertEqual(plan["batch_seconds"], expected[phase])
+                self.assertEqual(plan["phase_seconds"], 3 * expected[phase] + 10)
+                self.assertEqual(plan["plan_hash"], coordinator._canonical_hash({k:v for k,v in plan.items() if k != "plan_hash"}))
+        _, original = coordinator.plan_phase_batches("alignment", packets["alignment"])
+        _, changed = coordinator.plan_phase_batches("alignment", packets["alignment"],
+                            batch_seconds={"metadata": 300, "alignment": 900, "deep": 900})
+        self.assertEqual(original["phase_seconds"], 1810)
+        self.assertEqual(original["global_packet_hash"], changed["global_packet_hash"])
+        self.assertNotEqual(original["plan_hash"], changed["plan_hash"])
+        self.assertNotEqual(original["execution_policy_hash"], changed["execution_policy_hash"])
+        clock = [100.0]
+        deadlines = []
+        def execute(phase, packet, **kwargs):
+            deadlines.append(kwargs["deadline_monotonic"])
+            clock[0] += 20
+            return alignment_result(packet), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+        with mock.patch.object(coordinator.time, "monotonic", side_effect=lambda: clock[0]), mock.patch.object(coordinator, "_execute_phase", side_effect=execute), mock.patch.object(coordinator, "_validate_worker_toolchain"):
+            coordinator._execute_batch_round("alignment", packets["alignment"], cli="codex", role_file=Path("role"),
+                toolchain_identity={}, batch_seconds={"metadata": 300, "alignment": 600, "deep": 900})
+        self.assertEqual(deadlines, [700.0, 720.0, 740.0])
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "不正なphase予算をモデル起動やsnapshot抽出より前に拒否する"
+    # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
+    # fault = "booleanや非数値、範囲外の値でworkerを起動する"
+    # observable = "CLI exit 2、BATCH_POLICY_INVALIDと未起動の抽出/worker"
+    # observation_boundary = "public-boundary"
+    # scope = "phase-timeout-input"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_invalid_phase_seconds_are_rejected_before_model_start(self):
+        argv = ["--root", ".", "--changed-from", "base", "--state-dir", ".", "--cli", "codex"]
+        with mock.patch.object(coordinator, "_execute_phase") as worker, mock.patch.object(coordinator, "_resolve_repository") as resolve:
+            for phase in ("metadata", "alignment", "deep"):
+                for bad in (True, False, "600", "abc", None, 0, -1, 29, 1801, 600.5, float("inf")):
+                    args = SimpleNamespace(**{f"{phase}_batch_seconds": bad})
+                    with self.subTest(phase=phase, bad=bad), self.assertRaises(coordinator.CoordinatorBlocked) as caught:
+                        coordinator.run(args)
+                    self.assertEqual(caught.exception.reason_code, "BATCH_POLICY_INVALID")
+                for bad in ("true", "abc", "0", "-1", "29", "1801", "600.5", "inf"):
+                    with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                        coordinator.main(argv + [f"--{phase}-batch-seconds", bad])
+                    self.assertEqual(caught.exception.code, 2)
+                for valid in (30, 1800):
+                    args = coordinator.build_parser().parse_args(argv + [f"--{phase}-batch-seconds", str(valid)])
+                    self.assertEqual(getattr(args, f"{phase}_batch_seconds"), valid)
+            worker.assert_not_called()
+            resolve.assert_not_called()
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "policy変更は既存stateを変更せず停止しtimeout診断を指定秒数とともに保存する"
+    # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
+    # fault = "異なる予算のstateを再利用するか過去のlast-failureを上書きして失敗を隠す"
+    # observable = "STATE_EXECUTION_POLICY_MISMATCH、state全fileの不変性とbatch_seconds付きfailure JSON"
+    # observation_boundary = "public-boundary"
+    # scope = "phase-timeout-state"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_policy_mismatch_preserves_state_and_timeout_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"; root.mkdir()
+            state = Path(temporary) / "state"; state.mkdir()
+            policy = {"metadata": 300, "alignment": 600, "deep": 900}
+            manifest = coordinator._load_or_initialize_task(state, task_id="task", root=root, base_oid="a" * 40,
+                                                            mode="working", batch_seconds=policy)
+            self.assertEqual(manifest["execution_policy_hash"], coordinator._canonical_hash(coordinator.execution_policy(policy)))
+            self.assertEqual(coordinator._load_or_initialize_task(state, task_id="task", root=root, base_oid="a" * 40,
+                                                            mode="working", batch_seconds=policy), manifest)
+            old_failure = '{"gate":"BLOCKED","message":"previous failure"}'
+            (state / "last-failure.json").write_text(old_failure)
+            before = {p.name:p.read_bytes() for p in state.iterdir()}
+            argv = ["--root", str(root), "--changed-from", "base", "--state-dir", str(state), "--cli", "codex"]
+            with mock.patch.object(coordinator, "_resolve_repository", return_value=root), mock.patch.object(coordinator, "extract_all_languages") as extract, mock.patch.object(coordinator, "_toolchain_identity") as worker, contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(coordinator.main(argv + ["--alignment-batch-seconds", "900"]), 2)
+            self.assertEqual(json.loads(out.getvalue())["reason_codes"], ["STATE_EXECUTION_POLICY_MISMATCH"])
+            extract.assert_not_called(); worker.assert_not_called()
+            self.assertEqual({p.name:p.read_bytes() for p in state.iterdir()}, before)
+            packet = sized_phase_packets(22)["alignment"]
+            def timeout_run(_args):
+                return coordinator._execute_batch_round("alignment", packet, cli="codex", role_file=Path("role"),
+                                                       toolchain_identity={}, state_dir=state, batch_seconds=policy)
+            with mock.patch.object(coordinator, "run", side_effect=timeout_run), mock.patch.object(coordinator, "_execute_phase", side_effect=coordinator.CoordinatorBlocked("REVIEW_TIMEOUT", "REVIEW_TIMEOUT")) as worker, contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(coordinator.main(argv + ["--alignment-batch-seconds", "600"]), 2)
+            result = json.loads(out.getvalue())
+            self.assertEqual(worker.call_count, 1)
+            for key, expected in {"batch_seconds": 600, "batch_index": 0, "batch_count": 3, "completed_batches": 0,
+                                  "phase": "alignment", "packet_hash": coordinator.result_hash(coordinator.project_phase_batch("alignment", packet, packet["records"][:10]))}.items():
+                self.assertEqual(result["details"][key], expected)
+            self.assertEqual((state / "last-failure.json").read_text(), old_failure)
+            saved = list(state.glob("failure-*.json"))
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(json.loads(saved[0].read_text()), result)
+            self.assertEqual(json.loads((state / "execution-plan-alignment.json").read_text())["batch_seconds"], 600)
+
+    # @test-value v2
+    # kind = "regression"
     # claim = "全phaseの固定selectionを件数とcanonical文字数の両上限で自動分割し規模別の時間上限を計画する"
     # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
     # fault = "固定5分または単一packetのまま大量対象を処理するか文字数超過recordを捨てる"
@@ -109,7 +227,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                     self.assertEqual([len(batch["records"]) for batch in batches], sizes)
                     self.assertEqual([record for batch in batches for record in batch["records"]], packet["records"])
                     self.assertEqual(coordinator.plan_phase_batches(phase, copy.deepcopy(packet)), (batches, plan))
-                    seconds = 900 if phase == "deep" else 300
+                    seconds = {"metadata": 300, "alignment": 600, "deep": 900}[phase]
                     self.assertEqual(plan["phase_seconds"], len(sizes) * seconds + 10)
                     self.assertEqual([b["deadline_offset_seconds"] for b in plan["batches"]],
                                      [seconds * (i + 1) for i in range(len(sizes))])

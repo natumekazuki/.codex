@@ -25,7 +25,7 @@ metadata、alignment、deepは同じbatch policyを使う。coordinatorはselect
 | 1 batchの入力サイズ | canonical packetのUnicode文字数で最大800,000文字。prompt wrapper、system instruction、実行時の追加文は数えない |
 | 境界 | record数とcanonical packet文字数の両方を満たす最大の連続範囲。単独recordが文字数上限を超えた場合は対象を削らず`BLOCKED` |
 | batch順 | selectionのrecord順を維持し、欠落・重複・順序変更を許さない |
-| batch時間 | metadata／alignmentは300秒、deepは900秒。canary最大120秒、cleanup最大5秒を含む |
+| batch時間 | metadataは300秒、alignmentは600秒、deepは900秒。canary最大120秒、cleanup最大5秒を含む |
 | phase全体 | `N × 1 batchの時間上限 + 固定10秒`。`N`はbatch数、固定10秒はcoordinator overhead |
 | worker同時実行 | 1 |
 | audit | 10% |
@@ -35,7 +35,26 @@ workerへ渡すbatch deadlineは、coordinatorのphase plan開始時に取得し
 
 一つのbatchではcanary、review、cleanupが同じmonotonic deadlineを共有する。canaryの経過時間を差し引いた残り時間だけをreviewへ渡し、canaryからreviewへの切替でdeadlineを延長しない。deadline到達時は所有process treeとscratchを終了・削除し、cleanupの終了確認に失敗した場合も成功扱いにせず、専用reason codeを持つ`BLOCKED`にする。
 
-metadata packetをfreezeしてからmetadataのbatch planを確定し、metadata resultをfreezeしてからalignment planを確定する。deep planはmetadata／alignment resultとroutingをfreezeしてから確定する。全batchについてrecord ID、metadata／source hash、件数、順序、結果の完全性を集約時に検証する。一つでもbatchが失敗、timeout、cleanup失敗、欠落、重複、順序不整合になれば、成功batchだけで全体を`PASS`にしない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、失敗時は`last-failure.json`へ診断を残す。validator failureはpacket本文や機密情報を返さず、sanitized detailsにphase、record ID、違反種別、不正fieldを含める。
+metadata packetをfreezeしてからmetadataのbatch planを確定し、metadata resultをfreezeしてからalignment planを確定する。deep planはmetadata／alignment resultとroutingをfreezeしてから確定する。全batchについてrecord ID、metadata／source hash、件数、順序、結果の完全性を集約時に検証する。一つでもbatchが失敗、timeout、cleanup失敗、欠落、重複、順序不整合になれば、成功batchだけで全体を`PASS`にしない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、最初の失敗は`last-failure.json`へ、既存の失敗がある場合は`failure-<hash>.json`へ診断を残し、以前の記録を上書きしない。validator failureはpacket本文や機密情報を返さず、sanitized detailsにphase、record ID、違反種別、不正fieldを含める。
+
+### phase別予算を変更した再測定
+
+`--metadata-batch-seconds`、`--alignment-batch-seconds`、`--deep-batch-seconds`は各30〜1,800秒の整数を受け付ける。defaultはそれぞれ300／600／900秒。boolean・非数値・0・負数・範囲外はpacket送信前に拒否する。時間変更用の環境変数や自動倍増は用意しない。
+
+2026-09-07の実測ではmetadataの10／10／2件は完了したが、alignment batch 0（10件、39,924文字）は300秒で`REVIEW_TIMEOUT`となった。process終了と計画・失敗診断の保存は確認できた。600秒での完了は未確認であり、次の明示指定で再測定する。
+
+```powershell
+python -X utf8 skills/review-test-value/scripts/run_test_value_review.py `
+  --root <repository-root> --changed-from <task-base> `
+  --state-dir <new-state-directory> --cli <native-codex-executable> `
+  --host-evidence <host-evidence-json> --alignment-batch-seconds 600
+```
+
+`--prepare`にも同じ秒数指定を渡す。alignmentが3batchならoffsetは`3 × 600 + 10 = 1,810秒`となり、早く完了したbatchの後は待機せず次へ進む。時間予算はcanary・review・cleanupで共有する。
+
+指定した全phaseの値をtask manifestの`execution_policy`／`execution_policy_hash`、各計画の`batch_seconds`／`execution_policy_hash`／`plan_hash`へ固定する。generationのtoolchain identityにもpolicyを含める。policyの異なる既存state、またはpolicy未記録の旧stateは`STATE_EXECUTION_POLICY_MISMATCH`で停止し、計画も失敗記録も変更しない。再計画は新しいstate directoryで明示実行する方式に限定する。元のstateや未解決義務を消して完了扱いにはしない。
+
+新しいtimeout診断はphase、batch index、batch count、completed batch count、packet hash、`batch_seconds`、policy／plan hashを含む。600秒でもtimeoutすれば`BLOCKED`を保存し、追加延長は自動実行しない。
 
 ## 実行境界
 
@@ -75,7 +94,7 @@ stateの書込みが途中で終わり未公開generationが残った場合は�
 
 candidateの回帰checkでは、batch境界、record／hash／順序の集約、canaryからreviewへの残り時間、process treeとscratchのcleanup、schema variantとsanitized validation diagnostics、途中batchの失敗を確認する。22件以上のselectionを一つの固定runでWindows native CLIへ渡し、手動分割なしに規定のphase deadline内で終了契約を得る。1件、上限ちょうど、上限超過、22件、100件、および文字数境界のoffline fixtureは、実モデルE2Eの代わりにしない。
 
-22件のport入力検証fixtureは、Windowsで既存のChatGPT Pro認証を用い、次の明示実行で再現する。通常CIではモデルを呼ばない。fixture自体の22件のassertion、抽出、`10 + 10 + 2`の分割はofflineで確認できるが、このcheckoutでは実モデルrunは未実施である。
+22件のport入力検証fixtureは、coordinatorへ`--alignment-batch-seconds 600`を明示指定し、alignment batch 0の完了まで検証する。Windowsで既存のChatGPT Pro認証を用い、次の明示実行で再現する。通常CIではモデルを呼ばない。fixture自体の22件のassertion、抽出、`10 + 10 + 2`の分割はofflineで確認できるが、このcheckoutでは実モデルrunは未実施である。
 
 ```powershell
 $env:TEST_VALUE_E2E_CLI = 'C:\path\to\codex.exe'
@@ -83,7 +102,7 @@ $env:TEST_VALUE_E2E_STATE = 'C:\review-evidence\batch-e2e'
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_live_e2e.py
 ```
 
-指定先はcheckout外の絶対pathとする。実行ごとにfixture repository・state・`e2e-summary.json`を保持する。新規Codex sessionから同じコマンドを実行し、各runのplanとterminal gateを比較する。小さい22件fixtureでは各phase最大3batch、deep retryなしを前提に、外側watchdogを`3 × (300 + 300 + 900) + 3 × 10 + 180 = 4,710秒`とする。180秒はGit／preflight／最終保存の固定余裕であり、workerのdeadlineを延長しない。各runでは実際に生成されたphase planの時間合計とも照合する。preflight・canaryだけの失敗やskipを実モデルE2E成功と扱わず、モデル審査後の`BLOCKED`も品質確認・有効化の完了とは区別する。
+指定先はcheckout外の絶対pathとする。実行ごとにfixture repository・state・`e2e-summary.json`を保持する。新規Codex sessionから同じコマンドを実行し、各runのplanとterminal gateを比較する。小さい22件fixtureでは各phase最大3batch、deep retryなしを前提に、外側watchdogを`3 × (300 + 600 + 900) + 3 × 10 + 180 = 5,610秒`とする。180秒はGit／preflight／最終保存の固定余裕であり、workerのdeadlineを延長しない。各runでは実際に生成されたphase planの時間合計とも照合する。preflight・canaryだけの失敗やskipを実モデルE2E成功と扱わず、モデル審査後の`BLOCKED`も品質確認・有効化の完了とは区別する。
 
 Luna/maxの実効起動を全phaseで確認し、循環したoracle、本文以上の過大主張、mockによるSUTの置換、必要contextの欠落を誤承認しないか、正常例とともに確認する。所要時間・利用量も記録し、旧Sol構成と同等の精度や週枠削減を未測定のまま保証しない。
 

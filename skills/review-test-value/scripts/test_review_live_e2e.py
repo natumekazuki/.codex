@@ -97,7 +97,7 @@ def run_json(argv: list[str], root: Path, seconds: float):
 class LiveReviewE2ETests(unittest.TestCase):
     # @test-value v2
     # kind = "regression"
-    # claim = "22件の固定selectionを実モデル審査しbatch計画内でterminal gateを返す"
+    # claim = "22件の固定selectionをalignment 600秒で実モデル審査し最初のalignment batchを完了する"
     # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
     # fault = "少数fixtureのstubだけが成功し実モデル22件では期限超過や部分結果成功になる"
     # observable = "native CLIのterminal JSON/exit、計画時間と全22件のrecord ID"
@@ -121,7 +121,8 @@ class LiveReviewE2ETests(unittest.TestCase):
             root = run_dir / "repo"
             base = create_fixture(root)
             args = [sys.executable, str(SCRIPTS / "run_test_value_review.py"), "--root", str(root),
-                    "--changed-from", base, "--state-dir", str(state), "--cli", str(cli)]
+                    "--changed-from", base, "--state-dir", str(state), "--cli", str(cli),
+                    "--alignment-batch-seconds", "600"]
             code, prepared, _ = run_json([*args, "--prepare"], root, 180)
             self.assertEqual((code, prepared["reason_codes"]), (2, ["HOST_EVIDENCE_REQUIRED"]))
             identities = prepared["host_evidence_template"]["retention_by_record"]
@@ -153,11 +154,23 @@ class LiveReviewE2ETests(unittest.TestCase):
             code, result, elapsed = run_json([*args, "--host-evidence", str(host_path)], root, bound)
             plans = [json.loads(p.read_text(encoding="utf-8")) for p in state.glob("execution-plan-*.json")]
             evidence.update(exit_code=code, elapsed_seconds=elapsed, gate=result.get("gate"),
-                            reason_codes=result.get("reason_codes", []), plans=plans)
+                            reason_codes=result.get("reason_codes", []), plans=plans,
+                            failure_details={k:v for k,v in result.get("details", {}).items()
+                                             if k in {"phase", "batch_index", "batch_count", "completed_batches", "batch_seconds", "packet_hash", "plan_hash", "execution_policy_hash"}})
             self.assertTrue(plans, "preflight-only BLOCKED is not a live model run")
             for plan in plans:
                 self.assertLessEqual(len(plan["batches"]), batch_count)
                 self.assertEqual([rid for batch in plan["batches"] for rid in batch["record_ids"]], ids)
+            alignment = next((p for p in plans if p["phase"] == "alignment"), None)
+            self.assertIsNotNone(alignment, "alignment was not reached")
+            self.assertEqual(alignment["batch_seconds"], 600)
+            self.assertEqual(alignment["phase_seconds"], 1810)
+            failure = result.get("details", {})
+            if failure.get("phase") == "alignment":
+                self.assertGreaterEqual(failure.get("completed_batches", 0), 1,
+                                        "alignment batch 0 still failed at 600s; preserve BLOCKED without extending")
+            elif result.get("gate") == "BLOCKED" and "AGGREGATE_BLOCKED" not in result.get("reason_codes", []):
+                self.assertTrue(any(p["phase"] == "deep" for p in plans), "alignment completion was not observed")
             self.assertLessEqual(elapsed, sum(p["phase_seconds"] for p in plans) + 180)
             self.assertEqual(code, {"PASS": 0, "CHANGES_REQUIRED": 1, "BLOCKED": 2}[result["gate"]])
             if result["gate"] == "BLOCKED":
