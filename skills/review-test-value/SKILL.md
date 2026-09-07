@@ -38,7 +38,7 @@ dotnet restore <skill-dir>/scripts/adapters/csharp/TestValue.CSharpExtractor.csp
 python -X utf8 <skill-dir>/scripts/run_test_value_review.py `
   --root <repository-root> --changed-from <task-base> `
   --state-dir <task-state-directory> --cli <native-codex-executable> `
-  --host-evidence <host-evidence-json>
+  --host-evidence <host-evidence-json> --batch-concurrency auto
 ```
 
 host evidenceは現在のsnapshot・recordに結び付いたrisk評価、必要な限定context、実際に確認した保持根拠を渡す。sourceの内容・hash・意味判断を区別する。不足や競合を推測で埋めず、具体的な不足が返ったら確認する。各phaseのpacketを手組みしない。
@@ -65,15 +65,17 @@ metadata、alignment、deepは同じbatch policyを使う。coordinatorは固定
 - recordを削除、縮小、順序変更して上限へ合わせない。単独recordが文字数上限を超える場合は対象を残したまま`BLOCKED`とする。
 - 同じselection、canonical packet、policyからは同じbatch境界と同じ相対deadline offsetを得る。absolute monotonic anchorは実行ごとに異なる。
 
-各batchのdefault時間予算はmetadataが300秒、alignmentが600秒、deepが900秒であり、canary（最大120秒）とcleanup（最大5秒）を含む。phase planのmonotonic startを`P`、batch予算を`B`、0始まりのbatch indexを`i`、batch開始を`S_i`とすると、workerへ渡すbatch deadlineは`min(S_i + B, P + (i + 1) × B)`、phase全体のdeadline offsetは`N × B + 10秒`とする。workerはcanary、review、cleanupで一つのmonotonicな絶対deadlineを共有し、reviewへ渡せるのはcanaryで消費した時間を差し引いた残り時間だけとする。git抽出、host evidence準備、依存準備などplan実行前の処理をこの上限へ含めるとは表現しない。
+各batchのdefault時間予算はmetadataが300秒、alignmentが600秒、deepが900秒であり、canary（最大120秒）とcleanup（最大5秒）を含む。同一phaseではrecord順の連続batchをwaveにし、wave内を同時に開始する。`--batch-concurrency auto`（default）は`C=N`、正の整数の明示指定は`C=min(指定値,N)`とし、wave内の全workerがcleanupまで終えた直後に次waveを開始する。意図的な待機は挟まず、metadata→alignment→deepはphase単位で順次実行する。phase planのmonotonic startを`P`、batch予算を`B`、0始まりのbatch indexを`i`、解決済み同時実行数を`C`、batch開始を`S_i`とすると、workerへ渡すbatch deadlineは`min(S_i + B, P + (floor(i/C) + 1) × B)`、`N` batchのphase全体deadline offsetは`ceil(N/C) × B + 10秒`とする。workerはcanary、review、cleanupで一つのmonotonicな絶対deadlineを共有し、reviewへ渡せるのはcanaryで消費した時間を差し引いた残り時間だけとする。git抽出、host evidence準備、依存準備などplan実行前の処理をこの上限へ含めるとは表現しない。
 
-worker同時実行数は1、通常auditは10%、deepのretryは最大1回とする。alignment planはmetadata packetとその依存resultをfreezeした後、deep planはmetadata／alignmentとroutingをfreezeした後に確定する。phase全体の集約では、全batchのrecord ID、metadata／source hash、件数、順序、結果の完全性を検証する。欠落、重複、順序不整合、timeout、cleanup失敗を含む一つの非成功も成功batchだけでPASSへ集約しない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、最初の失敗は`last-failure.json`へ、既存の失敗がある場合は`failure-<hash>.json`へ診断を残し、以前の記録を上書きしない。validator failureのsanitized detailsにはpacket本文を含めず、少なくともphase、record ID、違反種別、不正fieldを残す。
+`--batch-concurrency`は`auto`（default）または1以上の整数を受け付ける。明示的な上限がbatch数より小さい場合だけwaveを分ける。同一phaseのwaveが失敗したら次waveを開始せず、開始済みの兄弟workerのcleanupを待つ。`BLOCKED`は入力indexが最小の失敗を決定論的に返し、`completed_batches`は同じwaveの兄弟を含む検証済み成功数を数える。通常auditは10%、deepの既存retryは最大1回とし、並列度の自動調整、batch workerの追加retry、model fallbackは行わない。local executor／runtimeのspawn失敗はsanitizedな`BATCH_EXECUTION_FAILED`として`BLOCKED`にする。alignment planはmetadata packetとその依存resultをfreezeした後、deep planはmetadata／alignmentとroutingをfreezeした後に確定する。phase全体の集約では、全batchのrecord ID、metadata／source hash、件数、順序、結果の完全性を検証する。欠落、重複、順序不整合、timeout、cleanup失敗を含む一つの非成功も成功batchだけでPASSへ集約しない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、最初の失敗は`last-failure.json`へ、既存の失敗がある場合は`failure-<hash>.json`へ診断を残し、以前の記録を上書きしない。validator failureのsanitized detailsにはpacket本文を含めず、少なくともphase、record ID、違反種別、不正fieldを残す。
+
+workerは`multi_agent`を無効にした独立native CLIを起動し、`spawn_agent`のsubagent枠やcapacity signalを使わない。親のsubagent枠を理由に並列度を自動で下げる連携はなく、timeoutやworker failureも同様に`BLOCKED`として扱う。
 
 stateには既存resolutionの未解決義務を保持し、別taskや別snapshotの証拠を流用しない。
 
-phaseの時間を調整する場合は`--metadata-batch-seconds`（default 300）、`--alignment-batch-seconds`（600）、`--deep-batch-seconds`（900）を明示指定する。各値は30〜1,800秒の整数だけを許可し、boolean・非数値・範囲外を送信前に拒否する。環境変数から時間を補わない。`--prepare`と本実行には同じ指定を使う。
+phaseの時間を調整する場合は`--metadata-batch-seconds`（default 300）、`--alignment-batch-seconds`（600）、`--deep-batch-seconds`（900）を明示指定する。各値は30〜1,800秒の整数だけを許可し、boolean・非数値・範囲外を送信前に拒否する。環境変数から時間を補わない。`--batch-concurrency`を含むpolicy指定は`--prepare`と本実行で同じにする。
 
-policy全体とhashはtask identityへ、phase予算・policy hash・plan hashは実行計画へ固定する。policyを変える再測定では新しいstate directoryを作り、以前のstateを保存する。旧形式などpolicyを確認できないstateも`STATE_EXECUTION_POLICY_MISMATCH`で停止し、失敗記録を含め変更しない。snapshot・selection・packet・role・contract・CLI identityが一致しない証拠を流用しない。timeout診断にはbatch index／件数／完了件数／packet hash／指定秒数を含め、自動延長や同じ設定の無条件retryは行わない。
+policy全体（`batch_concurrency`を含む）とhashはtask identityへ、phase予算・policy hash・plan hashは実行計画へ固定する。`auto`はexecution policyでは`null`としてhashし、各planには解決済み`C`を保存する。policyを変える再測定では新しいstate directoryを作り、以前のstateを保存する。旧形式などpolicyを確認できないstateも`STATE_EXECUTION_POLICY_MISMATCH`で停止し、失敗記録を含め変更しない。snapshot・selection・packet・role・contract・CLI identityが一致しない証拠を流用しない。timeout診断にはbatch index／件数／完了件数／packet hash／指定秒数を含め、自動延長や同じ設定の無条件retryは行わない。
 
 ## Validation
 

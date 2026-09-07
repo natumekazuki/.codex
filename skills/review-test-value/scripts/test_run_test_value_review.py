@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
+import threading
 import sys
 import unittest
 from unittest import mock
@@ -93,6 +94,157 @@ def sized_phase_packets(count):
 class ReviewCoordinatorTests(unittest.TestCase):
     # @test-value v2
     # kind = "regression"
+    # claim = "並列数をCLIから計画とstate identityへ固定し異なる設定を再利用しない"
+    # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
+    # fault = "並列数を無視したdeadline計算または既存stateの暗黙上書き"
+    # observable = "3batchの610/1210/1810秒、hashの差、不正入力拒否とstate保持"
+    # observation_boundary = "component-behavior"
+    # scope = "parallel-batch-policy"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_parallel_policy_deadlines_and_state_are_bound(self):
+        argv = ["--root", ".", "--changed-from", "base", "--state-dir", ".", "--cli", "codex"]
+        parser = coordinator.build_parser()
+        self.assertIsNone(parser.parse_args(argv).batch_concurrency)
+        packet = sized_phase_packets(22)["alignment"]
+        hashes = set()
+        for concurrency, seconds, offsets in ((None, 610, [600, 600, 600]), (1, 1810, [600, 1200, 1800]),
+                (2, 1210, [600, 600, 1200]), (3, 610, [600, 600, 600]), (4, 610, [600, 600, 600])):
+            args = parser.parse_args(argv + ["--batch-concurrency", "auto" if concurrency is None else str(concurrency)])
+            _, plan = coordinator.plan_phase_batches("alignment", packet, batch_concurrency=args.batch_concurrency)
+            self.assertEqual(plan["phase_seconds"], seconds)
+            self.assertEqual([b["deadline_offset_seconds"] for b in plan["batches"]], offsets)
+            hashes.add(plan["plan_hash"])
+            self.assertEqual(plan, coordinator.plan_phase_batches("alignment", packet, batch_concurrency=concurrency)[1])
+        self.assertEqual(len(hashes), 5)
+        for value in ("true", "bad", "0", "-1", "1.5"):
+            with self.subTest(value=value), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                parser.parse_args(argv + ["--batch-concurrency", value])
+            self.assertEqual(error.exception.code, 2)
+        for value in (True, False, 0, -1, 1.5, "2"):
+            with mock.patch.object(coordinator, "_resolve_repository") as resolve:
+                with self.assertRaises(coordinator.CoordinatorBlocked) as error:
+                    coordinator.run(SimpleNamespace(batch_concurrency=value))
+                self.assertEqual(error.exception.reason_code, "BATCH_POLICY_INVALID")
+                resolve.assert_not_called()
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            coordinator._load_or_initialize_task(state, task_id="task", root=state, base_oid="base", mode="working-tree")
+            before = {p.name: p.read_bytes() for p in state.iterdir()}
+            with self.assertRaises(coordinator.CoordinatorBlocked) as error:
+                coordinator._load_or_initialize_task(state, task_id="task", root=state, base_oid="base", mode="working-tree", batch_concurrency=2)
+            self.assertEqual(error.exception.reason_code, "STATE_EXECUTION_POLICY_MISMATCH")
+            self.assertEqual(before, {p.name: p.read_bytes() for p in state.iterdir()})
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "同phaseを上限内で同時実行し逆順完了でも全件を元の順序で検証する"
+    # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
+    # fault = "実際は直列、並列上限超過、または完了順で結果を集約する"
+    # observable = "同期barrierでの重複実行、最大2worker、全22件とproof順序"
+    # observation_boundary = "component-behavior"
+    # scope = "parallel-batch-order"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_parallel_batches_overlap_and_merge_in_selection_order(self):
+        packet = sized_phase_packets(22)["alignment"]
+        batches, _ = coordinator.plan_phase_batches("alignment", packet)
+        indices = {batch["records"][0]["record_id"]: i for i, batch in enumerate(batches)}
+        barrier = threading.Barrier(2)
+        second_done = threading.Event()
+        lock = threading.Lock()
+        active = 0
+        peak = 0
+        finished = []
+        def execute(phase, batch, **kwargs):
+            nonlocal active, peak
+            index = indices[batch["records"][0]["record_id"]]
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                if index < 2:
+                    barrier.wait(timeout=5)
+                if index == 0:
+                    self.assertTrue(second_done.wait(5))
+                self.assertGreater(kwargs["deadline_monotonic"], coordinator.time.monotonic())
+                return alignment_result(batch), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+            finally:
+                with lock:
+                    active -= 1
+                    finished.append(index)
+                if index == 1:
+                    second_done.set()
+        with mock.patch.object(coordinator, "_execute_phase", side_effect=execute), mock.patch.object(coordinator, "_validate_worker_toolchain"):
+            result, envelope = coordinator._execute_batch_round("alignment", packet, cli="codex", role_file=Path("role"), toolchain_identity={}, batch_concurrency=2)
+            self.assertEqual(peak, 2)
+            self.assertEqual(active, 0)
+            self.assertEqual(finished, [1, 0, 2])
+            self.assertEqual(result, alignment_result(packet))
+            self.assertEqual([b["index"] for b in envelope["batches"]], [0, 1, 2])
+            envelope["batches"][0], envelope["batches"][1] = envelope["batches"][1], envelope["batches"][0]
+            with self.assertRaises(coordinator.CoordinatorBlocked):
+                coordinator._validate_batch_execution(envelope, packet, result, {})
+        # With no cap every batch must be running before any can finish.
+        all_started = threading.Barrier(3)
+        def execute_auto(phase, batch, **kwargs):
+            all_started.wait(timeout=5)
+            return alignment_result(batch), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+        with mock.patch.object(coordinator, "_execute_phase", side_effect=execute_auto), mock.patch.object(coordinator, "_validate_worker_toolchain"):
+            result, envelope = coordinator._execute_batch_round("alignment", packet, cli="codex", role_file=Path("role"), toolchain_identity={})
+        self.assertEqual(result, alignment_result(packet))
+        self.assertEqual(envelope["plan"]["batch_concurrency"], 3)
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "並列batchの失敗時に次waveを起動せず実行中workerのcleanup後にBLOCKEDにする"
+    # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
+    # fault = "失敗を部分成功で隠す、後続を起動する、またはworkerを残して戻る"
+    # observable = "batch 2未起動、兄弟cleanup完了、完了数1と失敗batchの診断"
+    # observation_boundary = "component-behavior"
+    # scope = "parallel-batch-failure"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_parallel_failure_joins_siblings_and_stops_next_wave(self):
+        packet = sized_phase_packets(22)["alignment"]
+        batches, _ = coordinator.plan_phase_batches("alignment", packet)
+        indices = {batch["records"][0]["record_id"]: i for i, batch in enumerate(batches)}
+        for failed in (0, 1):
+            barrier = threading.Barrier(2)
+            cleaned = threading.Event()
+            called = []
+            def execute(phase, batch, **kwargs):
+                index = indices[batch["records"][0]["record_id"]]
+                called.append(index)
+                barrier.wait(timeout=5)
+                if index == failed:
+                    raise coordinator.CoordinatorBlocked("REVIEW_TIMEOUT", "deadline expired")
+                try:
+                    return alignment_result(batch), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+                finally:
+                    cleaned.set()
+            with mock.patch.object(coordinator, "_execute_phase", side_effect=execute), mock.patch.object(coordinator, "_validate_worker_toolchain"):
+                with self.assertRaises(coordinator.CoordinatorBlocked) as error:
+                    coordinator._execute_batch_round("alignment", packet, cli="codex", role_file=Path("role"), toolchain_identity={}, batch_concurrency=2)
+            self.assertTrue(cleaned.is_set())
+            self.assertCountEqual(called, [0, 1])
+            self.assertEqual(error.exception.reason_code, "REVIEW_TIMEOUT")
+            self.assertEqual(error.exception.details["batch_index"], failed)
+            self.assertEqual(error.exception.details["completed_batches"], 1)
+            self.assertEqual(error.exception.details["batch_count"], 3)
+            self.assertEqual(error.exception.details["batch_seconds"], 600)
+            self.assertEqual(error.exception.details["batch_concurrency"], 2)
+            self.assertEqual(error.exception.details["packet_hash"], coordinator.result_hash(batches[failed]))
+        # Failure to start the executor is not an agent-capacity signal or a retry.
+        with mock.patch.object(coordinator, "ThreadPoolExecutor", side_effect=RuntimeError("cannot start thread")) as pool:
+            with self.assertRaises(coordinator.CoordinatorBlocked) as error:
+                coordinator._execute_batch_round("alignment", packet, cli="codex", role_file=Path("role"), toolchain_identity={})
+        self.assertEqual(pool.call_count, 1)
+        self.assertEqual(error.exception.reason_code, "BATCH_EXECUTION_FAILED")
+        self.assertEqual(error.exception.details["batch_concurrency"], 3)
+
+    # @test-value v2
+    # kind = "regression"
     # claim = "phase別CLI予算を計画とhashに固定し同じpacketの時間変更を区別する"
     # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
     # fault = "alignmentが固定300秒のままか変更した予算がplanやhashへ伝播しない"
@@ -112,13 +264,13 @@ class ReviewCoordinatorTests(unittest.TestCase):
             values = {phase: getattr(args, f"{phase}_batch_seconds") for phase in expected}
             self.assertEqual(values, expected)
             for phase, packet in packets.items():
-                _, plan = coordinator.plan_phase_batches(phase, packet, batch_seconds=values)
+                _, plan = coordinator.plan_phase_batches(phase, packet, batch_seconds=values, batch_concurrency=1)
                 self.assertEqual(plan["batch_seconds"], expected[phase])
                 self.assertEqual(plan["phase_seconds"], 3 * expected[phase] + 10)
                 self.assertEqual(plan["plan_hash"], coordinator._canonical_hash({k:v for k,v in plan.items() if k != "plan_hash"}))
-        _, original = coordinator.plan_phase_batches("alignment", packets["alignment"])
+        _, original = coordinator.plan_phase_batches("alignment", packets["alignment"], batch_concurrency=1)
         _, changed = coordinator.plan_phase_batches("alignment", packets["alignment"],
-                            batch_seconds={"metadata": 300, "alignment": 900, "deep": 900})
+                            batch_seconds={"metadata": 300, "alignment": 900, "deep": 900}, batch_concurrency=1)
         self.assertEqual(original["phase_seconds"], 1810)
         self.assertEqual(original["global_packet_hash"], changed["global_packet_hash"])
         self.assertNotEqual(original["plan_hash"], changed["plan_hash"])
@@ -131,7 +283,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
             return alignment_result(packet), {"schema_version": "review-worker-evidence-v1", "phase": phase}
         with mock.patch.object(coordinator.time, "monotonic", side_effect=lambda: clock[0]), mock.patch.object(coordinator, "_execute_phase", side_effect=execute), mock.patch.object(coordinator, "_validate_worker_toolchain"):
             coordinator._execute_batch_round("alignment", packets["alignment"], cli="codex", role_file=Path("role"),
-                toolchain_identity={}, batch_seconds={"metadata": 300, "alignment": 600, "deep": 900})
+                toolchain_identity={}, batch_seconds={"metadata": 300, "alignment": 600, "deep": 900}, batch_concurrency=1)
         self.assertEqual(deadlines, [700.0, 720.0, 740.0])
 
     # @test-value v2
@@ -195,7 +347,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
             packet = sized_phase_packets(22)["alignment"]
             def timeout_run(_args):
                 return coordinator._execute_batch_round("alignment", packet, cli="codex", role_file=Path("role"),
-                                                       toolchain_identity={}, state_dir=state, batch_seconds=policy)
+                                                       toolchain_identity={}, state_dir=state, batch_seconds=policy, batch_concurrency=1)
             with mock.patch.object(coordinator, "run", side_effect=timeout_run), mock.patch.object(coordinator, "_execute_phase", side_effect=coordinator.CoordinatorBlocked("REVIEW_TIMEOUT", "REVIEW_TIMEOUT")) as worker, contextlib.redirect_stdout(io.StringIO()) as out:
                 self.assertEqual(coordinator.main(argv + ["--alignment-batch-seconds", "600"]), 2)
             result = json.loads(out.getvalue())
@@ -223,10 +375,10 @@ class ReviewCoordinatorTests(unittest.TestCase):
         for count, sizes in ((1, [1]), (10, [10]), (11, [10, 1]), (22, [10, 10, 2]), (100, [10] * 10)):
             for phase, packet in sized_phase_packets(count).items():
                 with self.subTest(count=count, phase=phase):
-                    batches, plan = coordinator.plan_phase_batches(phase, packet)
+                    batches, plan = coordinator.plan_phase_batches(phase, packet, batch_concurrency=1)
                     self.assertEqual([len(batch["records"]) for batch in batches], sizes)
                     self.assertEqual([record for batch in batches for record in batch["records"]], packet["records"])
-                    self.assertEqual(coordinator.plan_phase_batches(phase, copy.deepcopy(packet)), (batches, plan))
+                    self.assertEqual(coordinator.plan_phase_batches(phase, copy.deepcopy(packet), batch_concurrency=1), (batches, plan))
                     seconds = {"metadata": 300, "alignment": 600, "deep": 900}[phase]
                     self.assertEqual(plan["phase_seconds"], len(sizes) * seconds + 10)
                     self.assertEqual([b["deadline_offset_seconds"] for b in plan["batches"]],
@@ -236,10 +388,10 @@ class ReviewCoordinatorTests(unittest.TestCase):
         for phase, packet in sized_phase_packets(2).items():
             singletons = [coordinator.project_phase_batch(phase, packet, [record]) for record in packet["records"]]
             limit = max(len(canonical_json(batch)) for batch in singletons)
-            batches, _ = coordinator.plan_phase_batches(phase, packet, packet_char_limit=limit)
+            batches, _ = coordinator.plan_phase_batches(phase, packet, packet_char_limit=limit, batch_concurrency=1)
             self.assertEqual([len(batch["records"]) for batch in batches], [1, 1])
             with self.assertRaises(coordinator.CoordinatorBlocked) as caught:
-                coordinator.plan_phase_batches(phase, packet, packet_char_limit=limit - 1)
+                coordinator.plan_phase_batches(phase, packet, packet_char_limit=limit - 1, batch_concurrency=1)
             self.assertEqual(caught.exception.reason_code, "BATCH_RECORD_TOO_LARGE")
             self.assertIn(caught.exception.details["record_id"], [r["record_id"] for r in packet["records"]])
 
@@ -262,7 +414,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                 self.assertGreater(kwargs["deadline_monotonic"], coordinator.time.monotonic())
                 return factory(batch), {"schema_version": "review-worker-evidence-v1", "phase": phase}
             with mock.patch.object(coordinator, "_execute_phase", side_effect=execute) as worker, mock.patch.object(coordinator, "_validate_worker_toolchain"):
-                result, proof = coordinator._execute_batch_round(phase, packet, cli="codex", role_file=Path("role"), toolchain_identity={})
+                result, proof = coordinator._execute_batch_round(phase, packet, cli="codex", role_file=Path("role"), toolchain_identity={}, batch_concurrency=1)
                 self.assertEqual(worker.call_count, 3)
                 self.assertEqual(result, factory(packet))
                 corruptions = []
@@ -304,7 +456,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                     return result, {"schema_version": "review-worker-evidence-v1", "phase": phase}
                 with mock.patch.object(coordinator, "_execute_phase", side_effect=fail_second), mock.patch.object(coordinator, "_validate_worker_toolchain"), mock.patch.object(coordinator.time, "monotonic", side_effect=lambda: clock[0]):
                     with self.assertRaises(coordinator.CoordinatorBlocked) as caught:
-                        coordinator._execute_batch_round(phase, packet, cli="codex", role_file=Path("role"), toolchain_identity={})
+                        coordinator._execute_batch_round(phase, packet, cli="codex", role_file=Path("role"), toolchain_identity={}, batch_concurrency=1)
                 self.assertEqual(len(called), 2)
                 self.assertEqual(caught.exception.details["batch_index"], 1)
                 self.assertEqual(caught.exception.details["completed_batches"], 1)
@@ -1378,6 +1530,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                 role_file=Path("C:/test_value_deep.toml"),
                 toolchain_identity={"identity": "toolchain"},
                 packet_char_limit=budget,
+                batch_concurrency=1,
             )
 
         self.assertEqual(len(executed_packets), 3)
@@ -1562,6 +1715,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                     role_file=Path("C:/test_value_deep.toml"),
                     toolchain_identity={"identity": "toolchain"},
                     packet_char_limit=budget,
+                    batch_concurrency=1,
                 )
         self.assertEqual(partial_calls, 2)
 
