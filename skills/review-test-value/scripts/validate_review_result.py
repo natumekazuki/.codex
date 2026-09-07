@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,13 @@ from review_routing import (
 
 class ResultValidationError(ValueError):
     """Raised when an AI result or final aggregation input is untrusted."""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        # Keep diagnostics separate from the exception text.  Callers may expose
+        # this dictionary to the worker boundary, but must never need to include
+        # the untrusted result or packet to explain a validation failure.
+        self.details = dict(details or {})
 
 
 SOURCE_KEYS = {
@@ -122,6 +130,13 @@ PHASE_SPECS = {
 }
 
 _SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
+_CANONICAL_HASH_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+_SAFE_FIELD_PATTERN = re.compile(
+    r"^[a-z0-9_]{1,64}(?:\.[a-z0-9_]{1,64})?$"
+)
+_REDACTED = "REDACTED"
+
+
 def phase_result_schema(phase: str) -> dict[str, Any]:
     """Build the codex exec output schema for one v2 review phase.
 
@@ -286,7 +301,11 @@ def validate_phase_result(
                 raise ResultValidationError("review contains an unexpected record")
             if review["metadata_hash"] != expected.get("metadata_hash"):
                 raise ResultValidationError("metadata_hash does not match the packet")
-            _validate_metadata_evidence(review["evidence"], expected.get("metadata"))
+            _validate_metadata_evidence(
+                review["evidence"],
+                expected.get("metadata"),
+                record_id=expected.get("record_id"),
+            )
         else:
             _string_list(review["evidence"], "review.evidence")
         _string_list(review["unverified"], "review.unverified")
@@ -614,23 +633,94 @@ def _validate_alignment_record(record: Any) -> None:
     _string(record["coverage"], "record.coverage")
 
 
-def _validate_metadata_evidence(value: Any, metadata: Any) -> None:
+def _metadata_evidence_error(
+    message: str,
+    *,
+    record_id: str | None,
+    violation_type: str,
+    invalid_field: str | None = None,
+) -> ResultValidationError:
+    details: dict[str, Any] = {
+        "phase": "metadata",
+        "violation_type": violation_type,
+    }
+    if record_id is not None:
+        if isinstance(record_id, str) and _CANONICAL_HASH_PATTERN.fullmatch(record_id):
+            details["record_id"] = record_id
+        else:
+            details["record_id"] = _REDACTED
+            if isinstance(record_id, str):
+                details["record_id_hash"] = _diagnostic_hash(record_id)
+    if invalid_field is not None:
+        if _SAFE_FIELD_PATTERN.fullmatch(invalid_field):
+            details["invalid_field"] = invalid_field
+        else:
+            details["invalid_field"] = _REDACTED
+            details["invalid_field_hash"] = _diagnostic_hash(invalid_field)
+    return ResultValidationError(message, details)
+
+
+def _validate_metadata_evidence(
+    value: Any,
+    metadata: Any,
+    *,
+    record_id: str | None = None,
+) -> None:
     if not isinstance(metadata, dict):
-        raise ResultValidationError("packet metadata is invalid")
+        raise _metadata_evidence_error(
+            "packet metadata is invalid",
+            record_id=record_id,
+            violation_type="INVALID_METADATA",
+        )
     if not isinstance(value, list):
-        raise ResultValidationError("review.evidence must be an array")
+        raise _metadata_evidence_error(
+            "review.evidence must be an array",
+            record_id=record_id,
+            violation_type="INVALID_EVIDENCE_SHAPE",
+        )
+    allowed_fields = set(metadata)
+    oracle = metadata.get("oracle")
+    if isinstance(oracle, dict):
+        allowed_fields.update(
+            f"oracle.{key}"
+            for key in ("type", "ref")
+            if key in oracle
+        )
     for item in value:
         if not isinstance(item, dict) or set(item) != METADATA_EVIDENCE_KEYS:
-            raise ResultValidationError("metadata evidence has unexpected keys")
-        fields = _string_list(item["fields"], "metadata evidence.fields")
+            raise _metadata_evidence_error(
+                "metadata evidence has unexpected keys",
+                record_id=record_id,
+                violation_type="INVALID_EVIDENCE_SHAPE",
+            )
+        try:
+            fields = _string_list(item["fields"], "metadata evidence.fields")
+        except ResultValidationError as exc:
+            raise _metadata_evidence_error(
+                str(exc),
+                record_id=record_id,
+                violation_type="INVALID_FIELDS",
+            ) from exc
         if not fields or len(fields) != len(set(fields)):
-            raise ResultValidationError("metadata evidence.fields must be unique and non-empty")
+            raise _metadata_evidence_error(
+                "metadata evidence.fields must be unique and non-empty",
+                record_id=record_id,
+                violation_type="INVALID_FIELDS",
+            )
         for field in fields:
-            root = field.split(".", 1)[0]
-            if root not in metadata or field not in set(metadata) | {"oracle.type", "oracle.ref"}:
-                raise ResultValidationError("metadata evidence references an unavailable field")
+            if field not in allowed_fields:
+                raise _metadata_evidence_error(
+                    "metadata evidence references an unavailable field",
+                    record_id=record_id,
+                    violation_type="UNAVAILABLE_FIELD",
+                    invalid_field=field,
+                )
         if item["finding"] not in METADATA_EVIDENCE_FINDINGS:
-            raise ResultValidationError("metadata evidence finding is invalid")
+            raise _metadata_evidence_error(
+                "metadata evidence finding is invalid",
+                record_id=record_id,
+                violation_type="INVALID_FINDING",
+            )
 
 
 def _canonical_json(value: Any) -> str:
@@ -639,6 +729,13 @@ def _canonical_json(value: Any) -> str:
 
 def _sha256_text(value: str) -> str:
     return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _diagnostic_hash(value: str) -> str:
+    """Hash untrusted diagnostic text without echoing or rejecting surrogates."""
+    return "sha256:" + hashlib.sha256(
+        value.encode("utf-8", errors="surrogatepass")
+    ).hexdigest()
 
 
 def _positive_int(value: Any, name: str) -> int:

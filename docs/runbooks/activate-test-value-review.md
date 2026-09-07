@@ -2,54 +2,93 @@
 
 ## 現在の状態
 
-[Issue #52](https://github.com/natumekazuki/.codex/issues/52)の候補を作成中である。必須test価値審査の有効化とlive配布は未完了。旧Issueは再開しない。現在mainにあるv2抽出、Git transition、packet、validator、deep選定、retention／resolutionを再利用し、残るworkerとcoordinatorを[Issue #50](https://github.com/natumekazuki/.codex/issues/50)で接続する。
+`review-test-value` はcandidateであり、repositoryの必須gateとして公開していない。現在は`$review-test-value`による明示起動だけを許可し、通常の自動選択、test変更への暗黙適用、live配布は行わない。このcheckoutでは、Windows native CLI `0.153.4`と既存ChatGPT Pro認証による22件以上の実モデルE2E、candidate自身の審査、新規Codex sessionでの読込確認をまだ実施していない。有効化済みとは報告しない。
 
-今回のtask baseは`81b1ee740ab1ab7ad3eff98e66663ba23ea556e0`。着手時のmainと一致することを確認した。以後の別taskはその開始時のbaseを使い、この値や過去taskのbaseを流用しない。
+activeな必須gateへ切り替える条件は次のとおりである。
 
-候補Skillを別のCodex homeから`debug prompt-input`へ読み込ませた確認では、必須審査・監査・RelayGraphが通常一覧に入り、明示呼出し専用のUI・文書3種類は一覧から外れた。roleの実モデルsmokeは独立CLI runが終了したものの、JSONLには空のreceiverを持つwaitだけが記録され、spawnやchild modelの証拠を取得できなかった。最終応答の自己申告だけでrole実効確認を完了扱いしない。
+1. 固定した一つのselection全体（手動で1件ずつに分割しない）を、Windows native CLI `0.153.4`、既存ChatGPT Pro認証、Luna/maxの実モデルで22件以上審査する。全batchを集約した終了契約が、規定のphase deadline内に`PASS`、`CHANGES_REQUIRED`、`BLOCKED`のいずれかを返すことを確認する。
+2. このcandidateの変更自身を、同じreview契約とtask baseから自己審査する。offline test、合成canary、`BLOCKED`の返却は実モデルE2Eの代わりにしない。
+3. 新規Codex sessionでSkillの読込、candidateの明示起動、実効roleと入力隔離を確認する。
+4. 上記の証拠と回帰checkを揃え、実際のregistryでactiveへ変更する。active登録、hook／AGENTS／Skillの条件文、runbookの状態記述は同じ変更で更新する。
 
-同版app-serverの新規threadで、候補natural-japaneseを`turn/start`の`type: skill`入力として渡す確認も行った。user itemにtextとskillが記録され、明示したlight推敲が完了した。通常一覧からの除外と明示呼出しの成立を分けて確認したもので、全任意Skillや汎用childの確認を代替しない。`codex exec`のplain textに`$Skill名`を書くだけでは、このstructured inputと同じ確認にならない。
+`config/agents.example.toml`の`test_value_luna`／`test_value_deep`はrole設定例であり、実runtimeのlive登録を証明しない。実際のregistryが確認できない間は、候補の状態を維持する。
 
-現在の専門roleは`test_value_luna`（metadata／alignment）と`test_value_deep`（deep）で、ともにLuna/maxを使う。ADR-0022のmodel／role割当をこの構成へ更新し、phase分離・判定固定・必須の追加精査条件は維持する。実configへの適用時は旧`agents.test_value_sol`登録を`agents.test_value_deep`へ置き換える。追加contextでも判断できなければNEEDS_CONTEXTを親へ返し、Solへ自動昇格しない。
+候補実装の追跡は[Issue #52](https://github.com/natumekazuki/.codex/issues/52)、workerとcoordinatorの接続は[Issue #50](https://github.com/natumekazuki/.codex/issues/50)で行う。旧Issueは再開しない。
+
+## 共通batch・deadline policy
+
+metadata、alignment、deepは同じbatch policyを使う。coordinatorはselectionを固定し、record順を保つ連続batchを全phaseについて決定する。
+
+| 項目 | policy |
+| --- | --- |
+| 1 batchのrecord数 | 最大10件 |
+| 1 batchの入力サイズ | canonical packetのUnicode文字数で最大800,000文字。prompt wrapper、system instruction、実行時の追加文は数えない |
+| 境界 | record数とcanonical packet文字数の両方を満たす最大の連続範囲。単独recordが文字数上限を超えた場合は対象を削らず`BLOCKED` |
+| batch順 | selectionのrecord順を維持し、欠落・重複・順序変更を許さない |
+| batch時間 | metadata／alignmentは300秒、deepは900秒。canary最大120秒、cleanup最大5秒を含む |
+| phase全体 | `N × 1 batchの時間上限 + 固定10秒`。`N`はbatch数、固定10秒はcoordinator overhead |
+| worker同時実行 | 1 |
+| audit | 10% |
+| deep retry | 最大1回 |
+
+workerへ渡すbatch deadlineは、coordinatorのphase plan開始時に取得したmonotonic anchorからの絶対deadlineである。phase planのstartを`P`、batch予算を`B`、batch `i`（0始まり）、batch開始を`S_i`とすると、batch deadlineは`min(S_i + B, P + (i + 1) × B)`、phase全体のdeadline offsetは`N × B + 10秒`とする。同じselection、canonical packet、policyからこのrelative offsetを決定論的に計算する。monotonic anchorそのものは実行ごとに異なるため、異なるrunの絶対時刻を比較しない。phaseの時計はplan実行開始から進み、git抽出、host evidence準備、依存準備などplan前の処理をphase deadlineへ含めるとは表現しない。
+
+一つのbatchではcanary、review、cleanupが同じmonotonic deadlineを共有する。canaryの経過時間を差し引いた残り時間だけをreviewへ渡し、canaryからreviewへの切替でdeadlineを延長しない。deadline到達時は所有process treeとscratchを終了・削除し、cleanupの終了確認に失敗した場合も成功扱いにせず、専用reason codeを持つ`BLOCKED`にする。
+
+metadata packetをfreezeしてからmetadataのbatch planを確定し、metadata resultをfreezeしてからalignment planを確定する。deep planはmetadata／alignment resultとroutingをfreezeしてから確定する。全batchについてrecord ID、metadata／source hash、件数、順序、結果の完全性を集約時に検証する。一つでもbatchが失敗、timeout、cleanup失敗、欠落、重複、順序不整合になれば、成功batchだけで全体を`PASS`にしない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、失敗時は`last-failure.json`へ診断を残す。validator failureはpacket本文や機密情報を返さず、sanitized detailsにphase、record ID、違反種別、不正fieldを含める。
 
 ## 実行境界
 
 Luna/maxによるmetadata／alignmentと必要なdeep reviewは、それぞれ独立した新規Codex CLI runとする。model／effort／role指示は`agents/test_value_luna.toml`と`agents/test_value_deep.toml`を正本とする。通常の子のfork、親の自己評価、別modelへのfallbackは隔離審査の代行にならない。
 
-metadata phaseは正規metadataだけを受け取る。本文・locator・親履歴・別phase・ログ・Memory・MCPから補完できないよう、user／project／managed config、AGENTS、Skill、hook、tool、network、shellの自動入力と読取経路を確認する。`--ignore-user-config`だけで全入力が消えるとは仮定しない。管理者の安全policyは維持し、必要な境界を確認できない場合はpacket送信前にBLOCKEDとする。
+metadata phaseは正規metadataだけを受け取る。本文・locator・親履歴・別phase・ログ・Memory・MCPから補完できないよう、user／project／managed config、AGENTS、Skill、hook、tool、network、shellの自動入力と読取経路を確認する。`--ignore-user-config`だけで全入力が消えるとは仮定しない。管理者の安全policyは維持し、必要な境界を確認できない場合はpacket送信前に`BLOCKED`とする。
 
-実装の対応範囲はWindows native CLI `0.153.4`、既存ChatGPT Pro認証に限定する。同版のcloud-config eligibilityではProが取得対象外であることをsourceで確認した。管理configの存在、未確認の認証種別・CLI版では送信前に停止する。認証は既存CLIのChatGPTログインを使い、auth.jsonのコピーや新たな課金APIを導入しない。入力はstdin等のdataとして渡す。正式な起動設定・CLI identityと合成canaryの強制読取拒否を確認し、存在しないJSONL fieldをpreflightの要件にしない。
+対応範囲はWindows native CLI `0.153.4`、既存ChatGPT Pro認証に限定する。管理configの存在、未確認の認証種別・CLI版では送信前に停止する。認証は既存CLIのChatGPTログインを使い、auth.jsonのコピーや新たな課金APIを導入しない。入力はstdin等のdataとして渡す。正式な起動設定・CLI identityと合成canaryの強制読取拒否を確認し、存在しないJSONL fieldをpreflightの要件にしない。
 
-2026-09-06の既存試行では、Windows native CLI `0.153.4`のelevated sandboxでLuna/medium・Sol/xhighの合成canary読取がAccess denied、command exit 1となった。これは指定pathの拒否を示し、worker全体や全自動入力の隔離を証明するものではない。今回、合成した認証拒否testをcoordinatorの一つの入口から実行し、Luna/mediumのmetadata・alignment、riskで必要となるSol/xhigh、host保持根拠、aggregate PASSまで接続した。各phaseは独立runでcanary拒否とtool item 0件を確認した。これは合成例の機能確認であり、この変更自身の審査や後続のworker修正の証拠へ付け替えない。 この記録は旧Luna/medium・Sol/xhighでの試行であり、Luna/maxの実効起動・精度の証拠ではない。
+保存schemaの`sol_result`等とtoolchainの`workers.sol`はdeep phaseの既存識別子であり、Solを呼ぶ設定ではない。role・contractのhashが変わるため、旧modelのgenerationを新構成の実行証拠として再利用しない。
 
-## 完了判定
+## 履歴（有効化の証拠ではない）
 
-候補の一回の入口で、task baseとsnapshot固定、全対象言語の抽出、metadata／alignment、決定論的なrequired deep review、hostが実際に確認した保持根拠、既存ledgerのDROP／MOVE解消、全体gateを接続する。metadataがREDESIGNでもalignmentを省略しない。元の判定は固定し、削除・移設後の解消を別の結果として扱う。
+以下は候補開発時の記録であり、現在のactive登録、実モデルE2E、または新規session確認の証拠へ流用しない。
 
-全言語・全batch・現在のrecord・未解決義務が揃って初めてPASSとする。空selection、消えたledger、別snapshotのreceipt、構文validatorの正常終了を全体PASSにしない。終了契約は0=PASS、1=CHANGES_REQUIRED、2=BLOCKED。実行不能、不正JSON/hash、timeout/cancel、途中失敗は非成功として伝える。
+2026-09-07、C# test変更22件で`--prepare`はselection、snapshot hash、host evidence requirementを生成したが、metadata phaseは約4分30秒後に`BLOCKED`（`REVIEW_RESULT_VALIDATION_FAILED`、unavailable field）となった。同じ差分の別sessionでも失敗し、stateには失敗recordのID、参照field、sanitized resultが残らなかった。test suite、抽出、host evidence固定は成功しており、test実行失敗とは独立した事象である。
 
-保持の意味判断はhostがsourceとaccepted contractを読んで行う。oracle.refの存在、callerのPRESENT=true、modelの自由出力だけで保持を承認しない。追加contextは限定した内容とref/hashに結び付ける。初期予算は同時worker1、通常audit10%、deepの追加context再実行最大1回、metadata／alignmentは各5分、deepは15分とし、最適値とは表現しない。
+2026-09-06以前のcandidate smokeでは、独立CLIのJSONLに実効spawn／child modelの証拠がなく、別の合成canaryでは読取拒否を確認した。これらは入力隔離やLuna/maxの実効起動を証明せず、現在のactivation条件を満たす証拠へ流用しない。旧候補のtask baseやSkill discoveryの記録も履歴としてのみ保持する。
+
+## 完了契約
+
+candidateの一回の入口で、task baseとsnapshot固定、全対象言語の抽出、metadata／alignment、決定論的なrequired deep review、hostが実際に確認した保持根拠、既存ledgerのDROP／MOVE解消、全体gateを接続する。metadataが`REDESIGN`でもalignmentを省略しない。元の判定は固定し、削除・移設後の解消を別の結果として扱う。
+
+全言語・全batch・現在のrecord・未解決義務が揃って初めて`PASS`とする。空selection、消えたledger、別snapshotのreceipt、構文validatorの正常終了を全体PASSにしない。終了契約は0=`PASS`、1=`CHANGES_REQUIRED`、2=`BLOCKED`。実行不能、不正JSON／hash、timeout／cancel、途中失敗は非成功として伝える。
+
+保持の意味判断はhostがsourceとaccepted contractを読んで行う。`oracle.ref`の存在、callerの`PRESENT=true`、modelの自由出力だけで保持を承認しない。追加contextは限定した内容とref／hashに結び付ける。
 
 `--prepare`はhost evidenceの雛形と、recordに対応するpath・symbol・claimを返す。repositoryの根拠には`source = repository`／`authority = repository`を付ける。hostが実際に取得した外部Issue・契約・明示要求には`source = host-observed`と対応するauthority（`issue`／`external-contract`／`explicit-user-requirement`）を付け、本文・hash・意味判断を渡す。外部根拠を保持のためだけにrepositoryへ複製しない。
 
 再開時は返された`unresolved`から不足するcontextと元recordを確認する。本文とmetadataを同時に修正し自動対応できない場合は、`supersessions`へ旧generation／recordと新recordのidentity、保持される契約の根拠と`SUPPORTED`判断を渡す。現在の新規審査がPASSであることを別途確認し、同名という理由だけで旧義務を消さない。DROP／MOVEは`resolution_attempts`と既存ledgerで解消する。
 
-deepの入力が800,000文字を超える場合は、全対象・routing・auditを固定した後、record順を保つ連続batchへ事前分割する。各batchの結果と実行証拠を検証し、全件を集約した結果の由来をgenerationへ保存する。CLI 0.153.4の入力上限は1,048,576文字であり、800,000文字はモデルのtoken上限への適合を保証しない初期予算である。単独recordでも予算を超える場合や途中batchが失敗した場合は、対象を削らずBLOCKEDとする。metadata／alignmentは単一packetであり、入力を処理できなければ非成功として返す。
-
-保存schemaの`sol_result`等とtoolchainの`workers.sol`はdeep phaseの既存識別子であり、Solを呼ぶ設定ではない。role・contractのhashが変わるため、旧modelのgenerationを新構成の実行証拠として再利用しない。
-
 stateの書込みが途中で終わり未公開generationが残った場合は、記録を無視して続行せず停止する。
 
 ## 検証と切替
 
-既存の直接checkは[SkillのValidation](../../skills/review-test-value/SKILL.md#validation)を使う。offlineの成功と、Windows／CLI／modelを特定した実モデルE2Eを分ける。旧preflightはversionとroleのreadinessを返すだけで、exit 2のBLOCKEDは成功ではない。
+既存の直接checkは[SkillのValidation](../../skills/review-test-value/SKILL.md#validation)を使う。offlineの成功と、Windows／CLI／modelを特定した実モデルE2Eを分ける。旧preflightはversionとroleのreadinessを返すだけで、exit 2の`BLOCKED`は成功ではない。
 
-workerの入力隔離、全phaseと必要なdeep review、保持・削除・移設、途中失敗、timeout/cancelと所有process・scratchの終了を直接確認する。この変更自身の対象testも同じtask baseから候補の新方式で審査する。自己検証の成功だけをsandboxの証拠にしない。
+candidateの回帰checkでは、batch境界、record／hash／順序の集約、canaryからreviewへの残り時間、process treeとscratchのcleanup、schema variantとsanitized validation diagnostics、途中batchの失敗を確認する。22件以上のselectionを一つの固定runでWindows native CLIへ渡し、手動分割なしに規定のphase deadline内で終了契約を得る。1件、上限ちょうど、上限超過、22件、100件、および文字数境界のoffline fixtureは、実モデルE2Eの代わりにしない。
+
+22件のport入力検証fixtureは、Windowsで既存のChatGPT Pro認証を用い、次の明示実行で再現する。通常CIではモデルを呼ばない。fixture自体の22件のassertion、抽出、`10 + 10 + 2`の分割はofflineで確認できるが、このcheckoutでは実モデルrunは未実施である。
+
+```powershell
+$env:TEST_VALUE_E2E_CLI = 'C:\path\to\codex.exe'
+$env:TEST_VALUE_E2E_STATE = 'C:\review-evidence\batch-e2e'
+python -X utf8 -m unittest skills/review-test-value/scripts/test_review_live_e2e.py
+```
+
+指定先はcheckout外の絶対pathとする。実行ごとにfixture repository・state・`e2e-summary.json`を保持する。新規Codex sessionから同じコマンドを実行し、各runのplanとterminal gateを比較する。小さい22件fixtureでは各phase最大3batch、deep retryなしを前提に、外側watchdogを`3 × (300 + 300 + 900) + 3 × 10 + 180 = 4,710秒`とする。180秒はGit／preflight／最終保存の固定余裕であり、workerのdeadlineを延長しない。各runでは実際に生成されたphase planの時間合計とも照合する。preflight・canaryだけの失敗やskipを実モデルE2E成功と扱わず、モデル審査後の`BLOCKED`も品質確認・有効化の完了とは区別する。
 
 Luna/maxの実効起動を全phaseで確認し、循環したoracle、本文以上の過大主張、mockによるSUTの置換、必要contextの欠落を誤承認しないか、正常例とともに確認する。所要時間・利用量も記録し、旧Sol構成と同等の精度や週枠削減を未測定のまま保証しない。
 
-候補の実行と自身の審査、新規sessionでの読込確認が揃ってから、Skillの標準入口とAGENTSの完了条件を全体gateへ揃える。未確認のOS／runtimeには成功を広げない。AGENTS・role・Skill・hookを整合した単位でliveへ適用し、実config全体を上書きしない。
+candidateの22件以上の実モデルE2E、candidate自身の審査、新規sessionでの読込確認、registryの実効状態確認が揃っていないため、現時点では切替を保留する。条件が揃った場合だけ、registryのactive登録と本runbookの「現在の状態」を同じ変更で更新し、必須gateとして公開する。未確認のOS／runtimeには成功を広げない。
 
 ## 切戻し
 
-必須審査に障害があればBLOCKEDとして修復する。親をSolへ変更しても審査は省略しない。適用済みの既知の差分だけをレビュー可能な形で戻し、ユーザーworktreeをresetしない。v2利用後にv1専用extractorへ戻さず、v2読取能力と未解決ledgerを保持する。
+必須審査に障害があれば`BLOCKED`として修復する。active化後の障害ではregistryをcandidate／明示起動へ戻し、runbookと条件文を同じ変更で更新する。親をSolへ変更しても審査は省略しない。適用済みの既知の差分だけをレビュー可能な形で戻し、ユーザーworktreeをresetしない。v2利用後にv1専用extractorへ戻さず、v2読取能力と未解決ledgerを保持する。

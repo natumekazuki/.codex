@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -281,6 +283,333 @@ developer_instructions = \"Review only the supplied packet.\"
         self.assertEqual("DENIED", execution.evidence["canary"]["status"])
         self.assertEqual(2, len(calls))
         self.assertFalse(calls[0][2].exists())
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "canary consumption is deducted from one absolute phase deadline before review starts"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
+    # fault = "the worker gives review a fresh timeout after canary work has already consumed the phase budget"
+    # observable = "the two runner timeout arguments and the validated result"
+    # observation_boundary = "component-behavior"
+    # scope = "review-test-value review worker deadline"
+    # lifecycle = "permanent"
+    # distinction = "covers the shared absolute budget while the existing handoff test covers packet isolation"
+    # @end-test-value
+    def test_execute_phase_deducts_canary_time_from_shared_deadline(self) -> None:
+        packet = _packet()
+        expected_result = _result()
+        clock = [100.0]
+        timeouts: list[float] = []
+
+        def now() -> float:
+            return clock[0]
+
+        def runner(
+            argv: list[str], input_text: str, cwd: Path, timeout: float
+        ) -> review_worker.ProcessOutcome:
+            timeouts.append(timeout)
+            if len(timeouts) == 1:
+                clock[0] = 110.0
+                return review_worker.ProcessOutcome(0, "", "")
+            return review_worker.ProcessOutcome(
+                0,
+                _events(
+                    {
+                        "id": "message",
+                        "type": "agent_message",
+                        "text": json.dumps(expected_result),
+                    }
+                ),
+                "",
+            )
+
+        with (
+            patch("review_worker.platform.system", return_value="Windows"),
+            patch("review_worker._managed_config_paths", return_value=[]),
+            patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
+            patch("review_worker._verify_canary", return_value={"status": "DENIED"}),
+            patch("review_worker.time.monotonic", side_effect=now),
+        ):
+            execution = review_worker.execute_phase(
+                "metadata",
+                packet,
+                cli=str(self.cli),
+                role_file=str(self.role),
+                deadline_monotonic=200.0,
+                runner=runner,
+            )
+
+        self.assertEqual(expected_result, execution.result)
+        self.assertEqual([95.0, 85.0], timeouts)
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "a canary that consumes the remaining phase budget prevents packet delivery"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
+    # fault = "the worker launches review after the absolute deadline has no cleanup reserve left"
+    # observable = "PHASE_DEADLINE_EXCEEDED and exactly one runner invocation"
+    # observation_boundary = "component-behavior"
+    # scope = "review-test-value review worker deadline"
+    # lifecycle = "permanent"
+    # distinction = "exercises the deadline boundary after canary, independently of process timeout handling"
+    # @end-test-value
+    def test_execute_phase_blocks_when_canary_consumes_review_budget(self) -> None:
+        clock = [100.0]
+        calls = 0
+
+        def now() -> float:
+            return clock[0]
+
+        def runner(
+            argv: list[str], input_text: str, cwd: Path, timeout: float
+        ) -> review_worker.ProcessOutcome:
+            nonlocal calls
+            calls += 1
+            clock[0] = 106.0
+            return review_worker.ProcessOutcome(0, "", "")
+
+        with (
+            patch("review_worker.platform.system", return_value="Windows"),
+            patch("review_worker._managed_config_paths", return_value=[]),
+            patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
+            patch("review_worker._verify_canary", return_value={"status": "DENIED"}),
+            patch("review_worker.time.monotonic", side_effect=now),
+        ):
+            with self.assertRaisesRegex(
+                review_worker.ReviewWorkerBlocked, "PHASE_DEADLINE_EXCEEDED"
+            ) as blocked:
+                review_worker.execute_phase(
+                    "metadata",
+                    _packet(),
+                    cli=str(self.cli),
+                    role_file=str(self.role),
+                    deadline_monotonic=110.0,
+                    runner=runner,
+                )
+
+        self.assertEqual("PHASE_DEADLINE_EXCEEDED", blocked.exception.code)
+        self.assertEqual(1, calls)
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "validation failures expose sanitized record coordinates at the worker boundary"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
+    # fault = "a malformed model result becomes a generic blocker without identifying its record or field"
+    # observable = "REVIEW_RESULT_VALIDATION_FAILED evidence contains phase, record_id, violation_type, and invalid_field"
+    # observation_boundary = "component-behavior"
+    # scope = "review-test-value review worker diagnostics"
+    # lifecycle = "permanent"
+    # distinction = "covers post-generation diagnosis while the schema tests cover generation-time field constraints"
+    # @end-test-value
+    def test_execute_phase_reports_sanitized_validation_coordinates(self) -> None:
+        packet = _packet()
+        invalid_result = _result()
+        invalid_result["reviews"][0]["evidence"][0]["fields"] = ["does_not_exist"]
+        calls = 0
+
+        def runner(
+            argv: list[str], input_text: str, cwd: Path, timeout: float
+        ) -> review_worker.ProcessOutcome:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return review_worker.ProcessOutcome(0, "", "")
+            return review_worker.ProcessOutcome(
+                0,
+                _events(
+                    {
+                        "id": "message",
+                        "type": "agent_message",
+                        "text": json.dumps(invalid_result),
+                    }
+                ),
+                "",
+            )
+
+        with (
+            patch("review_worker.platform.system", return_value="Windows"),
+            patch("review_worker._managed_config_paths", return_value=[]),
+            patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
+            patch("review_worker._verify_canary", return_value={"status": "DENIED"}),
+        ):
+            with self.assertRaisesRegex(
+                review_worker.ReviewWorkerBlocked, "REVIEW_RESULT_VALIDATION_FAILED"
+            ) as blocked:
+                review_worker.execute_phase(
+                    "metadata",
+                    packet,
+                    cli=str(self.cli),
+                    role_file=str(self.role),
+                    runner=runner,
+                )
+
+        evidence = blocked.exception.evidence
+        self.assertEqual("metadata", evidence["phase"])
+        self.assertEqual(packet["records"][0]["record_id"], evidence["record_id"])
+        self.assertEqual("UNAVAILABLE_FIELD", evidence["violation_type"])
+        self.assertEqual("does_not_exist", evidence["invalid_field"])
+        self.assertEqual(evidence["validation_details"], {
+            "phase": "metadata",
+            "record_id": packet["records"][0]["record_id"],
+            "violation_type": "UNAVAILABLE_FIELD",
+            "invalid_field": "does_not_exist",
+        })
+        self.assertNotIn("does_not_exist", evidence["validator_error"])
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "scratch cleanup failure is a dedicated blocker and cannot become a successful phase"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
+    # fault = "the worker returns validated review output even though its owned scratch tree remains"
+    # observable = "SCRATCH_CLEANUP_FAILED and no successful PhaseExecution"
+    # observation_boundary = "component-behavior"
+    # scope = "review-test-value review worker cleanup"
+    # lifecycle = "permanent"
+    # distinction = "covers owned filesystem cleanup while process-tree tests cover native child termination"
+    # @end-test-value
+    def test_execute_phase_blocks_when_scratch_cleanup_fails(self) -> None:
+        packet = _packet()
+        expected_result = _result()
+        calls = 0
+
+        def runner(
+            argv: list[str], input_text: str, cwd: Path, timeout: float
+        ) -> review_worker.ProcessOutcome:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return review_worker.ProcessOutcome(0, "", "")
+            return review_worker.ProcessOutcome(
+                0,
+                _events(
+                    {
+                        "id": "message",
+                        "type": "agent_message",
+                        "text": json.dumps(expected_result),
+                    }
+                ),
+                "",
+            )
+
+        with (
+            patch("review_worker.platform.system", return_value="Windows"),
+            patch("review_worker._managed_config_paths", return_value=[]),
+            patch("review_worker._run_version", return_value=(0, "codex-cli 0.153.4", "")),
+            patch("review_worker._verify_canary", return_value={"status": "DENIED"}),
+            patch("review_worker.shutil.rmtree", side_effect=OSError("locked")),
+        ):
+            with self.assertRaisesRegex(
+                review_worker.ReviewWorkerBlocked, "SCRATCH_CLEANUP_FAILED"
+            ) as blocked:
+                review_worker.execute_phase(
+                    "metadata",
+                    packet,
+                    cli=str(self.cli),
+                    role_file=str(self.role),
+                    runner=runner,
+                )
+
+        self.assertEqual("SCRATCH_CLEANUP_FAILED", blocked.exception.code)
+        self.assertFalse(blocked.exception.evidence.get("paths_removed", True))
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "a stuck scratch deletion returns a blocker after a bounded cleanup wait"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
+    # fault = "coordinator waits forever for a locked scratch directory after the model process has ended"
+    # observable = "cleanup returns false within the configured bounded interval"
+    # observation_boundary = "component-behavior"
+    # scope = "review-test-value review worker cleanup"
+    # lifecycle = "permanent"
+    # distinction = "exercises cleanup wait bounding directly while the phase test covers dedicated failure propagation"
+    # @end-test-value
+    def test_cleanup_wait_is_bounded_when_rmtree_stalls(self) -> None:
+        root = Path(self.temp.name) / "stuck-scratch"
+        root.mkdir()
+        release = threading.Event()
+
+        def stalled_rmtree(path: Path, *, ignore_errors: bool) -> None:
+            release.wait(1.0)
+
+        started = time.monotonic()
+        with patch(
+            "review_worker.shutil.rmtree", side_effect=stalled_rmtree
+        ), patch("review_worker.PROCESS_TREE_TERMINATION_SECONDS", 0.02):
+            removed = review_worker._cleanup_owned_paths(
+                (root,), time.monotonic() + 1.0
+            )
+        elapsed = time.monotonic() - started
+        release.set()
+        self.assertFalse(removed)
+        self.assertLess(elapsed, 0.5)
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "canary and review process timeouts both terminate the phase as BLOCKED"
+    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/issues/50" }
+    # fault = "a timed out process is treated as a successful empty result or allows the next step to run"
+    # observable = "CANARY_TIMEOUT and REVIEW_TIMEOUT reason codes with bounded runner calls"
+    # observation_boundary = "component-behavior"
+    # scope = "review-test-value review worker timeout"
+    # lifecycle = "permanent"
+    # distinction = "covers both process phases while the shared-deadline test covers elapsed budget without a process timeout"
+    # @end-test-value
+    def test_execute_phase_blocks_canary_and_review_timeouts(self) -> None:
+        def run_case(*, review_timeout: bool) -> tuple[str, int]:
+            calls = 0
+
+            def runner(
+                argv: list[str], input_text: str, cwd: Path, timeout: float
+            ) -> review_worker.ProcessOutcome:
+                nonlocal calls
+                calls += 1
+                if calls == 1 and not review_timeout:
+                    return review_worker.ProcessOutcome(
+                        1, "", "", timed_out=True, process_tree_terminated=True
+                    )
+                if calls == 1:
+                    return review_worker.ProcessOutcome(0, "", "")
+                return review_worker.ProcessOutcome(
+                    1, "", "", timed_out=True, process_tree_terminated=True
+                )
+
+            patches = [
+                patch("review_worker.platform.system", return_value="Windows"),
+                patch("review_worker._managed_config_paths", return_value=[]),
+                patch(
+                    "review_worker._run_version",
+                    return_value=(0, "codex-cli 0.153.4", ""),
+                ),
+            ]
+            if review_timeout:
+                patches.append(
+                    patch("review_worker._verify_canary", return_value={"status": "DENIED"})
+                )
+            with patches[0], patches[1], patches[2]:
+                canary_patch = patches[3] if review_timeout else None
+                if canary_patch is None:
+                    context = unittest.mock.patch.object(
+                        review_worker, "_verify_canary", wraps=review_worker._verify_canary
+                    )
+                else:
+                    context = canary_patch
+                with context:
+                    with self.assertRaises(review_worker.ReviewWorkerBlocked) as blocked:
+                        review_worker.execute_phase(
+                            "metadata",
+                            _packet(),
+                            cli=str(self.cli),
+                            role_file=str(self.role),
+                            runner=runner,
+                        )
+            return blocked.exception.code, calls
+
+        canary_code, canary_calls = run_case(review_timeout=False)
+        self.assertEqual("CANARY_TIMEOUT", canary_code)
+        self.assertEqual(1, canary_calls)
+        review_code, review_calls = run_case(review_timeout=True)
+        self.assertEqual("REVIEW_TIMEOUT", review_code)
+        self.assertEqual(2, review_calls)
 
     # @test-value v2
     # kind = "security"

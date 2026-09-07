@@ -1,5 +1,6 @@
 import sys
 import copy
+import json
 import unittest
 from pathlib import Path
 
@@ -379,6 +380,100 @@ class ReviewResultSchemaTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ResultValidationError, "metadata evidence"):
             validate_phase_result("metadata", result, expected)
+
+    # @test-value v2
+    # kind = "security"
+    # claim = "metadata validatorは不正fieldのrecord identityと違反種別だけをsanitized detailsへ返す"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#50" }
+    # fault = "genericなvalidation messageだけを返し、失敗したrecordとmodelが参照したfieldを特定できない"
+    # observable = "ResultValidationError.details"
+    # observation_boundary = "public-boundary"
+    # scope = "metadata-validation-diagnostic"
+    # lifecycle = "permanent"
+    # risk_tags = ["privacy"]
+    # @end-test-value
+    def test_metadata_validation_failure_exposes_sanitized_record_and_field_details(self):
+        value = aggregation_input()
+        result = copy.deepcopy(value["metadata_result"])
+        record = value["alignment_packet"]["records"][0]
+        result["reviews"][0]["evidence"][0]["fields"] = ["source_text"]
+
+        with self.assertRaises(ResultValidationError) as raised:
+            validate_phase_result("metadata", result, [record])
+
+        self.assertEqual(
+            raised.exception.details,
+            {
+                "phase": "metadata",
+                "record_id": record["record_id"],
+                "violation_type": "UNAVAILABLE_FIELD",
+                "invalid_field": "source_text",
+            },
+        )
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "oracle.typeとoracle.refはoracleを持つrecordだけでmetadata evidenceへ許可される"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#50" }
+    # fault = "oracleのないrecordに対してoracle.refを有効なStructured Outputs fieldとして扱う"
+    # observable = "validate_phase_resultが返すResultValidationError"
+    # observation_boundary = "component-behavior"
+    # scope = "metadata-oracle-field-presence"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_metadata_result_rejects_oracle_field_when_oracle_is_absent(self):
+        value = aggregation_input()
+        result = copy.deepcopy(value["metadata_result"])
+        record = copy.deepcopy(value["alignment_packet"]["records"][0])
+        del record["metadata"]["oracle"]
+        result["reviews"][0]["evidence"][0]["fields"] = ["oracle.ref"]
+
+        with self.assertRaises(ResultValidationError) as raised:
+            validate_phase_result("metadata", result, [record])
+
+        self.assertEqual(raised.exception.details["violation_type"], "UNAVAILABLE_FIELD")
+        self.assertEqual(raised.exception.details["record_id"], record["record_id"])
+        self.assertEqual(raised.exception.details["invalid_field"], "oracle.ref")
+
+    # @test-value v2
+    # kind = "security"
+    # claim = "metadata validation detailsはmodel由来のfield文字列と非canonical record identityを漏らさない"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#50" }
+    # fault = "path、改行、tokenを含む長大fieldをvalidator errorへそのまま埋め込みsecretやsourceを公開する"
+    # observable = "ResultValidationError.detailsとその文字列表現"
+    # observation_boundary = "public-boundary"
+    # scope = "metadata-validation-diagnostic-redaction"
+    # lifecycle = "permanent"
+    # risk_tags = ["privacy", "security"]
+    # @end-test-value
+    def test_metadata_validation_details_redact_unbounded_field_and_record_id(self):
+        value = aggregation_input()
+        result = copy.deepcopy(value["metadata_result"])
+        record = copy.deepcopy(value["alignment_packet"]["records"][0])
+        unsafe_record_id = "C:\\private\\source.cs:42"
+        unsafe_field = (
+            "C:\\private\\source.cs\n"
+            "Authorization: Bearer secret-token "
+            + ("x" * 1024)
+        )
+        record["record_id"] = unsafe_record_id
+        result["reviews"][0]["record_id"] = unsafe_record_id
+        result["reviews"][0]["evidence"][0]["fields"] = [unsafe_field]
+
+        with self.assertRaises(ResultValidationError) as raised:
+            validate_phase_result("metadata", result, [record])
+
+        details = raised.exception.details
+        rendered = json.dumps(details, ensure_ascii=False)
+        self.assertEqual(details["phase"], "metadata")
+        self.assertEqual(details["violation_type"], "UNAVAILABLE_FIELD")
+        self.assertEqual(details["record_id"], "REDACTED")
+        self.assertEqual(details["invalid_field"], "REDACTED")
+        self.assertEqual(details["record_id_hash"], sha256_text(unsafe_record_id))
+        self.assertEqual(details["invalid_field_hash"], sha256_text(unsafe_field))
+        self.assertNotIn(unsafe_record_id, rendered)
+        self.assertNotIn(unsafe_field, rendered)
+        self.assertNotIn("Authorization: Bearer", rendered)
 
     # @test-value v1
     # kind = "security"

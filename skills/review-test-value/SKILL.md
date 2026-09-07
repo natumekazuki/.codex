@@ -1,13 +1,17 @@
 ---
 name: review-test-value
-description: Python、TypeScript、C#のtest新規追加・意味変更をGit差分から抽出し、専用Luna/maxで検証価値と本文整合を必須審査する。削除・移設の解消も扱う。既存checkの実行だけには起動しない。
+description: Python、TypeScript、C#のtest新規追加・意味変更をGit差分から抽出し、専用Luna/maxで検証価値と本文整合を審査する。active登録時は必須審査として適用し、candidate時は明示起動で検証する。削除・移設の解消も扱い、既存checkの実行だけには起動しない。
 ---
 
 # Review Test Value
 
 構造化metadataとtest sourceの対応付け、入力固定、結果の集合・順序・hash検証はscriptが所有する。親は実際のsourceとaccepted contractを確認して保持根拠とriskを渡す。参照先を読まず、oracle.refの存在やmodelの自由出力だけで保持を承認しない。
 
-このcheckoutは候補であり、実モデルE2E・候補自身の審査・新規session確認が完了するまでliveへ配布しない。[有効化runbook](../../docs/runbooks/activate-test-value-review.md)で状態を確認する。以下は候補を明示実行する経路であり、旧単一審査へ戻すfallbackではない。
+このcheckoutはcandidateであり、実モデルE2E・候補自身の審査・新規session確認が完了するまでliveへ配布しない。[有効化runbook](../../docs/runbooks/activate-test-value-review.md)で状態を確認する。candidate期間は`$review-test-value`による明示起動だけを受け付け、通常の自動選択やrepositoryの必須gateとして扱わない。active登録へ切り替える場合はregistryとrunbookの状態を同じ変更で更新する。以下はcandidateを明示実行する経路であり、旧単一審査へ戻すfallbackではない。
+
+## 登録状態と有効化条件
+
+現在のrepositoryではcandidateのlive登録と実モデル実効性を確認できていない。Windows native CLI `0.153.4`、既存ChatGPT Pro認証による22件以上の実モデルE2E、candidate自身の審査、新規Codex sessionでの読込確認がすべて揃うまで、activeな必須gateへ変更しない。offline test、合成canary、`BLOCKED`、旧構成の履歴をこの条件の代わりにしない。有効化後はこのSkill、registry、hook、runbookの状態を同じ変更で更新する。
 
 ## testを増やす前の判断
 
@@ -15,7 +19,7 @@ description: Python、TypeScript、C#のtest新規追加・意味変更をGit差
 
 不要なtestは追加しない・減らす・適切なcheckへ移す結論を扱う。必要なnegative testや安全境界をabsenceという理由だけで捨てない。既存checkを実行するだけなら設計・価値審査を追加しない。
 
-## 候補の実行
+## Candidateの明示実行
 
 Python 3.11以降を使う。対象の選択はtask開始時のbaseからのGit modeとし、pathやrecordを都合よく選び直さない。対象外の未変更testを一括審査・移行しない。metadataを書く場合は[comment-format-v2](references/comment-format-v2.md)、対応宣言とGit選択は[source-adapters-v1](references/source-adapters-v1.md)と[git-selection-v1](references/git-selection-v1.md)を必要に応じて読む。
 
@@ -53,7 +57,19 @@ PASSとtest自体の実行成功は別の証拠である。抽出やvalidator単
 
 全phaseでLuna/maxを使い、metadata／alignmentは`test_value_luna`、deepは`test_value_deep`を別runで呼ぶ。追加contextでも判断できなければNEEDS_CONTEXTを親へ返し、Solや他modelへ自動昇格しない。
 
-初期予算はworker同時1、通常audit10%、追加contextによるdeep再実行最大1回。各実行の上限はmetadata／alignment 5分、deep 15分とする。deep入力が800,000文字を超える場合だけ、固定済みの対象順で事前にbatch分割する。全batchの検証済み結果が揃わなければ全体PASSにしない。単独recordの予算超過や期限・cancel・途中失敗を黙って切り捨てず非成功とする。stateには既存resolutionの未解決義務を保持し、別taskや別snapshotの証拠を流用しない。
+## 共通batch・deadline policy
+
+metadata、alignment、deepは同じbatch policyを使う。coordinatorは固定した全selectionをrecord順の連続batchへ分割し、次の両方を各batchへ適用する。
+
+- 1 batchは最大10 record、かつcanonical packetのUnicode文字数が最大800,000文字。prompt wrapper、system instruction、実行時の追加文は文字数へ含めない。
+- recordを削除、縮小、順序変更して上限へ合わせない。単独recordが文字数上限を超える場合は対象を残したまま`BLOCKED`とする。
+- 同じselection、canonical packet、policyからは同じbatch境界と同じ相対deadline offsetを得る。absolute monotonic anchorは実行ごとに異なる。
+
+各batchの時間予算はmetadata／alignmentが300秒、deepが900秒であり、canary（最大120秒）とcleanup（最大5秒）を含む。phase planのmonotonic startを`P`、batch予算を`B`、0始まりのbatch indexを`i`、batch開始を`S_i`とすると、workerへ渡すbatch deadlineは`min(S_i + B, P + (i + 1) × B)`、phase全体のdeadline offsetは`N × B + 10秒`とする。workerはcanary、review、cleanupで一つのmonotonicな絶対deadlineを共有し、reviewへ渡せるのはcanaryで消費した時間を差し引いた残り時間だけとする。git抽出、host evidence準備、依存準備などplan実行前の処理をこの上限へ含めるとは表現しない。
+
+worker同時実行数は1、通常auditは10%、deepのretryは最大1回とする。alignment planはmetadata packetとその依存resultをfreezeした後、deep planはmetadata／alignmentとroutingをfreezeした後に確定する。phase全体の集約では、全batchのrecord ID、metadata／source hash、件数、順序、結果の完全性を検証する。欠落、重複、順序不整合、timeout、cleanup失敗を含む一つの非成功も成功batchだけでPASSへ集約しない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、失敗時は`last-failure.json`へ診断を残す。validator failureのsanitized detailsにはpacket本文を含めず、少なくともphase、record ID、違反種別、不正fieldを残す。
+
+stateには既存resolutionの未解決義務を保持し、別taskや別snapshotの証拠を流用しない。
 
 ## Validation
 

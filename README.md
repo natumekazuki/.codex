@@ -1,16 +1,16 @@
 # Codex 個人設定
 
-Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追加の共通ルールは過剰実装の抑制と必須のtest価値審査を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
+Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追加の共通ルールは過剰実装の抑制と、active登録後の必須test価値審査を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
 
-このcheckoutは変更候補であり、ソース整理とlive導入は別の状態である。必須審査のworker・全体gate・実runtimeの確認が揃うまで、軽量化した構成をliveへ部分配布しない。現在の不足は[有効化runbook](docs/runbooks/activate-test-value-review.md)を参照する。
+このcheckoutの`review-test-value`はcandidateであり、現在は明示起動だけで利用する。通常の自動選択やrepositoryの必須gateとしては登録せず、候補のworker・全体gate・実runtimeの確認が揃うまでliveへ配布しない。Windows native CLI `0.153.4`による22件以上の実モデルE2E、candidate自身の審査、新規sessionでの読込確認はこの環境では未実施であり、有効化を報告できる状態ではない。必要な条件と同時切替は[有効化runbook](docs/runbooks/activate-test-value-review.md)を参照する。
 
 ## 構成
 
 | 正本 | 内容 |
 | --- | --- |
-| `AGENTS.md` | 短い抑制、操作境界、個人設定、必須審査とWithMateへの入口 |
+| `AGENTS.md` | 短い抑制、操作境界、個人設定、active登録後の必須審査とWithMateへの入口 |
 | `agents/` | 汎用2＋専門2のカスタムrole |
-| `skills/` | 必須1＋任意5の管理Skill |
+| `skills/` | active時に必須となる`review-test-value`のcandidate＋任意5の管理Skill |
 | `hooks/implementation-restraint.ps1`、`hooks.json` | 共通ルールの短い再通知 |
 | `config.example.toml`、`config/` | 共有できる設定例。実configと認証は端末local |
 | `docs/runbooks/` | 必要時の運用・導入手順 |
@@ -29,7 +29,7 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 汎用2roleは調査・設計・実装・review・検証に使え、必要な仕事は起動時の依頼で表す。委譲する調査・データ取得・範囲が明確な実装・検証はLunaを優先する。SolはLunaで未解決の具体的な問題、専門審査の指定、ユーザーの明示指定に限る。親が設計判断と統合を担い、必要な文脈だけを渡す。共通hookがこの方針を再通知するが、モデル利用を機械的に禁止するものではない。標準`default`／`worker`／`explorer`はカスタム4種とは別である。
 
-設定例はCLI `0.153.4`を対象にする。汎用roleの権限は親から継承し、調査依頼のread-only境界が必要な場合はruntimeで制限する。専門審査の入力隔離は[review-test-value](skills/review-test-value/SKILL.md)が所有し、汎用roleや親の自己評価で代行しない。 専門2roleはともにLuna/maxで、metadata・alignment・必要なdeepを別runで実行する。追加contextでも判断できなければNEEDS_CONTEXTを返し、Solへ自動昇格しない。
+設定例はCLI `0.153.4`を対象にする。汎用roleの権限は親から継承し、調査依頼のread-only境界が必要な場合はruntimeで制限する。専門審査の入力隔離は[review-test-value](skills/review-test-value/SKILL.md)が所有し、汎用roleや親の自己評価で代行しない。専門2roleはともにLuna/maxで、candidateではmetadata・alignment・必要なdeepを明示起動した別runで実行する。追加contextでも判断できなければNEEDS_CONTEXTを返し、Solへ自動昇格しない。
 
 親をSolへ明示切替する場合は、有効な`CODEX_HOME`直下へ配置した`gpt56.config.toml`を使う。
 
@@ -38,20 +38,20 @@ codex --profile gpt56
 codex --profile astra
 ```
 
-どちらも同じ4role・短い共通ルール・必須審査を使う。model配置とreasoning effortは運用上の設定値であり、性能の最適値や週リミット消費の解消を保証しない。設定例の値と新規sessionの実効値を区別する。
+どちらも同じ4role・短い共通ルール・candidateの審査経路を使う。model配置とreasoning effortは運用上の設定値であり、性能の最適値や週リミット消費の解消を保証しない。設定例の値と新規sessionの実効値を区別する。
 
 ## Skill
 
 | Skill | 起動用途 |
 | --- | --- |
-| `review-test-value` | Python／TypeScript／C#のtest新規追加・意味変更で必須。削除・移設の解消も扱う |
+| `review-test-value` | active登録時にPython／TypeScript／C#のtest新規追加・意味変更へ必須適用。candidate期間は明示起動。削除・移設の解消も扱う |
 | `design-ui-information` | 明示的なUI設計方針の指定・見直し |
 | `japanese-tech-writing-review` | 明示的な技術文書の推敲・論証・表記確認 |
 | `natural-japanese` | 明示的な自然さの推敲・採点・文体調整 |
 | `audit-codex-work-quality` | 日次・固定期間の作業監査 |
 | `relaygraph` | 採用済みrepositoryの関係調査・変更・検証。新規導入は明示依頼時 |
 
-UIと二つの文書Skillは`agents/openai.yaml`の`policy.allow_implicit_invocation: false`で明示呼出し中心にする。通常のREADME編集、commit、短報告へ自動の校正工程を付けない。明示された文書modeの必要工程は保つ。必須`review-test-value`にはこの無効化を適用しない。
+UIと二つの文書Skill、およびcandidateの`review-test-value`は各Skillの`agents/openai.yaml`にある`policy.allow_implicit_invocation: false`で明示呼出しにする。通常のREADME編集、commit、短報告へ自動の校正工程を付けない。明示された文書modeの必要工程は保つ。activeな必須gateへ切り替える場合は、実際のregistryとrunbookの状態を同じ変更で更新する。
 
 Skillはruntimeが通知する実pathから読む。本repositoryの`skills/`は配布元であり、全hostの探索先が同じとは仮定しない。新規sessionの一覧で発見と重複を確認する。`withmate-glossary`はWithMateが配布する別枠のmanaged Skillであり、コピー・forkしない。
 
@@ -72,4 +72,4 @@ hookは有効な`CODEX_HOME`（未指定ならユーザーhomeの`.codex`）か�
 
 WithMateのMemory／Character操作はMCP toolの説明とschemaに従い、[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
 
-CIは既存の抽出・packet・validator・routing・resolution・監査機能と抑制hookを確認する。offlineの成功を実モデル審査や新規sessionの成功と同一視しない。候補の必須審査が完了してから、[小さな比較と導入手順](docs/runbooks/compare-subagent-roles.md)で確認・切替する。公開CIへ有料モデル実行やsecretを追加しない。
+CIは既存の抽出・packet・validator・routing・resolution・監査機能と抑制hookを確認する。offlineの成功を実モデル審査や新規sessionの成功と同一視しない。candidateの実モデルE2E・自己審査・新規session確認が完了し、[小さな比較と導入手順](docs/runbooks/compare-subagent-roles.md)の条件を満たすまで、公開CIやrepositoryの必須gateから呼び出さない。activeへ切り替えるときはregistryとrunbookを同じ変更で更新し、有料モデル実行やsecretを公開CIへ追加しない。

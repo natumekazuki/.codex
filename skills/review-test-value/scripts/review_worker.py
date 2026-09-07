@@ -9,8 +9,10 @@ import copy
 import ctypes
 from ctypes import wintypes
 from dataclasses import dataclass
+from contextvars import ContextVar
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -19,6 +21,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from typing import Any, Callable
 import uuid
 
@@ -49,6 +53,13 @@ CREATE_NEW_PROCESS_GROUP = 0x00000200
 CREATE_NO_WINDOW = 0x08000000
 PROFILE_NAME = "test-value-review-worker"
 SUPPORTED_CLI_VERSION = "codex-cli 0.153.4"
+# A process runner can need a short, bounded interval to terminate a Windows
+# Job Object and drain its pipes.  The coordinator's absolute deadline leaves
+# this interval unused by canary/review work and the worker uses it for scratch
+# cleanup as well.
+CANARY_MAX_SECONDS = 120.0
+CLEANUP_RESERVE_SECONDS = 5.0
+PROCESS_TREE_TERMINATION_SECONDS = 5.0
 PHASE_CONTRACTS = {
     "metadata": "metadata-review-contract.md",
     "alignment": "alignment-review-contract.md",
@@ -140,6 +151,9 @@ class ReviewWorkerBlocked(RuntimeError):
 
 
 ProcessRunner = Callable[[list[str], str, Path, float], ProcessOutcome]
+_ACTIVE_PROCESS_DEADLINE: ContextVar[float | None] = ContextVar(
+    "review_worker_process_deadline", default=None
+)
 
 
 class _IO_COUNTERS(ctypes.Structure):
@@ -178,10 +192,30 @@ class _EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
     ]
 
 
+class _BASIC_ACCOUNTING_INFORMATION(ctypes.Structure):
+    """The part of JOBOBJECT_BASIC_ACCOUNTING_INFORMATION we need.
+
+    Querying the job rather than just waiting for the primary Popen handle is
+    what lets the worker prove that descendants have also stopped.
+    """
+
+    _fields_ = [
+        ("TotalUserTime", ctypes.c_int64),
+        ("TotalKernelTime", ctypes.c_int64),
+        ("ThisPeriodTotalUserTime", ctypes.c_int64),
+        ("ThisPeriodTotalKernelTime", ctypes.c_int64),
+        ("TotalPageFaultCount", wintypes.DWORD),
+        ("TotalProcesses", wintypes.DWORD),
+        ("ActiveProcesses", wintypes.DWORD),
+        ("TotalTerminatedProcesses", wintypes.DWORD),
+    ]
+
+
 class _WindowsJob:
     """Own a Windows process tree and terminate it when the handle closes."""
 
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+    JobObjectBasicAccountingInformation = 1
     JobObjectExtendedLimitInformation = 9
 
     def __init__(self) -> None:
@@ -199,6 +233,16 @@ class _WindowsJob:
         kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
         kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
         kernel32.TerminateJobObject.restype = wintypes.BOOL
+        kernel32.QueryInformationJobObject.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        kernel32.QueryInformationJobObject.restype = wintypes.BOOL
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
         kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         kernel32.CloseHandle.restype = wintypes.BOOL
         self._kernel32 = kernel32
@@ -224,6 +268,40 @@ class _WindowsJob:
     def terminate(self) -> None:
         if self._handle and not self._kernel32.TerminateJobObject(self._handle, 1):
             raise OSError(ctypes.get_last_error(), "TerminateJobObject failed")
+
+    def active_processes(self) -> int:
+        if not self._handle:
+            return 0
+        accounting = _BASIC_ACCOUNTING_INFORMATION()
+        returned = wintypes.DWORD()
+        if not self._kernel32.QueryInformationJobObject(
+            self._handle,
+            self.JobObjectBasicAccountingInformation,
+            ctypes.byref(accounting),
+            ctypes.sizeof(accounting),
+            ctypes.byref(returned),
+        ):
+            raise OSError(ctypes.get_last_error(), "QueryInformationJobObject failed")
+        return int(accounting.ActiveProcesses)
+
+    def wait_empty(self, timeout: float) -> bool:
+        """Wait for the job's primary process *and* all descendants to stop."""
+
+        if timeout < 0:
+            timeout = 0
+        deadline = time.monotonic() + timeout
+        while True:
+            if self.active_processes() == 0:
+                return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            wait_ms = min(50, max(1, int(remaining * 1000)))
+            result = self._kernel32.WaitForSingleObject(self._handle, wait_ms)
+            if result == 0x00000000:  # WAIT_OBJECT_0
+                return self.active_processes() == 0
+            if result != 0x00000102:  # WAIT_TIMEOUT
+                raise OSError(ctypes.get_last_error(), "WaitForSingleObject failed")
 
     def close(self) -> None:
         if self._handle:
@@ -285,9 +363,39 @@ def _resume_suspended_process(process_id: int) -> None:
     raise OSError("suspended primary thread was not found")
 
 
+def _terminate_job_tree(job: _WindowsJob, *, timeout: float) -> None:
+    """Terminate and verify every process currently owned by ``job``."""
+
+    try:
+        job.terminate()
+    except OSError as exc:
+        # A process can exit between the timeout and TerminateJobObject.  In
+        # that case a zero active-process count is still a verified cleanup.
+        try:
+            if job.active_processes() == 0:
+                return
+        except OSError:
+            pass
+        raise ReviewWorkerBlocked("PROCESS_TREE_TERMINATION_FAILED") from exc
+    try:
+        empty = job.wait_empty(timeout)
+    except OSError as exc:
+        raise ReviewWorkerBlocked("PROCESS_TREE_TERMINATION_UNCONFIRMED") from exc
+    if not empty:
+        raise ReviewWorkerBlocked("PROCESS_TREE_TERMINATION_UNCONFIRMED")
+
+
 def _run_process(argv: list[str], input_text: str, cwd: Path, timeout: float) -> ProcessOutcome:
     if platform.system() != "Windows":
         raise ReviewWorkerBlocked("WINDOWS_RUNTIME_REQUIRED")
+    if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout < 0:
+        raise ReviewWorkerBlocked("INVALID_PROCESS_TIMEOUT")
+    absolute_deadline = _ACTIVE_PROCESS_DEADLINE.get()
+    if absolute_deadline is not None:
+        timeout = min(
+            float(timeout),
+            max(0.0, absolute_deadline - time.monotonic() - CLEANUP_RESERVE_SECONDS),
+        )
     try:
         job = _WindowsJob()
     except OSError as exc:
@@ -315,31 +423,67 @@ def _run_process(argv: list[str], input_text: str, cwd: Path, timeout: float) ->
             job.assign(int(process._handle))  # type: ignore[attr-defined]
             _resume_suspended_process(process.pid)
         except OSError as exc:
+            tree_error: ReviewWorkerBlocked | None = None
+            assignment_cleanup_deadline = (
+                time.monotonic() + PROCESS_TREE_TERMINATION_SECONDS
+            )
+            if absolute_deadline is not None:
+                assignment_cleanup_deadline = min(
+                    assignment_cleanup_deadline, absolute_deadline
+                )
             try:
-                job.terminate()
-            except OSError:
-                pass
+                _terminate_job_tree(
+                    job,
+                    timeout=max(
+                        0.0, assignment_cleanup_deadline - time.monotonic()
+                    ),
+                )
+            except ReviewWorkerBlocked as termination_error:
+                tree_error = termination_error
+            # Assignment can fail before the suspended primary process enters
+            # the job.  Kill that handle directly and wait with the same
+            # bounded interval so an unowned process cannot escape cleanup.
             try:
-                process.kill()
-            except OSError:
-                pass
-            try:
-                process.wait(timeout=5)
+                if process.poll() is None:
+                    process.kill()
+                process.wait(
+                    timeout=max(0.0, assignment_cleanup_deadline - time.monotonic())
+                )
             except subprocess.TimeoutExpired as termination_exc:
                 raise ReviewWorkerBlocked(
                     "PROCESS_TREE_TERMINATION_UNCONFIRMED"
                 ) from termination_exc
+            except OSError as termination_exc:
+                raise ReviewWorkerBlocked(
+                    "PROCESS_TREE_TERMINATION_FAILED"
+                ) from termination_exc
+            if tree_error is not None:
+                raise tree_error
             raise ReviewWorkerBlocked("JOB_OBJECT_ASSIGNMENT_FAILED") from exc
+        if absolute_deadline is not None:
+            # Popen, job assignment, and resume happen before communicate's
+            # timeout starts.  Recompute here so launch time cannot extend the
+            # coordinator's absolute deadline.
+            timeout = min(
+                float(timeout),
+                max(0.0, absolute_deadline - time.monotonic() - CLEANUP_RESERVE_SECONDS),
+            )
         try:
-            stdout, stderr = process.communicate(input=input_text, timeout=timeout)
-            return ProcessOutcome(process.returncode, stdout, stderr)
+            stdout, stderr = process.communicate(input=input_text, timeout=float(timeout))
         except subprocess.TimeoutExpired:
+            # The process runner owns this bounded termination interval.  The
+            # caller reserves the same interval from its absolute deadline.
+            cleanup_deadline = time.monotonic() + PROCESS_TREE_TERMINATION_SECONDS
+            if absolute_deadline is not None:
+                cleanup_deadline = min(cleanup_deadline, absolute_deadline)
+            _terminate_job_tree(
+                job,
+                timeout=max(0.0, cleanup_deadline - time.monotonic()),
+            )
             try:
-                job.terminate()
-            except OSError as exc:
-                raise ReviewWorkerBlocked("PROCESS_TREE_TERMINATION_FAILED") from exc
-            try:
-                stdout, stderr = process.communicate(timeout=5)
+                stdout, stderr = process.communicate(
+                    timeout=max(0.0, cleanup_deadline - time.monotonic())
+                )
             except subprocess.TimeoutExpired as exc:
                 raise ReviewWorkerBlocked("PROCESS_TREE_TERMINATION_UNCONFIRMED") from exc
             return ProcessOutcome(
@@ -349,10 +493,41 @@ def _run_process(argv: list[str], input_text: str, cwd: Path, timeout: float) ->
                 timed_out=True,
                 process_tree_terminated=True,
             )
+
+        # A successful primary process can still leave a descendant holding a
+        # pipe or doing work.  Kill and verify that tree before releasing the
+        # job handle; checking only Popen.returncode is insufficient.
+        try:
+            active_processes = job.active_processes()
+        except OSError as exc:
+            raise ReviewWorkerBlocked("PROCESS_TREE_TERMINATION_UNCONFIRMED") from exc
+        tree_terminated = False
+        if active_processes:
+            cleanup_timeout = PROCESS_TREE_TERMINATION_SECONDS
+            if absolute_deadline is not None:
+                cleanup_timeout = min(
+                    cleanup_timeout,
+                    max(0.0, absolute_deadline - time.monotonic()),
+                )
+            _terminate_job_tree(job, timeout=cleanup_timeout)
+            tree_terminated = True
+        return ProcessOutcome(
+            process.returncode if process.returncode is not None else 1,
+            stdout,
+            stderr,
+            process_tree_terminated=tree_terminated,
+        )
+    except ReviewWorkerBlocked:
+        raise
     except OSError as exc:
         raise ReviewWorkerBlocked("WORKER_LAUNCH_FAILED") from exc
     finally:
-        job.close()
+        try:
+            job.close()
+        except OSError as exc:
+            # Closing with KILL_ON_JOB_CLOSE is itself part of process-tree
+            # cleanup.  Never turn a close failure into a successful result.
+            raise ReviewWorkerBlocked("PROCESS_TREE_TERMINATION_UNCONFIRMED") from exc
 
 
 def _toml_string(value: str) -> str:
@@ -796,6 +971,22 @@ def _bound_phase_result_schema(
                         "type": "string",
                         "enum": [record[key]],
                     }
+            if phase == "metadata":
+                metadata = record.get("metadata")
+                allowed_fields = set(metadata) if isinstance(metadata, dict) else set()
+                oracle = metadata.get("oracle") if isinstance(metadata, dict) else None
+                if isinstance(oracle, dict):
+                    allowed_fields.update(
+                        f"oracle.{key}"
+                        for key in ("type", "ref")
+                        if key in oracle
+                    )
+                variant["properties"]["evidence"]["items"]["properties"][
+                    "fields"
+                ]["items"] = {
+                    "type": "string",
+                    "enum": sorted(allowed_fields),
+                }
             if phase == "deep" and record["context"]:
                 context_items = variant["properties"]["context_resolution"]["properties"][
                     "context_evidence"
@@ -853,8 +1044,21 @@ def _contract_path(role_path: Path, phase: str) -> Path:
 
 
 def _prepare_worker(
-    *, cli: str, role_file: str, phases: list[str] | tuple[str, ...] | None
+    *,
+    cli: str,
+    role_file: str,
+    phases: list[str] | tuple[str, ...] | None,
+    deadline_monotonic: float | None = None,
 ) -> _WorkerPreparation:
+    if deadline_monotonic is not None:
+        if (
+            not isinstance(deadline_monotonic, (int, float))
+            or isinstance(deadline_monotonic, bool)
+            or not math.isfinite(float(deadline_monotonic))
+        ):
+            raise ReviewWorkerBlocked("INVALID_DEADLINE")
+        if deadline_monotonic - time.monotonic() <= CLEANUP_RESERVE_SECONDS:
+            raise ReviewWorkerBlocked("PHASE_DEADLINE_EXCEEDED")
     if platform.system() != "Windows":
         raise ReviewWorkerBlocked("WINDOWS_RUNTIME_REQUIRED")
     _assert_no_local_managed_config()
@@ -880,7 +1084,25 @@ def _prepare_worker(
         requested_set = set(requested_phases)
         selected_phases = [phase for phase in PHASE_CONTRACTS if phase in requested_set]
         before_hash = _sha256(executable)
-        _, version, _ = _run_version(executable_realpath, VERSION_TIMEOUT_SECONDS)
+        version_timeout = VERSION_TIMEOUT_SECONDS
+        if deadline_monotonic is not None:
+            version_timeout = min(
+                version_timeout,
+                max(
+                    0.0,
+                    deadline_monotonic
+                    - time.monotonic()
+                    - CLEANUP_RESERVE_SECONDS,
+                ),
+            )
+            if version_timeout <= 0:
+                raise ReviewWorkerBlocked("PHASE_DEADLINE_EXCEEDED")
+        _, version, _ = _run_version(executable_realpath, version_timeout)
+        if (
+            deadline_monotonic is not None
+            and deadline_monotonic - time.monotonic() <= CLEANUP_RESERVE_SECONDS
+        ):
+            raise ReviewWorkerBlocked("PHASE_DEADLINE_EXCEEDED")
         if version != SUPPORTED_CLI_VERSION:
             raise ReviewWorkerBlocked("CLI_VERSION_UNSUPPORTED")
         executable_hash = _sha256(executable)
@@ -956,6 +1178,106 @@ def review_prompt(packet: dict[str, Any]) -> str:
     )
 
 
+def _usable_phase_budget(deadline_monotonic: float) -> float:
+    """Return work time while preserving the bounded cleanup reservation."""
+
+    remaining = deadline_monotonic - time.monotonic()
+    usable = remaining - CLEANUP_RESERVE_SECONDS
+    if usable <= 0:
+        raise ReviewWorkerBlocked("PHASE_DEADLINE_EXCEEDED")
+    return usable
+
+
+def _invoke_runner(
+    runner: ProcessRunner,
+    argv: list[str],
+    input_text: str,
+    cwd: Path,
+    *,
+    deadline_monotonic: float,
+    max_timeout: float | None = None,
+) -> ProcessOutcome:
+    """Invoke a runner with a relative budget and an absolute deadline guard.
+
+    The public fake-runner contract stays a four-argument callable.  The
+    context variable lets the native runner account for launch time too,
+    while test doubles continue to observe the relative timeout value.
+    """
+
+    timeout = _usable_phase_budget(deadline_monotonic)
+    if max_timeout is not None:
+        timeout = min(timeout, max_timeout)
+    token = _ACTIVE_PROCESS_DEADLINE.set(deadline_monotonic)
+    try:
+        return runner(argv, input_text, cwd, timeout)
+    finally:
+        _ACTIVE_PROCESS_DEADLINE.reset(token)
+
+
+def _safe_validation_detail(value: Any, *, limit: int = 256) -> str | None:
+    if not isinstance(value, str) or not value or len(value) > limit:
+        return None
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in value):
+        return None
+    return value
+
+
+def _validation_failure_evidence(
+    phase: str, error: ResultValidationError
+) -> dict[str, Any]:
+    """Expose only bounded validator coordinates, never the model result."""
+
+    details = getattr(error, "details", {})
+    safe: dict[str, Any] = {"phase": phase}
+    if isinstance(details, dict):
+        for key, limit in (
+            ("record_id", 256),
+            ("violation_type", 80),
+            ("invalid_field", 256),
+            ("invalid_field_hash", 128),
+        ):
+            value = _safe_validation_detail(details.get(key), limit=limit)
+            if value is not None:
+                safe[key] = value
+    return safe
+
+
+def _cleanup_owned_paths(
+    paths: tuple[Path, ...], deadline_monotonic: float
+) -> bool:
+    """Remove worker-owned directories without waiting past the phase deadline."""
+
+    errors: list[BaseException] = []
+
+    def remove() -> None:
+        for path in paths:
+            try:
+                if path.exists():
+                    shutil.rmtree(path, ignore_errors=False)
+            except Exception as exc:  # noqa: BLE001 - convert to BLOCKED below
+                errors.append(exc)
+
+    cleanup_thread = threading.Thread(
+        target=remove,
+        name="review-worker-cleanup",
+        daemon=True,
+    )
+    cleanup_thread.start()
+    remaining = max(0.0, deadline_monotonic - time.monotonic())
+    cleanup_thread.join(min(PROCESS_TREE_TERMINATION_SECONDS, remaining))
+    if cleanup_thread.is_alive() or errors:
+        return False
+    if time.monotonic() > deadline_monotonic:
+        return False
+    for path in paths:
+        try:
+            if path.exists():
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def execute_phase(
     phase: str,
     packet: dict[str, Any],
@@ -963,13 +1285,34 @@ def execute_phase(
     cli: str,
     role_file: str,
     timeout_seconds: float = 300.0,
+    deadline_monotonic: float | None = None,
     runner: ProcessRunner = _run_process,
 ) -> PhaseExecution:
     """Execute one phase after a same-runtime synthetic isolation canary."""
+    entry_monotonic = time.monotonic()
+    if deadline_monotonic is None:
+        if (
+            not isinstance(timeout_seconds, (int, float))
+            or isinstance(timeout_seconds, bool)
+            or not math.isfinite(float(timeout_seconds))
+            or not 1 <= timeout_seconds <= 1800
+        ):
+            raise ReviewWorkerBlocked("INVALID_TIMEOUT")
+        deadline_monotonic = entry_monotonic + float(timeout_seconds)
+    elif (
+        not isinstance(deadline_monotonic, (int, float))
+        or isinstance(deadline_monotonic, bool)
+        or not math.isfinite(float(deadline_monotonic))
+    ):
+        raise ReviewWorkerBlocked("INVALID_DEADLINE")
+    phase_deadline = float(deadline_monotonic)
     records = _validate_packet(phase, packet)
-    if not isinstance(timeout_seconds, (int, float)) or not 1 <= timeout_seconds <= 1800:
-        raise ReviewWorkerBlocked("INVALID_TIMEOUT")
-    preparation = _prepare_worker(cli=cli, role_file=role_file, phases=[phase])
+    preparation = _prepare_worker(
+        cli=cli,
+        role_file=role_file,
+        phases=[phase],
+        deadline_monotonic=phase_deadline,
+    )
     executable = preparation.executable
     executable_realpath = preparation.executable_realpath
     executable_hash = preparation.executable_hash
@@ -989,6 +1332,7 @@ def execute_phase(
     except UnicodeDecodeError as exc:
         raise ReviewWorkerBlocked("PHASE_CONTRACT_UNAVAILABLE") from exc
     developer_instructions = role["developer_instructions"] + "\n\n" + contract_text
+    _usable_phase_budget(phase_deadline)
 
     scratch = Path(tempfile.mkdtemp(prefix="codex-test-value-worker-"))
     canary_root: Path | None = None
@@ -1015,8 +1359,16 @@ def execute_phase(
             schema=None,
             enable_shell=True,
         )
-        canary_outcome = runner(canary_argv, canary_prompt, scratch, min(timeout_seconds, 120.0))
+        canary_outcome = _invoke_runner(
+            runner,
+            canary_argv,
+            canary_prompt,
+            scratch,
+            deadline_monotonic=phase_deadline,
+            max_timeout=CANARY_MAX_SECONDS,
+        )
         canary_evidence = _verify_canary(canary_outcome, token, canary)
+        _usable_phase_budget(phase_deadline)
         current_auth = _consumer_auth_snapshot(environment["CODEX_HOME"])
         if (
             current_auth.path != auth_snapshot.path
@@ -1048,7 +1400,13 @@ def execute_phase(
             schema=schema,
             enable_shell=False,
         )
-        review_outcome = runner(review_argv, review_prompt(packet), scratch, timeout_seconds)
+        review_outcome = _invoke_runner(
+            runner,
+            review_argv,
+            review_prompt(packet),
+            scratch,
+            deadline_monotonic=phase_deadline,
+        )
         raw_result = _review_result(review_outcome)
         try:
             result = validate_phase_result(
@@ -1058,8 +1416,15 @@ def execute_phase(
                 packet.get("input_hash") if phase == "deep" else None,
             )
         except ResultValidationError as exc:
+            validation_details = _validation_failure_evidence(phase, exc)
             raise ReviewWorkerBlocked(
-                "REVIEW_RESULT_VALIDATION_FAILED", {"validator_error": str(exc)}
+                "REVIEW_RESULT_VALIDATION_FAILED",
+                {
+                    "phase": phase,
+                    "validator_error": str(exc),
+                    "validation_details": validation_details,
+                    **validation_details,
+                },
             ) from exc
         evidence = {
             "schema_version": "review-worker-evidence-v1",
@@ -1106,18 +1471,17 @@ def execute_phase(
             "payload_delivered": True,
             "result_validated": True,
         }
+        _usable_phase_budget(phase_deadline)
         return PhaseExecution(result=result, evidence=evidence)
     finally:
-        cleanup_failed = False
-        for owned_path in (scratch, canary_root):
-            if owned_path is None:
-                continue
-            try:
-                shutil.rmtree(owned_path, ignore_errors=False)
-            except OSError:
-                cleanup_failed = True
-        if cleanup_failed:
-            raise ReviewWorkerBlocked("SCRATCH_CLEANUP_FAILED")
+        owned_paths = tuple(
+            path for path in (scratch, canary_root) if path is not None
+        )
+        if owned_paths and not _cleanup_owned_paths(owned_paths, phase_deadline):
+            raise ReviewWorkerBlocked(
+                "SCRATCH_CLEANUP_FAILED",
+                {"phase": phase, "paths_removed": False},
+            )
 
 
 def main(argv: list[str] | None = None) -> int:

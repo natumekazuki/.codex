@@ -354,6 +354,42 @@ def build_deep_packet(
     return {**packet, "input_hash": result_hash(packet)}
 
 
+def project_phase_batch(
+    phase: str, global_packet: dict[str, Any], contiguous_records: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Project a transport slice without changing the frozen per-record reviews."""
+    if phase == "deep":
+        return project_deep_batch(global_packet, contiguous_records)
+    if phase not in {"metadata", "alignment"}:
+        raise PacketError("unknown batch phase")
+    expected_keys = {"review_contract_version", "records"}
+    if phase == "alignment":
+        expected_keys.add("metadata_result_hash")
+    if set(global_packet) != expected_keys or global_packet["review_contract_version"] != f"{phase}-review-v2":
+        raise PacketError("global phase packet has unexpected shape")
+    records = global_packet["records"]
+    if not isinstance(records, list) or not contiguous_records:
+        raise PacketError("batch must contain records")
+    starts = [i for i in range(len(records) - len(contiguous_records) + 1)
+              if records[i:i + len(contiguous_records)] == contiguous_records]
+    if len(starts) != 1:
+        raise PacketError("batch is not one unique contiguous global slice")
+    packet = {"review_contract_version": global_packet["review_contract_version"],
+              "records": contiguous_records}
+    if phase == "alignment":
+        frozen = {"review_contract_version": "metadata-review-v2",
+                  "reviews": [item["metadata_review"] for item in records]}
+        try:
+            validate_alignment_packet(global_packet, frozen)
+        except ResultValidationError as exc:
+            raise PacketError(str(exc)) from exc
+        packet["metadata_result_hash"] = result_hash({
+            "review_contract_version": "metadata-review-v2",
+            "reviews": [item["metadata_review"] for item in contiguous_records],
+        })
+    return packet
+
+
 def project_deep_batch(
     global_packet: dict[str, Any], contiguous_records: list[dict[str, Any]]
 ) -> dict[str, Any]:

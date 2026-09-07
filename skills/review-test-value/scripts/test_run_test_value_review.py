@@ -70,7 +70,127 @@ def alignment_result(packet: dict, verdict: str = "MISMATCH") -> dict:
     }
 
 
+def sized_phase_packets(count):
+    extracted = extractor_result()
+    template = extracted["tests"][0]
+    extracted["tests"] = []
+    for index in range(count):
+        record = copy.deepcopy(template)
+        record["source"]["path"] = f"tests/test_{index:03d}.py"
+        extracted["tests"].append(record)
+    metadata = build_metadata_packet_multi([extracted])
+    frozen = metadata_result(metadata)
+    alignment = build_alignment_packet_multi([extracted], frozen)
+    aligned = alignment_result(alignment)
+    workflow = {"review_contract_version": "review-workflow-context-v1", "records": [
+        {"record_id": record["record_id"], "metadata_hash": record["metadata_hash"],
+         "parent_risk_tags": ["security"], "audit_percent": 10} for record in alignment["records"]]}
+    routing = build_routing_manifest(coordinator._routing_inputs(alignment, aligned), workflow)
+    deep = build_deep_packet(alignment, frozen, aligned, routing, workflow, {})
+    return {"metadata": metadata, "alignment": alignment, "deep": deep}
+
+
 class ReviewCoordinatorTests(unittest.TestCase):
+    # @test-value v2
+    # kind = "regression"
+    # claim = "全phaseの固定selectionを件数とcanonical文字数の両上限で自動分割し規模別の時間上限を計画する"
+    # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
+    # fault = "固定5分または単一packetのまま大量対象を処理するか文字数超過recordを捨てる"
+    # observable = "1/10/11/22/100件の境界・deadline offset・文字数分割・単独超過BLOCKED"
+    # observation_boundary = "component-behavior"
+    # scope = "review-batch-planning"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_all_phase_batch_plans_obey_count_char_and_deadline_policy(self):
+        for count, sizes in ((1, [1]), (10, [10]), (11, [10, 1]), (22, [10, 10, 2]), (100, [10] * 10)):
+            for phase, packet in sized_phase_packets(count).items():
+                with self.subTest(count=count, phase=phase):
+                    batches, plan = coordinator.plan_phase_batches(phase, packet)
+                    self.assertEqual([len(batch["records"]) for batch in batches], sizes)
+                    self.assertEqual([record for batch in batches for record in batch["records"]], packet["records"])
+                    self.assertEqual(coordinator.plan_phase_batches(phase, copy.deepcopy(packet)), (batches, plan))
+                    seconds = 900 if phase == "deep" else 300
+                    self.assertEqual(plan["phase_seconds"], len(sizes) * seconds + 10)
+                    self.assertEqual([b["deadline_offset_seconds"] for b in plan["batches"]],
+                                     [seconds * (i + 1) for i in range(len(sizes))])
+                    for batch in batches:
+                        review_worker._validate_packet(phase, batch)
+        for phase, packet in sized_phase_packets(2).items():
+            singletons = [coordinator.project_phase_batch(phase, packet, [record]) for record in packet["records"]]
+            limit = max(len(canonical_json(batch)) for batch in singletons)
+            batches, _ = coordinator.plan_phase_batches(phase, packet, packet_char_limit=limit)
+            self.assertEqual([len(batch["records"]) for batch in batches], [1, 1])
+            with self.assertRaises(coordinator.CoordinatorBlocked) as caught:
+                coordinator.plan_phase_batches(phase, packet, packet_char_limit=limit - 1)
+            self.assertEqual(caught.exception.reason_code, "BATCH_RECORD_TOO_LARGE")
+            self.assertIn(caught.exception.details["record_id"], [r["record_id"] for r in packet["records"]])
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "metadata/alignmentの全batchを検証し中間失敗や不完全・順序変更・hash破損を全体成功にしない"
+    # oracle = { type = "contract", ref = "docs/runbooks/activate-test-value-review.md" }
+    # fault = "22件中の成功batchだけを集約するか保存証拠の改変を再利用する"
+    # observable = "全22件の集約と保存proof再検証、破損時BLOCKEDおよび後続worker未起動"
+    # observation_boundary = "component-behavior"
+    # scope = "review-batch-completeness"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_metadata_alignment_batches_fail_closed_and_revalidate_all_proofs(self):
+        for phase, packet in sized_phase_packets(22).items():
+            if phase == "deep":
+                continue  # Deep results/proof corruption are covered by the existing deep-round test.
+            factory = metadata_result if phase == "metadata" else alignment_result
+            def execute(_phase, batch, **kwargs):
+                self.assertGreater(kwargs["deadline_monotonic"], coordinator.time.monotonic())
+                return factory(batch), {"schema_version": "review-worker-evidence-v1", "phase": phase}
+            with mock.patch.object(coordinator, "_execute_phase", side_effect=execute) as worker, mock.patch.object(coordinator, "_validate_worker_toolchain"):
+                result, proof = coordinator._execute_batch_round(phase, packet, cli="codex", role_file=Path("role"), toolchain_identity={})
+                self.assertEqual(worker.call_count, 3)
+                self.assertEqual(result, factory(packet))
+                corruptions = []
+                for operation in ("missing", "duplicate", "order", "metadata_hash", "source_hash"):
+                    if phase == "metadata" and operation == "source_hash":
+                        continue
+                    bad = copy.deepcopy(proof)
+                    if operation == "missing":
+                        bad["batches"].pop(1)
+                    elif operation == "duplicate":
+                        bad["batches"][1] = copy.deepcopy(bad["batches"][0])
+                    elif operation == "order":
+                        bad["batches"][1]["result"]["reviews"].reverse()
+                    else:
+                        bad["batches"][1]["result"]["reviews"][0][operation] = content_hash("tampered")
+                    for batch in bad["batches"]:
+                        batch["result_hash"] = coordinator.result_hash(batch["result"])
+                    corruptions.append(bad)
+                for bad in corruptions:
+                    with self.assertRaises(coordinator.CoordinatorBlocked):
+                        coordinator._validate_batch_execution(bad, packet, result, {})
+            for failure in ("timeout", "missing", "duplicate", "order", "late"):
+                called = []
+                clock = [100.0]
+                def fail_second(_phase, batch, **kwargs):
+                    called.append(batch)
+                    result = factory(batch)
+                    if len(called) == 2:
+                        if failure == "timeout":
+                            raise coordinator.CoordinatorBlocked("REVIEW_TIMEOUT", "timeout")
+                        if failure == "missing":
+                            result["reviews"].pop()
+                        if failure == "duplicate":
+                            result["reviews"][1] = copy.deepcopy(result["reviews"][0])
+                        if failure == "order":
+                            result["reviews"].reverse()
+                        if failure == "late":
+                            clock[0] = kwargs["deadline_monotonic"] + 1
+                    return result, {"schema_version": "review-worker-evidence-v1", "phase": phase}
+                with mock.patch.object(coordinator, "_execute_phase", side_effect=fail_second), mock.patch.object(coordinator, "_validate_worker_toolchain"), mock.patch.object(coordinator.time, "monotonic", side_effect=lambda: clock[0]):
+                    with self.assertRaises(coordinator.CoordinatorBlocked) as caught:
+                        coordinator._execute_batch_round(phase, packet, cli="codex", role_file=Path("role"), toolchain_identity={})
+                self.assertEqual(len(called), 2)
+                self.assertEqual(caught.exception.details["batch_index"], 1)
+                self.assertEqual(caught.exception.details["completed_batches"], 1)
+
     # @test-value v2
     # kind = "regression"
     # claim = "v1削除は元metadataで各phaseと保持根拠を検証し、削除解消義務を残す"
@@ -271,6 +391,18 @@ class ReviewCoordinatorTests(unittest.TestCase):
         self.assertEqual(result["details"], canary.exception.details)
         self.assertNotIn("commands", result["details"]["canary_evidence"])
         self.assertNotIn("unrelated.txt", output.getvalue())
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            state = Path(temporary) / "state"
+            root.mkdir()
+            state.mkdir()
+            output = io.StringIO()
+            with mock.patch.object(coordinator, "run", side_effect=canary.exception), contextlib.redirect_stdout(output):
+                self.assertEqual(coordinator.main([
+                    "--root", str(root), "--changed-from", "base", "--state-dir", str(state), "--cli", "codex"
+                ]), 2)
+            self.assertEqual(json.loads((state / "last-failure.json").read_text()), json.loads(output.getvalue()))
+            self.assertNotIn("unrelated.txt", (state / "last-failure.json").read_text())
 
     # @test-value v2
     # kind = "contract"
@@ -1067,7 +1199,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
         )
         singleton_sizes = [
             len(
-                review_worker.review_prompt(
+                canonical_json(
                     coordinator.project_deep_batch(global_packet, [record])
                 )
             )
@@ -1077,7 +1209,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
         self.assertTrue(
             all(
                 len(
-                    review_worker.review_prompt(
+                    canonical_json(
                         coordinator.project_deep_batch(
                             global_packet,
                             global_packet["records"][index : index + 2],
@@ -1127,7 +1259,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                 cli="C:/codex.exe",
                 role_file=Path("C:/test_value_deep.toml"),
                 toolchain_identity={"identity": "toolchain"},
-                prompt_char_budget=budget,
+                packet_char_limit=budget,
             )
 
         self.assertEqual(len(executed_packets), 3)
@@ -1136,7 +1268,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
             [record["record_id"] for record in global_packet["records"]],
         )
         self.assertTrue(
-            all(len(review_worker.review_prompt(packet)) <= budget for packet in executed_packets)
+            all(len(canonical_json(packet)) <= budget for packet in executed_packets)
         )
         aggregate_input = {
             "alignment_packet": alignment_packet,
@@ -1311,7 +1443,7 @@ class ReviewCoordinatorTests(unittest.TestCase):
                     cli="C:/codex.exe",
                     role_file=Path("C:/test_value_deep.toml"),
                     toolchain_identity={"identity": "toolchain"},
-                    prompt_char_budget=budget,
+                    packet_char_limit=budget,
                 )
         self.assertEqual(partial_calls, 2)
 
