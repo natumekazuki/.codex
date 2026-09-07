@@ -22,9 +22,6 @@ EXTRACTOR = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = EXTRACTOR
 SPEC.loader.exec_module(EXTRACTOR)
 
-from build_review_packets import build_metadata_packet  # noqa: E402
-
-
 VALID_METADATA = '''# @test-value v2
 # kind = "invariant"
 # claim = "同じkeyによる再試行で請求件数が1件を超えない"
@@ -594,10 +591,10 @@ def test_oracle_table_with_decoy():
     # @test-value v2
     # kind = "contract"
     # claim = "path modeのv1を移行dataとして読取るがTEST_VALUE_V2_REQUIREDで審査開始を止める"
-    # oracle = { type = "adr", ref = "ADR-0022 v1読取りをv2移行に限定する" }
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/comment-format-v2.md" }
     # fault = "v1 recordを成功扱いするか移行に必要なmetadataを失う"
     # observable = "exit status、diagnostic、metadata_format_version、metadata hash"
-    # observation_boundary = "public-boundary"
+    # observation_boundary = "component-behavior"
     # scope = "extractor-path-mode"
     # lifecycle = "permanent"
     # @end-test-value
@@ -618,6 +615,17 @@ def test_oracle_table_with_decoy():
         record = result["tests"][0]
         self.assertEqual(record["metadata_format_version"], 1)
         self.assertEqual(record["metadata"]["failure_mode"], "応答喪失後の再送で請求を二重に永続化する")
+        self.assertEqual(
+            record["metadata"],
+            {
+                "kind": "invariant",
+                "claim": "同じkeyによる再試行で請求件数が1件を超えない",
+                "oracle": {"type": "contract", "ref": "PAYMENT-004"},
+                "failure_mode": "応答喪失後の再送で請求を二重に永続化する",
+                "scope": "payment-api",
+                "lifecycle": "permanent",
+            },
+        )
         self.assertRegex(record["metadata_hash"], r"^sha256:[0-9a-f]{64}$")
 
     # @test-value v1
@@ -904,10 +912,10 @@ def test_oracle_table_with_decoy():
 
     # @test-value v2
     # kind = "regression"
-    # claim = "正常なv1削除は元metadataを審査へ渡し、不正な削除元の診断は保持する"
+    # claim = "正常なv1削除は元metadataをDELETED.beforeへ保持し、不正な削除元の診断も保持する"
     # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
     # fault = "固定baseへv2移行を要求するか削除元の不正metadataまで黙認する"
-    # observable = "Git抽出CLIのexit、診断とmetadata packetの元v1内容"
+    # observable = "Git抽出CLIのexit、診断と削除前の元v1内容"
     # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
@@ -934,10 +942,7 @@ def test_oracle_table_with_decoy():
                     if valid:
                         self.assertEqual(exit_status, 0, stderr)
                         self.assertEqual(result["diagnostics"], [])
-                        record = build_metadata_packet(result)["records"][0]
-                        self.assertEqual(record["metadata_format_version"], 1)
-                        self.assertEqual(record["metadata"], historical["metadata"])
-                        self.assertEqual(record["metadata_hash"], historical["metadata_hash"])
+                        self.assertEqual(historical["metadata_format_version"], 1)
                     else:
                         self.assertEqual(exit_status, 1, stderr)
                         self.assertTrue(any(d["code"] != "TEST_VALUE_V2_REQUIRED" for d in result["diagnostics"]))
@@ -945,7 +950,7 @@ def test_oracle_table_with_decoy():
     # @test-value v2
     # kind = "contract"
     # claim = "Git modeは未変更v1を選ばず、選択されたv1だけをV2_REQUIREDで停止する"
-    # oracle = { type = "adr", ref = "ADR-0022 v1読取りをv2移行に限定する" }
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
     # fault = "未変更v1を一括移行対象にするか変更v1を審査対象として通す"
     # observable = "Git選択結果のrecord symbol、diagnostic、exit status"
     # observation_boundary = "public-boundary"
@@ -995,15 +1000,15 @@ def test_oracle_table_with_decoy():
 
     # @test-value v2
     # kind = "regression"
-    # claim = "Git modeでv1、metadata未付与、壊れたmetadataからv2へ修正したSURVIVED testをPhase 1 packetへ渡せる"
-    # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/pull/46#discussion_r3941758175" }
+    # claim = "Git modeでv1、metadata未付与、壊れたmetadataからv2へ修正したSURVIVED testを抽出できる"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
     # fault = "移行元のbefore recordを現行v2として検証し、修正済みafter recordの価値審査を開始できない"
-    # observable = "Git抽出結果からbuild_metadata_packetが生成する現行v2 record"
+    # observable = "Git抽出結果の現行v2 record"
     # observation_boundary = "component-behavior"
-    # scope = "git-transition-review-packet"
+    # scope = "git-transition-selection"
     # lifecycle = "permanent"
     # @end-test-value
-    def test_git_mode_packets_repaired_historical_metadata(self) -> None:
+    def test_git_mode_selects_repaired_historical_metadata(self) -> None:
         historical_sources = {
             "v1": V1_METADATA + "def test_migrate():\n    assert observed() == 1\n",
             "unannotated": "def test_migrate():\n    assert observed() == 1\n",
@@ -1027,18 +1032,18 @@ def test_oracle_table_with_decoy():
                         + "def test_migrate():\n    assert observed() == 2\n",
                         encoding="utf-8",
                     )
+                    expected, expected_exit = self.extract("tests/test_migration.py")
 
                     result, exit_status, stderr = self.extract_git(base)
 
+                    self.assertEqual(expected_exit, 0)
                     self.assertEqual(exit_status, 0, stderr)
                     self.assertEqual(result["diagnostics"], [])
                     self.assertEqual(
                         [transition["kind"] for transition in result["transitions"]],
                         ["SURVIVED"],
                     )
-                    packet = build_metadata_packet(result)
-                    self.assertEqual(len(packet["records"]), 1)
-                    self.assertEqual(packet["records"][0]["metadata_format_version"], 2)
+                    self.assertEqual(result["tests"], expected["tests"])
 
     # @test-value v2
     # kind = "regression"
@@ -1788,11 +1793,13 @@ def test_oracle_table_with_decoy():
                 self.assertEqual(result["tests"], [])
                 self.assertEqual(result["diagnostics"], [])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "native adapter failureはtracebackなしのexit 2として返す"
-    # oracle = { type = "contract", ref = "output-v1" }
-    # failure_mode = "exit 1とJSONなしのtracebackでconsumerが結果解析に失敗する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/SKILL.md" }
+    # fault = "native adapter failureを通常の抽出diagnosticのexit 1へ誤分類するかtracebackを出す"
+    # observable = "Git抽出CLIのexit statusとstderrのadapter diagnostic"
+    # observation_boundary = "public-boundary"
     # scope = "git-adapter-failure"
     # lifecycle = "permanent"
     # @end-test-value

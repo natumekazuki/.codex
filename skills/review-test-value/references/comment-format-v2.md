@@ -1,8 +1,6 @@
 # Test Value Comment v2
 
-候補版のmetadata契約である。有効化の前提と状態は[有効化runbook](../../../docs/runbooks/activate-test-value-review.md)を確認する。
-
-対応するtest declarationの直前に、言語の行コメントで`@test-value v2`から`@end-test-value`までのTOMLを置く。結合と宣言範囲は既存の[source adapter契約](source-adapters-v1.md)を維持する。
+対応するtest declarationの直前に、言語の行コメントで`@test-value v2`から`@end-test-value`までのTOMLを置く。結合と宣言範囲は[source adapter契約](source-adapters-v1.md)に従う。
 
 ```python
 # @test-value v2
@@ -19,13 +17,13 @@ def test_retry_preserves_charge_count():
     ...
 ```
 
-`kind`、`claim`、`oracle`、`scope`、`lifecycle`の意味とenumはv1から維持する。`oracle`は`type`と非空の`ref`だけを持つinline tableとする。参照文字列の存在は参照先の検証済み証拠ではない。
+`kind`、`claim`、`oracle`、`scope`、`lifecycle`は必須である。`oracle`は`type`と非空の`ref`だけを持つinline tableとする。参照文字列だけでは参照先の存在やclaimの裏付けを証明しない。
 
-`fault`は失敗させるべき具体的な欠陥、`observable`はassertionが直接読む値、状態、eventまたはartifactであり、いずれも非空文字列を必須とする。`failure_mode`は使用しない。`observation_boundary`は`consumer`、`public-boundary`、`component-behavior`、`declaration`、`implementation`のいずれかを必須とする。
+`fault`は失敗させるべき具体的な欠陥、`observable`はassertionが直接読む値、状態、eventまたはartifactであり、いずれも非空文字列を必須とする。`observation_boundary`は`consumer`、`public-boundary`、`component-behavior`、`declaration`、`implementation`のいずれかを必須とする。
 
-任意の`impact`には下流の影響を記載できる。直接観測を主張するfieldではないため、間接的な影響であることだけをoverclaimとは判定しない。`distinction`は既存checkとの違いを表す非空文字列である。
+任意の`impact`には下流の影響を記載できる。直接観測を主張するfieldではない。`distinction`は既存checkとの違いを表す非空文字列である。
 
-任意の`risk_tags`は`security`、`authentication`、`authorization`、`billing`、`irreversible-data-loss`、`privacy`の配列とする。親workflowのriskを解除する用途には使えない。
+任意の`risk_tags`は`security`、`authentication`、`authorization`、`billing`、`irreversible-data-loss`、`privacy`の配列とする。reviewerの追加review要否はmetadataだけで自動決定せず、親エージェントが対象コードとreview結果から判断する。
 
 | lifecycle | 条件 |
 | --- | --- |
@@ -33,10 +31,8 @@ def test_retry_preserves_charge_count():
 | `characterization` | `expires_on`または非空の`review_when`を必要とする。`remove_when`はこの条件の代用にならない。 |
 | `ephemeral` | 非空の`remove_when`を必要とする。 |
 
-`expires_on`は実在する日付を表す`YYYY-MM-DD`文字列とする。期限や削除条件の記載は削除権限でも、条件未成立の証拠でもない。未知field、不正型、未知enumを補正しない。
+`expires_on`は`YYYY-MM-DD`形式の日付とする。未知field、不正型、未知enumを補正しない。抽出器はsourceとmetadataの構文・schema・対応付けを検証し、意味上の価値や保持方針はreviewerへ委ねる。
 
-## v1からの移行
+## v1 metadata
 
-現在の追加・変更testと明示pathのv1は、そのtask内でv2へ移行するために読み取り、`TEST_VALUE_V2_REQUIRED`とexit `1`を返す。例外はGit modeで削除を確認した正常な`DELETED.before`だけであり、固定baseの元v1 metadataを変更せず歴史的な証拠として審査へ渡す。[Git選択契約](git-selection-v1.md)に従い、削除審査や保持根拠・解消確認を省略しない。
-
-実際のtest本文とaccepted contractを確認し、`fault`、`observable`、`observation_boundary`を記述してsourceを更新する。同じ選択条件で再抽出し、exit `0`になってからv2審査へ進む。情報不足や編集権限不足で移行できなければ停止する。`failure_mode`の分割や推測による自動変換、対象外v1の一括移行は行わない。
+既存sourceを読むため、抽出器はv1 markerも認識し、選択されたv1には`TEST_VALUE_V2_REQUIRED` diagnosticを返す。v1の`failure_mode`を推測でv2 fieldへ分割しない。現在のtestをreviewへ渡す前に、必要な`fault`、`observable`、`observation_boundary`を人が確認してv2へ移行する。

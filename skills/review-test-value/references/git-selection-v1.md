@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Git差分へ含まれる新規・意味変更testだけを抽出し、変更していない既存testへ`@test-value`の一括導入を要求しない。
+Git差分へ含まれる新規・意味変更・削除・移設testを抽出し、変更していない既存testへ`@test-value`の一括導入を要求しない。
 
 ## Invocation
 
