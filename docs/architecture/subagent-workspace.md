@@ -6,4 +6,4 @@
 
 worktreeやcommit固定は具体的な隔離・再現の必要に応じて使う。全reviewへ一律に別worktreeを要求しない。
 
-`test_value_luna`と`test_value_deep`の審査は別の専門境界を持つ。通常の子をforkして入力隔離の代わりにせず、[review-test-value](../../skills/review-test-value/SKILL.md)の有効な実行経路へ渡す。metadataだけのphaseへ本文、親履歴、一般hookを混入させない。
+`test_value_luna`は単一意味reviewの専門境界を持つ。通常の子をforkして入力隔離の代わりにせず、[review-test-value](../../skills/review-test-value/SKILL.md)の実行経路へ渡す。metadata・test本文・必要なbounded contextをhostが一つのinputへまとめる。親履歴や一般hookを自動注入せず、modelにはtoolやrepository探索を公開しない。旧metadata/alignment/deepの分業は使用しない。

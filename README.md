@@ -2,14 +2,14 @@
 
 Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追加の共通ルールは過剰実装の抑制と、active登録後の必須test価値審査を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
 
-このcheckoutの`review-test-value`はcandidateであり、現在は明示起動だけで利用する。通常の自動選択やrepositoryの必須gateとしては登録せず、候補のworker・全体gate・実runtimeの確認が揃うまでliveへ配布しない。Windows native CLI `0.153.4`による22件以上の実モデルE2E、candidate自身の審査、新規sessionでの読込確認はこの環境では未実施であり、有効化を報告できる状態ではない。必要な条件と同時切替は[有効化runbook](docs/runbooks/activate-test-value-review.md)を参照する。
+このcheckoutの`review-test-value`は単一意味reviewのv3 candidateであり、現在は明示起動だけで利用する。通常の自動選択やrepositoryの必須gateとしては登録しない。新contract自身の実モデル審査、明示E2E、新規session確認が完了するまでactive化しない。旧metadata/alignment/deepの証拠を流用しない。条件と同時切替は[有効化runbook](docs/runbooks/activate-test-value-review.md)を参照する。
 
 ## 構成
 
 | 正本 | 内容 |
 | --- | --- |
 | `AGENTS.md` | 短い抑制、操作境界、個人設定、active登録後の必須審査とWithMateへの入口 |
-| `agents/` | 汎用2＋専門2のカスタムrole |
+| `agents/` | 汎用2＋単一review専用1のカスタムrole |
 | `skills/` | active時に必須となる`review-test-value`のcandidate＋任意5の管理Skill |
 | `hooks/implementation-restraint.ps1`、`hooks.json` | 共通ルールの短い再通知 |
 | `config.example.toml`、`config/` | 共有できる設定例。実configと認証は端末local |
@@ -25,11 +25,10 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 | `general_sol` | `gpt-5.6-sol` | medium |
 | `general_luna` | `gpt-5.6-luna` | max |
 | `test_value_luna` | `gpt-5.6-luna` | max |
-| `test_value_deep` | `gpt-5.6-luna` | max |
 
-汎用2roleは調査・設計・実装・review・検証に使え、必要な仕事は起動時の依頼で表す。委譲する調査・データ取得・範囲が明確な実装・検証はLunaを優先する。SolはLunaで未解決の具体的な問題、専門審査の指定、ユーザーの明示指定に限る。親が設計判断と統合を担い、必要な文脈だけを渡す。共通hookがこの方針を再通知するが、モデル利用を機械的に禁止するものではない。標準`default`／`worker`／`explorer`はカスタム4種とは別である。
+汎用2roleは調査・設計・実装・review・検証に使え、必要な仕事は起動時の依頼で表す。委譲する調査・データ取得・範囲が明確な実装・検証はLunaを優先する。SolはLunaで未解決の具体的な問題、専門審査の指定、ユーザーの明示指定に限る。親が設計判断と統合を担い、必要な文脈だけを渡す。共通hookがこの方針を再通知するが、モデル利用を機械的に禁止するものではない。標準`default`／`worker`／`explorer`はカスタム3種とは別である。
 
-設定例はCLI `0.153.4`を対象にする。汎用roleの権限は親から継承し、調査依頼のread-only境界が必要な場合はruntimeで制限する。専門審査の入力隔離は[review-test-value](skills/review-test-value/SKILL.md)が所有し、汎用roleや親の自己評価で代行しない。専門2roleはともにLuna/maxで、candidateではmetadata・alignment・必要なdeepを明示起動した別runで実行する。追加contextでも判断できなければNEEDS_CONTEXTを返し、Solへ自動昇格しない。
+設定例はCLI `0.153.4`を対象にする。汎用roleの権限は親から継承し、調査依頼のread-only境界が必要な場合はruntimeで制限する。専門審査の入力隔離は[review-test-value](skills/review-test-value/SKILL.md)が所有し、汎用roleや親の自己評価で代行しない。専用Luna/maxへmetadata・本文・bounded contextをまとめ、batchごとに一回だけ意味reviewする。通常canary、audit、追加deep、Solへの自動昇格はない。NEEDS_CONTEXTは正常なBLOCKEDとして扱い、追加contextを得たrecordだけ再reviewする。
 
 親をSolへ明示切替する場合は、有効な`CODEX_HOME`直下へ配置した`gpt56.config.toml`を使う。
 
@@ -38,7 +37,7 @@ codex --profile gpt56
 codex --profile astra
 ```
 
-どちらも同じ4role・短い共通ルール・candidateの審査経路を使う。model配置とreasoning effortは運用上の設定値であり、性能の最適値や週リミット消費の解消を保証しない。設定例の値と新規sessionの実効値を区別する。
+どちらも同じ3role・短い共通ルール・candidateの審査経路を使う。model配置とreasoning effortは運用上の設定値であり、性能の最適値や週リミット消費の解消を保証しない。設定例の値と新規sessionの実効値を区別する。
 
 ## Skill
 
@@ -72,4 +71,4 @@ hookは有効な`CODEX_HOME`（未指定ならユーザーhomeの`.codex`）か�
 
 WithMateのMemory／Character操作はMCP toolの説明とschemaに従い、[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
 
-CIは既存の抽出・packet・validator・routing・resolution・監査機能と抑制hookを確認する。offlineの成功を実モデル審査や新規sessionの成功と同一視しない。candidateの実モデルE2E・自己審査・新規session確認が完了し、[小さな比較と導入手順](docs/runbooks/compare-subagent-roles.md)の条件を満たすまで、公開CIやrepositoryの必須gateから呼び出さない。activeへ切り替えるときはregistryとrunbookを同じ変更で更新し、有料モデル実行やsecretを公開CIへ追加しない。
+CIは既存の抽出・多言語adapter・監査・抑制hookと、単一reviewのflat schema/ordinal、host retention/resolution、再開、並列batch、Windows process終了を確認する。offlineの成功を実モデル審査や新規sessionの成功と同一視しない。candidateの実モデルE2E・自己審査・新規session確認が完了し、[小さな比較と導入手順](docs/runbooks/compare-subagent-roles.md)の条件を満たすまで、公開CIやrepositoryの必須gateから呼び出さない。有料モデル実行やsecretを公開CIへ追加しない。過去ADRの多段phase契約は履歴であり、現在の意味契約は[review-contract-v3](skills/review-test-value/references/review-contract-v3.md)を正本とする。

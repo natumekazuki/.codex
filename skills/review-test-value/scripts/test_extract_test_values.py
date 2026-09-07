@@ -22,7 +22,7 @@ EXTRACTOR = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = EXTRACTOR
 SPEC.loader.exec_module(EXTRACTOR)
 
-from build_review_packets import build_metadata_packet  # noqa: E402
+from build_review_packets import selected_records  # noqa: E402
 
 
 VALID_METADATA = '''# @test-value v2
@@ -46,6 +46,17 @@ V1_METADATA = '''# @test-value v1
 # lifecycle = "permanent"
 # @end-test-value
 '''
+
+
+def review_records(result: dict) -> list[dict]:
+    extractors = [
+        result if profile.adapter == result["adapter"] else {
+            "schema_version": 2, "adapter": profile.adapter, "coverage": profile.coverage,
+            "tests": [], "transitions": [], "diagnostics": [],
+        }
+        for profile in EXTRACTOR.ADAPTER_PROFILES
+    ]
+    return selected_records(extractors)
 
 
 class ExtractTestValuesTests(unittest.TestCase):
@@ -907,7 +918,7 @@ def test_oracle_table_with_decoy():
     # claim = "正常なv1削除は元metadataを審査へ渡し、不正な削除元の診断は保持する"
     # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
     # fault = "固定baseへv2移行を要求するか削除元の不正metadataまで黙認する"
-    # observable = "Git抽出CLIのexit、診断とmetadata packetの元v1内容"
+    # observable = "Git抽出CLIのexit、診断と単一reviewへ渡す元v1内容"
     # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
@@ -934,7 +945,7 @@ def test_oracle_table_with_decoy():
                     if valid:
                         self.assertEqual(exit_status, 0, stderr)
                         self.assertEqual(result["diagnostics"], [])
-                        record = build_metadata_packet(result)["records"][0]
+                        record = review_records(result)[0]
                         self.assertEqual(record["metadata_format_version"], 1)
                         self.assertEqual(record["metadata"], historical["metadata"])
                         self.assertEqual(record["metadata_hash"], historical["metadata_hash"])
@@ -995,10 +1006,10 @@ def test_oracle_table_with_decoy():
 
     # @test-value v2
     # kind = "regression"
-    # claim = "Git modeでv1、metadata未付与、壊れたmetadataからv2へ修正したSURVIVED testをPhase 1 packetへ渡せる"
+    # claim = "Git modeでv1、metadata未付与、壊れたmetadataからv2へ修正したSURVIVED testを単一reviewへ渡せる"
     # oracle = { type = "issue", ref = "https://github.com/natumekazuki/.codex/pull/46#discussion_r3941758175" }
     # fault = "移行元のbefore recordを現行v2として検証し、修正済みafter recordの価値審査を開始できない"
-    # observable = "Git抽出結果からbuild_metadata_packetが生成する現行v2 record"
+    # observable = "Git抽出結果からselected_recordsが生成する現行v2 record"
     # observation_boundary = "component-behavior"
     # scope = "git-transition-review-packet"
     # lifecycle = "permanent"
@@ -1036,9 +1047,9 @@ def test_oracle_table_with_decoy():
                         [transition["kind"] for transition in result["transitions"]],
                         ["SURVIVED"],
                     )
-                    packet = build_metadata_packet(result)
-                    self.assertEqual(len(packet["records"]), 1)
-                    self.assertEqual(packet["records"][0]["metadata_format_version"], 2)
+                    records = review_records(result)
+                    self.assertEqual(len(records), 1)
+                    self.assertEqual(records[0]["metadata_format_version"], 2)
 
     # @test-value v2
     # kind = "regression"
