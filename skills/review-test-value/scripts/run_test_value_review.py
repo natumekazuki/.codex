@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 from typing import Any, Sequence
 
 from build_review_packets import (
@@ -21,6 +22,8 @@ from build_review_packets import (
     extractor_record_identities_multi,
     extractor_record_summaries_multi,
     project_deep_batch,
+    project_phase_batch,
+    canonical_json as canonical_packet_json,
 )
 from extract_test_values import (
     ADAPTER_PROFILES,
@@ -63,7 +66,10 @@ GENERATION_VERSION = "test-value-review-generation-v1"
 HOST_EVIDENCE_VERSION = "test-value-host-evidence-v1"
 RESULT_VERSION = "test-value-review-run-v1"
 AUDIT_PERCENT = 10
-DEEP_PROMPT_CHAR_BUDGET = 800_000
+BATCH_RECORD_LIMIT = 10
+BATCH_PACKET_CHAR_LIMIT = 800_000
+BATCH_SECONDS = {"metadata": 300, "alignment": 300, "deep": 900}
+PHASE_OVERHEAD_SECONDS = 10
 LANGUAGES = ("python", "typescript", "csharp")
 RISK_TAGS = {
     "security",
@@ -811,7 +817,8 @@ def _commit_resolution_attempts(
 
 
 def _execute_phase(
-    phase: str, packet: dict[str, Any], *, cli: str, role_file: Path
+    phase: str, packet: dict[str, Any], *, cli: str, role_file: Path,
+    deadline_monotonic: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     try:
         from review_worker import ReviewWorkerBlocked, execute_phase
@@ -824,6 +831,7 @@ def _execute_phase(
             cli=cli,
             role_file=str(role_file),
             timeout_seconds=900.0 if phase == "deep" else 300.0,
+            deadline_monotonic=deadline_monotonic,
         )
     except ReviewWorkerBlocked as exc:
         code = getattr(exc, "code", "WORKER_BLOCKED")
@@ -832,6 +840,9 @@ def _execute_phase(
         if isinstance(worker_evidence, dict):
             if isinstance(worker_evidence.get("validator_error"), str):
                 details["validator_error"] = worker_evidence["validator_error"]
+            for key in ("record_id", "record_id_hash", "violation_type", "invalid_field", "invalid_field_hash"):
+                if isinstance(worker_evidence.get(key), str):
+                    details[key] = worker_evidence[key]
             canary: dict[str, Any] = {}
             for key in (
                 "turn_completed",
@@ -896,115 +907,154 @@ def _validate_worker_toolchain(
         raise CoordinatorBlocked("TOOLCHAIN_CHANGED", f"{phase} contract path changed")
 
 
-def plan_deep_batches(
-    global_packet: dict[str, Any],
-    *,
-    prompt_char_budget: int = DEEP_PROMPT_CHAR_BUDGET,
-) -> list[dict[str, Any]]:
-    """Plan every contiguous deep transport batch before launching deep review."""
-
-    if not isinstance(prompt_char_budget, int) or isinstance(prompt_char_budget, bool) or prompt_char_budget <= 0:
-        raise CoordinatorBlocked("DEEP_BATCH_UNAVAILABLE", "deep prompt budget is invalid")
-    try:
-        from review_worker import review_prompt
-    except ImportError as exc:
-        raise CoordinatorBlocked("WORKER_UNAVAILABLE", str(exc)) from exc
+def plan_phase_batches(
+    phase: str, global_packet: dict[str, Any], *,
+    record_limit: int = BATCH_RECORD_LIMIT,
+    packet_char_limit: int = BATCH_PACKET_CHAR_LIMIT,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Freeze contiguous boundaries and relative deadlines before any phase worker."""
+    if phase not in BATCH_SECONDS or any(
+        type(value) is not int or value <= 0 or value > maximum
+        for value, maximum in ((record_limit, BATCH_RECORD_LIMIT),
+                               (packet_char_limit, BATCH_PACKET_CHAR_LIMIT))
+    ):
+        raise CoordinatorBlocked("BATCH_POLICY_INVALID", "batch policy is invalid")
     records = global_packet.get("records")
     if not isinstance(records, list):
-        raise CoordinatorBlocked("DEEP_BATCH_UNAVAILABLE", "global deep records are invalid")
-    if not records:
-        return []
-    batches: list[dict[str, Any]] = []
-    current: list[dict[str, Any]] = []
+        raise CoordinatorBlocked("BATCH_PLAN_INVALID", "records must be an array")
+    ids = [record.get("record_id") for record in records]
+    if any(not isinstance(value, str) for value in ids) or len(set(ids)) != len(ids):
+        raise CoordinatorBlocked("BATCH_PLAN_INVALID", "record identities must be unique")
+    batches = []
+    current = []
     for record in records:
-        candidate_records = [*current, record]
-        try:
-            candidate = project_deep_batch(global_packet, candidate_records)
-        except PacketError as exc:
-            raise CoordinatorBlocked("DEEP_BATCH_UNAVAILABLE", str(exc)) from exc
-        if len(review_prompt(candidate)) <= prompt_char_budget:
-            current = candidate_records
+        candidate = project_phase_batch(phase, global_packet, [*current, record])
+        if len(current) < record_limit and len(canonical_packet_json(candidate)) <= packet_char_limit:
+            current.append(record)
             continue
-        if not current:
-            raise CoordinatorBlocked(
-                "DEEP_BATCH_UNAVAILABLE",
-                f"deep record exceeds the {prompt_char_budget} character prompt budget",
-            )
-        batches.append(project_deep_batch(global_packet, current))
+        if current:
+            batches.append(project_phase_batch(phase, global_packet, current))
         current = [record]
-        singleton = project_deep_batch(global_packet, current)
-        if len(review_prompt(singleton)) > prompt_char_budget:
-            raise CoordinatorBlocked(
-                "DEEP_BATCH_UNAVAILABLE",
-                f"deep record exceeds the {prompt_char_budget} character prompt budget",
-            )
+        singleton = project_phase_batch(phase, global_packet, current)
+        if len(canonical_packet_json(singleton)) > packet_char_limit:
+            raise CoordinatorBlocked("BATCH_RECORD_TOO_LARGE", "one record exceeds the packet character limit",
+                                     {"phase": phase, "record_id": record["record_id"],
+                                      "packet_char_limit": packet_char_limit})
     if current:
-        batches.append(project_deep_batch(global_packet, current))
-    return batches
+        batches.append(project_phase_batch(phase, global_packet, current))
+    seconds = BATCH_SECONDS[phase]
+    plan = {
+        "phase": phase, "global_packet_hash": result_hash(global_packet),
+        "record_limit": record_limit, "packet_char_limit": packet_char_limit,
+        "batch_seconds": seconds, "overhead_seconds": PHASE_OVERHEAD_SECONDS,
+        "phase_seconds": len(batches) * seconds + PHASE_OVERHEAD_SECONDS,
+        "batches": [
+            {"index": index, "record_ids": [item["record_id"] for item in packet["records"]],
+             "record_count": len(packet["records"]), "packet_hash": result_hash(packet),
+             "packet_chars": len(canonical_packet_json(packet)),
+             "deadline_offset_seconds": (index + 1) * seconds}
+            for index, packet in enumerate(batches)
+        ],
+    }
+    return batches, plan
 
 
-def _execute_deep_round(
-    global_packet: dict[str, Any],
-    *,
-    cli: str,
-    role_file: Path,
-    toolchain_identity: dict[str, Any],
-    prompt_char_budget: int = DEEP_PROMPT_CHAR_BUDGET,
+def _execute_batch_round(
+    phase: str, global_packet: dict[str, Any], *, cli: str, role_file: Path,
+    toolchain_identity: dict[str, Any], packet_char_limit: int = BATCH_PACKET_CHAR_LIMIT,
+    state_dir: Path | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    batches = plan_deep_batches(
-        global_packet,
-        prompt_char_budget=prompt_char_budget,
-    )
+    batches, plan = plan_phase_batches(phase, global_packet, packet_char_limit=packet_char_limit)
     if not batches:
-        raise CoordinatorBlocked("DEEP_BATCH_UNAVAILABLE", "required deep packet is empty")
+        raise CoordinatorBlocked("BATCH_SELECTION_EMPTY", "review selection is empty", {"phase": phase})
+    if state_dir is not None:
+        _atomic_write(state_dir / f"execution-plan-{phase}.json", plan)
+    started = time.monotonic()
+    phase_deadline = started + plan["phase_seconds"]
     proofs = []
     merged_reviews = []
     for index, packet in enumerate(batches):
-        local_result, evidence = _execute_phase(
-            "deep",
-            packet,
-            cli=cli,
-            role_file=role_file,
-        )
-        _validate_worker_toolchain("deep", evidence, toolchain_identity)
-        validated = validate_phase_result(
-            "deep",
-            local_result,
-            packet["records"],
-            packet["input_hash"],
-        )
+        deadline = min(time.monotonic() + plan["batch_seconds"],
+                       started + plan["batches"][index]["deadline_offset_seconds"])
+        if time.monotonic() >= deadline:
+            raise CoordinatorBlocked("PHASE_DEADLINE_EXCEEDED", "phase budget exhausted",
+                                     {"phase": phase, "batch_index": index})
+        try:
+            local_result, evidence = _execute_phase(
+                phase, packet, cli=cli, role_file=role_file, deadline_monotonic=deadline,
+            )
+            if time.monotonic() > deadline:
+                raise CoordinatorBlocked("BATCH_DEADLINE_EXCEEDED", "worker exceeded batch deadline")
+            _validate_worker_toolchain(phase, evidence, toolchain_identity)
+            validated = validate_phase_result(phase, local_result, packet["records"], packet.get("input_hash"))
+        except (CoordinatorBlocked, ResultValidationError) as exc:
+            details = {**(getattr(exc, "details", None) or {}), "phase": phase, "batch_index": index,
+                       "batch_count": len(batches), "completed_batches": len(proofs),
+                       "packet_hash": result_hash(packet)}
+            raise CoordinatorBlocked(getattr(exc, "reason_code", "REVIEW_RESULT_VALIDATION_FAILED"),
+                                     str(exc), details) from exc
         merged_reviews.extend(validated["reviews"])
-        proofs.append(
-            {
-                "index": index,
-                "record_ids": [item["record_id"] for item in packet["records"]],
-                "packet_input_hash": packet["input_hash"],
-                "result": validated,
-                "result_hash": result_hash(validated),
-                "worker_evidence": evidence,
-                "worker_evidence_hash": _canonical_hash(evidence),
-            }
-        )
-    merged = {
-        "review_contract_version": "deep-review-v2",
-        "input_hash": global_packet["input_hash"],
-        "reviews": merged_reviews,
-    }
-    merged = validate_phase_result(
-        "deep",
-        merged,
-        global_packet["records"],
-        global_packet["input_hash"],
-    )
-    if len(proofs) == 1:
-        return merged, proofs[0]["worker_evidence"]
-    return merged, {
-        "schema_version": "deep-batch-execution-v1",
-        "phase": "deep",
-        "global_input_hash": global_packet["input_hash"],
-        "batches": proofs,
-        "merged_result_hash": result_hash(merged),
-    }
+        proofs.append({"index": index,
+                       "record_ids": [item["record_id"] for item in packet["records"]],
+                       "packet_input_hash": packet.get("input_hash", result_hash(packet)),
+                       "result": validated, "result_hash": result_hash(validated),
+                       "worker_evidence": evidence, "worker_evidence_hash": _canonical_hash(evidence)})
+    merged = {"review_contract_version": global_packet["review_contract_version"], "reviews": merged_reviews}
+    if phase == "deep":
+        merged["input_hash"] = global_packet["input_hash"]
+    merged = validate_phase_result(phase, merged, global_packet["records"], global_packet.get("input_hash"))
+    envelope = {"schema_version": "phase-batch-execution-v1", "phase": phase,
+                "plan": plan, "batches": proofs, "merged_result_hash": result_hash(merged)}
+    _validate_batch_execution(envelope, global_packet, merged, toolchain_identity)
+    if time.monotonic() > phase_deadline:
+        raise CoordinatorBlocked("PHASE_DEADLINE_EXCEEDED", "aggregation exceeded phase budget", {"phase": phase})
+    return merged, envelope
+
+
+def _execute_deep_round(global_packet: dict[str, Any], *, cli: str, role_file: Path,
+                        toolchain_identity: dict[str, Any],
+                        packet_char_limit: int = BATCH_PACKET_CHAR_LIMIT,
+                        state_dir: Path | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    return _execute_batch_round("deep", global_packet, cli=cli, role_file=role_file,
+                                toolchain_identity=toolchain_identity,
+                                packet_char_limit=packet_char_limit, state_dir=state_dir)
+
+
+def _validate_batch_execution(envelope: dict[str, Any], global_packet: dict[str, Any],
+                              merged_result: dict[str, Any], toolchain_identity: dict[str, Any]) -> None:
+    try:
+        phase = envelope["phase"]
+        batches, plan = plan_phase_batches(phase, global_packet,
+                                           record_limit=envelope["plan"]["record_limit"],
+                                           packet_char_limit=envelope["plan"]["packet_char_limit"])
+        if (set(envelope) != {"schema_version", "phase", "plan", "batches", "merged_result_hash"}
+            or envelope["schema_version"] != "phase-batch-execution-v1"
+            or envelope["plan"] != plan or len(envelope["batches"]) != len(batches)):
+            raise ValueError("batch plan or count mismatch")
+        reviews = []
+        for index, (proof, packet) in enumerate(zip(envelope["batches"], batches)):
+            if (set(proof) != {"index", "record_ids", "packet_input_hash", "result", "result_hash",
+                              "worker_evidence", "worker_evidence_hash"}
+                or proof["index"] != index
+                or proof["record_ids"] != plan["batches"][index]["record_ids"]
+                or proof["packet_input_hash"] != packet.get("input_hash", result_hash(packet))
+                or proof["result_hash"] != result_hash(proof["result"])
+                or proof["worker_evidence_hash"] != _canonical_hash(proof["worker_evidence"])):
+                raise ValueError("batch proof mismatch")
+            evidence = proof["worker_evidence"]
+            if evidence.get("schema_version") != "review-worker-evidence-v1" or evidence.get("phase") != phase:
+                raise ValueError("worker evidence identity mismatch")
+            _validate_worker_toolchain(phase, evidence, toolchain_identity)
+            validated = validate_phase_result(phase, proof["result"], packet["records"], packet.get("input_hash"))
+            reviews.extend(validated["reviews"])
+        expected = {"review_contract_version": global_packet["review_contract_version"], "reviews": reviews}
+        if phase == "deep":
+            expected["input_hash"] = global_packet["input_hash"]
+        validate_phase_result(phase, expected, global_packet["records"], global_packet.get("input_hash"))
+        if expected != merged_result or envelope["merged_result_hash"] != result_hash(expected):
+            raise ValueError("merged result mismatch")
+    except (KeyError, TypeError, ValueError, PacketError, ResultValidationError, CoordinatorBlocked) as exc:
+        raise CoordinatorBlocked("STATE_INVALID", "phase batch execution proof is invalid") from exc
 
 
 def _routing_inputs(
@@ -1242,6 +1292,11 @@ def _validate_deep_batch_execution(
     sol_result: dict[str, Any],
     toolchain_identity: dict[str, Any],
 ) -> None:
+    if isinstance(envelope, dict) and envelope.get("schema_version") == "phase-batch-execution-v1":
+        if envelope.get("phase") != "deep":
+            raise CoordinatorBlocked("STATE_INVALID", "deep batch phase mismatch")
+        _validate_batch_execution(envelope, global_packet, sol_result, toolchain_identity)
+        return
     if not isinstance(envelope, dict) or set(envelope) != {
         "schema_version",
         "phase",
@@ -1397,7 +1452,7 @@ def _load_generation(state_dir: Path, descriptor: dict[str, Any]) -> dict[str, A
     phase_evidence = worker_evidence[:2]
     if any(
         not isinstance(item, dict)
-        or item.get("schema_version") != "review-worker-evidence-v1"
+        or item.get("schema_version") not in {"review-worker-evidence-v1", "phase-batch-execution-v1"}
         or item.get("phase") != phase
         for item, phase in zip(phase_evidence, ("metadata", "alignment"))
     ):
@@ -1409,14 +1464,23 @@ def _load_generation(state_dir: Path, descriptor: dict[str, Any]) -> dict[str, A
     deep_evidence = worker_evidence[2:]
     try:
         for item in phase_evidence:
-            _validate_worker_toolchain(item["phase"], item, value["toolchain_identity"])
+            phase = item["phase"]
+            if item["schema_version"] == "phase-batch-execution-v1":
+                packet = aggregation["input"]["alignment_packet"]
+                if phase == "metadata":
+                    packet = {"review_contract_version": "metadata-review-v2", "records": [
+                        {key: record[key] for key in ("record_id", "metadata_format_version", "metadata", "metadata_hash")}
+                        for record in packet["records"]]}
+                _validate_batch_execution(item, packet, aggregation["input"][f"{phase}_result"], value["toolchain_identity"])
+            else:
+                _validate_worker_toolchain(phase, item, value["toolchain_identity"])
         if not deep_required:
             if deep_evidence:
                 raise CoordinatorBlocked("STATE_INVALID", "unexpected deep evidence")
         elif (
             len(deep_evidence) == 1
             and isinstance(deep_evidence[0], dict)
-            and deep_evidence[0].get("schema_version") == "deep-batch-execution-v1"
+            and deep_evidence[0].get("schema_version") in {"deep-batch-execution-v1", "phase-batch-execution-v1"}
         ):
             _validate_deep_batch_execution(
                 deep_evidence[0],
@@ -1820,6 +1884,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         raise CoordinatorBlocked("SNAPSHOT_CHANGED", "source changed during extraction")
     selection_hash = _canonical_hash(extractors)
     metadata_packet = build_metadata_packet_multi(extractors)
+    _, metadata_plan = plan_phase_batches("metadata", metadata_packet)
     identity_records = extractor_record_identities_multi(extractors)
     if args.host_evidence is None:
         template = {
@@ -1855,6 +1920,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "target_snapshot_hash": before["target_snapshot_hash"],
             "selection_hash": selection_hash,
             "selection_summary": extractor_record_summaries_multi(extractors),
+            "metadata_execution_plan": metadata_plan,
             "host_evidence_template": template,
         }
     host_raw = _read_json_object(args.host_evidence, "HOST_EVIDENCE")
@@ -1964,17 +2030,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     luna_role = scripts_root / "agents" / "test_value_luna.toml"
     deep_role = scripts_root / "agents" / "test_value_deep.toml"
     worker_evidence = []
-    metadata_result, evidence = _execute_phase(
-        "metadata", metadata_packet, cli=args.cli, role_file=luna_role
+    metadata_result, evidence = _execute_batch_round(
+        "metadata", metadata_packet, cli=args.cli, role_file=luna_role,
+        toolchain_identity=toolchain_identity, state_dir=state_dir,
     )
-    _validate_worker_toolchain("metadata", evidence, toolchain_identity)
     worker_evidence.append(evidence)
     validate_phase_result("metadata", metadata_result, metadata_packet["records"])
     alignment_packet = build_alignment_packet_multi(extractors, metadata_result)
-    alignment_result, evidence = _execute_phase(
-        "alignment", alignment_packet, cli=args.cli, role_file=luna_role
+    alignment_result, evidence = _execute_batch_round(
+        "alignment", alignment_packet, cli=args.cli, role_file=luna_role,
+        toolchain_identity=toolchain_identity, state_dir=state_dir,
     )
-    _validate_worker_toolchain("alignment", evidence, toolchain_identity)
     worker_evidence.append(evidence)
     alignment_reviews = validate_phase_result(
         "alignment", alignment_result, alignment_packet["records"]
@@ -2015,7 +2081,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             deep_packet,
             cli=args.cli,
             role_file=deep_role,
-            toolchain_identity=toolchain_identity,
+            toolchain_identity=toolchain_identity, state_dir=state_dir,
         )
         worker_evidence.append(evidence)
         reviews = validate_phase_result(
@@ -2041,11 +2107,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 deep_packet,
                 cli=args.cli,
                 role_file=deep_role,
-                toolchain_identity=toolchain_identity,
+                toolchain_identity=toolchain_identity, state_dir=state_dir,
             )
             if (
-                evidence.get("schema_version") == "deep-batch-execution-v1"
-                or retry_evidence.get("schema_version") == "deep-batch-execution-v1"
+                evidence.get("schema_version") in {"deep-batch-execution-v1", "phase-batch-execution-v1"}
+                or retry_evidence.get("schema_version") in {"deep-batch-execution-v1", "phase-batch-execution-v1"}
             ):
                 worker_evidence[-1] = retry_evidence
             else:
@@ -2232,6 +2298,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         details = getattr(exc, "details", None)
         if isinstance(details, dict) and details:
             blocked["details"] = details
+        try:
+            if args.state_dir.is_dir() and not args.state_dir.resolve().is_relative_to(args.root.resolve()):
+                _atomic_write(args.state_dir / "last-failure.json", blocked)
+        except (OSError, CoordinatorBlocked):
+            blocked["diagnostic_persistence_error"] = "DIAGNOSTIC_WRITE_FAILED"
         print(canonical_json(blocked))
         return 2
     print(canonical_json(result))

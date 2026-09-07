@@ -15,6 +15,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 from validate_review_result import phase_result_schema
+from review_worker import _bound_phase_result_schema
 
 
 def _hash(seed: str) -> str:
@@ -99,6 +100,79 @@ class ReviewOutputSchemaTests(unittest.TestCase):
                 del missing_review_field["reviews"][0]["next_action"]
                 with self.assertRaises(ValidationError):
                     validate(missing_review_field, schema)
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "metadata schema variantは各recordの実在fieldだけをevidenceへ許可する"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#50" }
+    # fault = "recordごとのmetadata field集合を束縛せず、別recordのoracle fieldや未知fieldをStructured Outputsで受理する"
+    # observable = "bound metadata schemaへjsonschema.validateを適用した結果"
+    # observation_boundary = "component-behavior"
+    # scope = "metadata-evidence-record-field-binding"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_bound_metadata_schema_allows_only_record_fields_and_present_oracle_fields(self):
+        records = [
+            {
+                "record_id": _hash("a"),
+                "metadata_hash": _hash("b"),
+                "metadata": {
+                    "claim": "claim",
+                    "kind": "contract",
+                    "oracle": {"type": "issue", "ref": "#50"},
+                    "only_first": "first",
+                },
+            },
+            {
+                "record_id": _hash("c"),
+                "metadata_hash": _hash("d"),
+                "metadata": {"claim": "claim", "kind": "contract"},
+            },
+        ]
+        schema = _bound_phase_result_schema(
+            "metadata",
+            records,
+            {"review_contract_version": "metadata-review-v2", "records": records},
+        )
+        result = {
+            "review_contract_version": "metadata-review-v2",
+            "reviews": [
+                {
+                    "record_id": records[0]["record_id"],
+                    "metadata_hash": records[0]["metadata_hash"],
+                    "verdict": "VALID",
+                    "evidence": [
+                        {
+                            "fields": ["claim", "kind", "oracle.type", "oracle.ref"],
+                            "finding": "ORACLE_DECLARED",
+                        }
+                    ],
+                    "unverified": [],
+                    "next_action": None,
+                },
+                {
+                    "record_id": records[1]["record_id"],
+                    "metadata_hash": records[1]["metadata_hash"],
+                    "verdict": "VALID",
+                    "evidence": [
+                        {"fields": ["claim", "kind"], "finding": "SELF_CONTAINED_CLAIM"}
+                    ],
+                    "unverified": [],
+                    "next_action": None,
+                },
+            ],
+        }
+        validate(result, schema)
+
+        unknown = copy.deepcopy(result)
+        unknown["reviews"][1]["evidence"][0]["fields"] = ["only_first"]
+        with self.assertRaises(ValidationError):
+            validate(unknown, schema)
+
+        absent_oracle = copy.deepcopy(result)
+        absent_oracle["reviews"][1]["evidence"][0]["fields"] = ["oracle.ref"]
+        with self.assertRaises(ValidationError):
+            validate(absent_oracle, schema)
 
     # @test-value v2
     # kind = "contract"
