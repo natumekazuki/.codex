@@ -24,8 +24,8 @@
 - 対応sourceのhunkはGit属性のbinary指定やtext conversionに左右されないraw text差分として取得する。抽出sourceと同じLF正規化の意味論へ揃えるため、行末のCR有無だけによる変更はhunkに含めず、同時に存在する内容変更は通常どおり対象にする。
 - 変更していない既存testとそのmetadata欠落diagnosticはGit modeの結果へ含めない。
 - syntax error、decode error、adapter failureなど、変更sourceの信頼できる抽出を妨げるfailureは選択範囲外として隠さない。
-- pure renameと削除は価値内容の審査対象にしない。renameと同時に内容が変わった場合は変更recordを対象にする。test削除の妥当性は`design-tests`が所有する。
-- 一つのresultは一つのsource adapterだけを表すADR-0020の契約と、output schema v1を維持する。
+- pure renameは対象にせず、renameと同時に内容が変わった場合は変更recordを対象にする。test declarationまたはfileの削除はbase snapshotのrecordを`DELETED.before`へ保持し、削除の妥当性を通常のtest価値reviewへ渡す。
+- 一つのresultは一つのsource adapterだけを表すADR-0020の契約と、現在のextractor output schemaを維持する。
 - CI gateはこの判断に含めない。運用実績から機械的なmerge gateが必要になった場合は別契約として判断する。
 
 ## Alternatives
@@ -36,12 +36,12 @@
 
 ## Consequences
 
-- Positive: 新規・意味変更されたtestをCodexの裁量で選択対象から外せない。
+- Positive: 新規・意味変更・削除・移設されたtestをCodexの裁量で選択対象から外せない。
 - Positive: 変更していない既存testへ一括でmetadataを導入せず段階移行できる。
 - Positive: working tree、index、commit snapshotのどれを審査したかを区別できる。
 - Negative: Git管理repositoryと明示base revisionが必要になる。
 - Negative: 複数言語の変更では言語ごとにCLIを実行する必要がある。
-- Negative: pure renameと削除の価値判断はGit modeの対象外となる。
+- Negative: pure renameだけでは価値内容を再審査しない。
 
 ## Executable Anchors
 

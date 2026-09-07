@@ -1,2 +1,0 @@
-# JSON Schema semantics for the codex exec output contract.
-jsonschema==4.26.0
