@@ -65,11 +65,15 @@ metadata、alignment、deepは同じbatch policyを使う。coordinatorは固定
 - recordを削除、縮小、順序変更して上限へ合わせない。単独recordが文字数上限を超える場合は対象を残したまま`BLOCKED`とする。
 - 同じselection、canonical packet、policyからは同じbatch境界と同じ相対deadline offsetを得る。absolute monotonic anchorは実行ごとに異なる。
 
-各batchの時間予算はmetadata／alignmentが300秒、deepが900秒であり、canary（最大120秒）とcleanup（最大5秒）を含む。phase planのmonotonic startを`P`、batch予算を`B`、0始まりのbatch indexを`i`、batch開始を`S_i`とすると、workerへ渡すbatch deadlineは`min(S_i + B, P + (i + 1) × B)`、phase全体のdeadline offsetは`N × B + 10秒`とする。workerはcanary、review、cleanupで一つのmonotonicな絶対deadlineを共有し、reviewへ渡せるのはcanaryで消費した時間を差し引いた残り時間だけとする。git抽出、host evidence準備、依存準備などplan実行前の処理をこの上限へ含めるとは表現しない。
+各batchのdefault時間予算はmetadataが300秒、alignmentが600秒、deepが900秒であり、canary（最大120秒）とcleanup（最大5秒）を含む。phase planのmonotonic startを`P`、batch予算を`B`、0始まりのbatch indexを`i`、batch開始を`S_i`とすると、workerへ渡すbatch deadlineは`min(S_i + B, P + (i + 1) × B)`、phase全体のdeadline offsetは`N × B + 10秒`とする。workerはcanary、review、cleanupで一つのmonotonicな絶対deadlineを共有し、reviewへ渡せるのはcanaryで消費した時間を差し引いた残り時間だけとする。git抽出、host evidence準備、依存準備などplan実行前の処理をこの上限へ含めるとは表現しない。
 
-worker同時実行数は1、通常auditは10%、deepのretryは最大1回とする。alignment planはmetadata packetとその依存resultをfreezeした後、deep planはmetadata／alignmentとroutingをfreezeした後に確定する。phase全体の集約では、全batchのrecord ID、metadata／source hash、件数、順序、結果の完全性を検証する。欠落、重複、順序不整合、timeout、cleanup失敗を含む一つの非成功も成功batchだけでPASSへ集約しない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、失敗時は`last-failure.json`へ診断を残す。validator failureのsanitized detailsにはpacket本文を含めず、少なくともphase、record ID、違反種別、不正fieldを残す。
+worker同時実行数は1、通常auditは10%、deepのretryは最大1回とする。alignment planはmetadata packetとその依存resultをfreezeした後、deep planはmetadata／alignmentとroutingをfreezeした後に確定する。phase全体の集約では、全batchのrecord ID、metadata／source hash、件数、順序、結果の完全性を検証する。欠落、重複、順序不整合、timeout、cleanup失敗を含む一つの非成功も成功batchだけでPASSへ集約しない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、最初の失敗は`last-failure.json`へ、既存の失敗がある場合は`failure-<hash>.json`へ診断を残し、以前の記録を上書きしない。validator failureのsanitized detailsにはpacket本文を含めず、少なくともphase、record ID、違反種別、不正fieldを残す。
 
 stateには既存resolutionの未解決義務を保持し、別taskや別snapshotの証拠を流用しない。
+
+phaseの時間を調整する場合は`--metadata-batch-seconds`（default 300）、`--alignment-batch-seconds`（600）、`--deep-batch-seconds`（900）を明示指定する。各値は30〜1,800秒の整数だけを許可し、boolean・非数値・範囲外を送信前に拒否する。環境変数から時間を補わない。`--prepare`と本実行には同じ指定を使う。
+
+policy全体とhashはtask identityへ、phase予算・policy hash・plan hashは実行計画へ固定する。policyを変える再測定では新しいstate directoryを作り、以前のstateを保存する。旧形式などpolicyを確認できないstateも`STATE_EXECUTION_POLICY_MISMATCH`で停止し、失敗記録を含め変更しない。snapshot・selection・packet・role・contract・CLI identityが一致しない証拠を流用しない。timeout診断にはbatch index／件数／完了件数／packet hash／指定秒数を含め、自動延長や同じ設定の無条件retryは行わない。
 
 ## Validation
 

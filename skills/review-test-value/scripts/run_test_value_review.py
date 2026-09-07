@@ -68,8 +68,10 @@ RESULT_VERSION = "test-value-review-run-v1"
 AUDIT_PERCENT = 10
 BATCH_RECORD_LIMIT = 10
 BATCH_PACKET_CHAR_LIMIT = 800_000
-BATCH_SECONDS = {"metadata": 300, "alignment": 300, "deep": 900}
+BATCH_SECONDS = {"metadata": 300, "alignment": 600, "deep": 900}
 PHASE_OVERHEAD_SECONDS = 10
+MIN_BATCH_SECONDS = 30
+MAX_BATCH_SECONDS = 1800
 LANGUAGES = ("python", "typescript", "csharp")
 RISK_TAGS = {
     "security",
@@ -123,6 +125,26 @@ class CoordinatorBlocked(RuntimeError):
         super().__init__(message)
         self.reason_code = reason_code
         self.details = details
+
+
+def execution_policy(seconds: dict[str, int] | None = None) -> dict[str, Any]:
+    values = dict(BATCH_SECONDS) if seconds is None else seconds
+    if (not isinstance(values, dict) or set(values) != set(BATCH_SECONDS)
+        or any(type(value) is not int or not MIN_BATCH_SECONDS <= value <= MAX_BATCH_SECONDS
+               for value in values.values())):
+        raise CoordinatorBlocked("BATCH_POLICY_INVALID", "batch seconds must be integers from 30 through 1800")
+    return {"batch_seconds": dict(values), "record_limit": BATCH_RECORD_LIMIT,
+            "packet_char_limit": BATCH_PACKET_CHAR_LIMIT, "overhead_seconds": PHASE_OVERHEAD_SECONDS}
+
+
+def _check_state_policy(state_dir: Path, policy: dict[str, Any]) -> None:
+    path = state_dir / "task-manifest.json"
+    if path.exists():
+        state = _read_json_object(path, "STATE")
+        if (state.get("execution_policy") != policy
+            or state.get("execution_policy_hash") != _canonical_hash(policy)):
+            raise CoordinatorBlocked("STATE_EXECUTION_POLICY_MISMATCH",
+                "execution policy differs or is unversioned; use a new state directory")
 
 
 def _git(root: Path, *args: str, binary: bool = False) -> str | bytes:
@@ -830,7 +852,7 @@ def _execute_phase(
             packet,
             cli=cli,
             role_file=str(role_file),
-            timeout_seconds=900.0 if phase == "deep" else 300.0,
+            timeout_seconds=BATCH_SECONDS[phase],
             deadline_monotonic=deadline_monotonic,
         )
     except ReviewWorkerBlocked as exc:
@@ -911,6 +933,7 @@ def plan_phase_batches(
     phase: str, global_packet: dict[str, Any], *,
     record_limit: int = BATCH_RECORD_LIMIT,
     packet_char_limit: int = BATCH_PACKET_CHAR_LIMIT,
+    batch_seconds: dict[str, int] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Freeze contiguous boundaries and relative deadlines before any phase worker."""
     if phase not in BATCH_SECONDS or any(
@@ -919,6 +942,7 @@ def plan_phase_batches(
                                (packet_char_limit, BATCH_PACKET_CHAR_LIMIT))
     ):
         raise CoordinatorBlocked("BATCH_POLICY_INVALID", "batch policy is invalid")
+    policy = execution_policy(batch_seconds)
     records = global_packet.get("records")
     if not isinstance(records, list):
         raise CoordinatorBlocked("BATCH_PLAN_INVALID", "records must be an array")
@@ -942,8 +966,9 @@ def plan_phase_batches(
                                       "packet_char_limit": packet_char_limit})
     if current:
         batches.append(project_phase_batch(phase, global_packet, current))
-    seconds = BATCH_SECONDS[phase]
+    seconds = policy["batch_seconds"][phase]
     plan = {
+        "execution_policy": policy, "execution_policy_hash": _canonical_hash(policy),
         "phase": phase, "global_packet_hash": result_hash(global_packet),
         "record_limit": record_limit, "packet_char_limit": packet_char_limit,
         "batch_seconds": seconds, "overhead_seconds": PHASE_OVERHEAD_SECONDS,
@@ -956,15 +981,17 @@ def plan_phase_batches(
             for index, packet in enumerate(batches)
         ],
     }
+    plan["plan_hash"] = _canonical_hash(plan)
     return batches, plan
 
 
 def _execute_batch_round(
     phase: str, global_packet: dict[str, Any], *, cli: str, role_file: Path,
     toolchain_identity: dict[str, Any], packet_char_limit: int = BATCH_PACKET_CHAR_LIMIT,
-    state_dir: Path | None = None,
+    state_dir: Path | None = None, batch_seconds: dict[str, int] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    batches, plan = plan_phase_batches(phase, global_packet, packet_char_limit=packet_char_limit)
+    batches, plan = plan_phase_batches(phase, global_packet, packet_char_limit=packet_char_limit,
+                                      batch_seconds=batch_seconds)
     if not batches:
         raise CoordinatorBlocked("BATCH_SELECTION_EMPTY", "review selection is empty", {"phase": phase})
     if state_dir is not None:
@@ -976,10 +1003,9 @@ def _execute_batch_round(
     for index, packet in enumerate(batches):
         deadline = min(time.monotonic() + plan["batch_seconds"],
                        started + plan["batches"][index]["deadline_offset_seconds"])
-        if time.monotonic() >= deadline:
-            raise CoordinatorBlocked("PHASE_DEADLINE_EXCEEDED", "phase budget exhausted",
-                                     {"phase": phase, "batch_index": index})
         try:
+            if time.monotonic() >= deadline:
+                raise CoordinatorBlocked("PHASE_DEADLINE_EXCEEDED", "phase budget exhausted")
             local_result, evidence = _execute_phase(
                 phase, packet, cli=cli, role_file=role_file, deadline_monotonic=deadline,
             )
@@ -990,7 +1016,8 @@ def _execute_batch_round(
         except (CoordinatorBlocked, ResultValidationError) as exc:
             details = {**(getattr(exc, "details", None) or {}), "phase": phase, "batch_index": index,
                        "batch_count": len(batches), "completed_batches": len(proofs),
-                       "packet_hash": result_hash(packet)}
+                       "packet_hash": result_hash(packet), "batch_seconds": plan["batch_seconds"],
+                       "execution_policy_hash": plan["execution_policy_hash"], "plan_hash": plan["plan_hash"]}
             raise CoordinatorBlocked(getattr(exc, "reason_code", "REVIEW_RESULT_VALIDATION_FAILED"),
                                      str(exc), details) from exc
         merged_reviews.extend(validated["reviews"])
@@ -1007,26 +1034,35 @@ def _execute_batch_round(
                 "plan": plan, "batches": proofs, "merged_result_hash": result_hash(merged)}
     _validate_batch_execution(envelope, global_packet, merged, toolchain_identity)
     if time.monotonic() > phase_deadline:
-        raise CoordinatorBlocked("PHASE_DEADLINE_EXCEEDED", "aggregation exceeded phase budget", {"phase": phase})
+        raise CoordinatorBlocked("PHASE_DEADLINE_EXCEEDED", "aggregation exceeded phase budget",
+            {"phase": phase, "batch_index": len(batches) - 1, "batch_count": len(batches),
+             "completed_batches": len(proofs), "packet_hash": result_hash(batches[-1]),
+             "batch_seconds": plan["batch_seconds"], "execution_policy_hash": plan["execution_policy_hash"],
+             "plan_hash": plan["plan_hash"]})
     return merged, envelope
 
 
 def _execute_deep_round(global_packet: dict[str, Any], *, cli: str, role_file: Path,
                         toolchain_identity: dict[str, Any],
                         packet_char_limit: int = BATCH_PACKET_CHAR_LIMIT,
-                        state_dir: Path | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+                        state_dir: Path | None = None,
+                        batch_seconds: dict[str, int] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     return _execute_batch_round("deep", global_packet, cli=cli, role_file=role_file,
                                 toolchain_identity=toolchain_identity,
-                                packet_char_limit=packet_char_limit, state_dir=state_dir)
+                                packet_char_limit=packet_char_limit, state_dir=state_dir, batch_seconds=batch_seconds)
 
 
 def _validate_batch_execution(envelope: dict[str, Any], global_packet: dict[str, Any],
                               merged_result: dict[str, Any], toolchain_identity: dict[str, Any]) -> None:
     try:
         phase = envelope["phase"]
+        if ("execution_policy" in toolchain_identity
+            and envelope["plan"]["execution_policy"] != toolchain_identity["execution_policy"]):
+            raise ValueError("batch policy differs from generation identity")
         batches, plan = plan_phase_batches(phase, global_packet,
                                            record_limit=envelope["plan"]["record_limit"],
-                                           packet_char_limit=envelope["plan"]["packet_char_limit"])
+                                           packet_char_limit=envelope["plan"]["packet_char_limit"],
+                                           batch_seconds=envelope["plan"]["execution_policy"]["batch_seconds"])
         if (set(envelope) != {"schema_version", "phase", "plan", "batches", "merged_result_hash"}
             or envelope["schema_version"] != "phase-batch-execution-v1"
             or envelope["plan"] != plan or len(envelope["batches"]) != len(batches)):
@@ -1227,9 +1263,13 @@ def _load_or_initialize_task(
     root: Path,
     base_oid: str,
     mode: str,
+    batch_seconds: dict[str, int] | None = None,
 ) -> dict[str, Any]:
+    policy = execution_policy(batch_seconds)
+    _check_state_policy(state_dir, policy)
     path = state_dir / "task-manifest.json"
     identity = {
+        "execution_policy": policy, "execution_policy_hash": _canonical_hash(policy),
         "task_id": task_id,
         "repository_root": str(root),
         "base_commit_oid": base_oid,
@@ -1865,6 +1905,8 @@ def _result_details(
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    policy = execution_policy({phase: getattr(args, f"{phase}_batch_seconds", default)
+                               for phase, default in BATCH_SECONDS.items()})
     root = _resolve_repository(args.root)
     try:
         state_dir = args.state_dir.resolve(strict=True)
@@ -1874,6 +1916,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         raise CoordinatorBlocked("STATE_DIRECTORY_MISSING", "--state-dir must be a directory")
     if state_dir.is_relative_to(root):
         raise CoordinatorBlocked("STATE_INSIDE_ROOT", "--state-dir must be outside the repository")
+    _check_state_policy(state_dir, policy)
     base_oid = _resolve_commit(root, args.changed_from)
     mode = "staged" if args.staged else "head" if args.head else "working"
     head_oid = _resolve_commit(root, args.head) if args.head else None
@@ -1884,7 +1927,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         raise CoordinatorBlocked("SNAPSHOT_CHANGED", "source changed during extraction")
     selection_hash = _canonical_hash(extractors)
     metadata_packet = build_metadata_packet_multi(extractors)
-    _, metadata_plan = plan_phase_batches("metadata", metadata_packet)
+    _, metadata_plan = plan_phase_batches("metadata", metadata_packet, batch_seconds=policy["batch_seconds"])
     identity_records = extractor_record_identities_multi(extractors)
     if args.host_evidence is None:
         template = {
@@ -1936,16 +1979,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     )
     scripts_root = Path(__file__).resolve().parents[3]
     toolchain_identity = _toolchain_identity(args.cli, scripts_root)
+    toolchain_identity["execution_policy"] = policy
     toolchain_hash = _canonical_hash(toolchain_identity)
     state = _load_or_initialize_task(
         state_dir,
         task_id=host["task_id"],
         root=root,
         base_oid=base_oid,
-        mode=mode,
+        mode=mode, batch_seconds=policy["batch_seconds"],
     )
     for descriptor in state["generations"]:
         historical = _load_generation(state_dir, descriptor)
+        if historical["toolchain_identity"].get("execution_policy") != policy:
+            raise CoordinatorBlocked("STATE_EXECUTION_POLICY_MISMATCH",
+                                     "generation policy differs; use a new state directory")
         historical_gate, _ = _resolution_gate(
             root,
             state_dir,
@@ -2010,7 +2057,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         if snapshot_descriptor(root, base_oid, mode=mode, head_oid=head_oid) != before:
             raise CoordinatorBlocked("SNAPSHOT_CHANGED", "source changed before resolution commit")
-        if _toolchain_identity(args.cli, scripts_root) != toolchain_identity:
+        if {**_toolchain_identity(args.cli, scripts_root), "execution_policy": policy} != toolchain_identity:
             raise CoordinatorBlocked("TOOLCHAIN_CHANGED", "review toolchain changed before reuse")
         result = {
             "schema_version": RESULT_VERSION,
@@ -2032,14 +2079,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     worker_evidence = []
     metadata_result, evidence = _execute_batch_round(
         "metadata", metadata_packet, cli=args.cli, role_file=luna_role,
-        toolchain_identity=toolchain_identity, state_dir=state_dir,
+        toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"],
     )
     worker_evidence.append(evidence)
     validate_phase_result("metadata", metadata_result, metadata_packet["records"])
     alignment_packet = build_alignment_packet_multi(extractors, metadata_result)
     alignment_result, evidence = _execute_batch_round(
         "alignment", alignment_packet, cli=args.cli, role_file=luna_role,
-        toolchain_identity=toolchain_identity, state_dir=state_dir,
+        toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"],
     )
     worker_evidence.append(evidence)
     alignment_reviews = validate_phase_result(
@@ -2081,7 +2128,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             deep_packet,
             cli=args.cli,
             role_file=deep_role,
-            toolchain_identity=toolchain_identity, state_dir=state_dir,
+            toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"],
         )
         worker_evidence.append(evidence)
         reviews = validate_phase_result(
@@ -2107,7 +2154,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 deep_packet,
                 cli=args.cli,
                 role_file=deep_role,
-                toolchain_identity=toolchain_identity, state_dir=state_dir,
+                toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"],
             )
             if (
                 evidence.get("schema_version") in {"deep-batch-execution-v1", "phase-batch-execution-v1"}
@@ -2138,7 +2185,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "retention_records": retention_records,
     }
     aggregate_result = aggregate_results(aggregate_input)
-    if _toolchain_identity(args.cli, scripts_root) != toolchain_identity:
+    if {**_toolchain_identity(args.cli, scripts_root), "execution_policy": policy} != toolchain_identity:
         raise CoordinatorBlocked("TOOLCHAIN_CHANGED", "review toolchain changed during execution")
     if snapshot_descriptor(root, base_oid, mode=mode, head_oid=head_oid) != before:
         raise CoordinatorBlocked("SNAPSHOT_CHANGED", "source changed during review")
@@ -2233,7 +2280,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     )
     if snapshot_descriptor(root, base_oid, mode=mode, head_oid=head_oid) != before:
         raise CoordinatorBlocked("SNAPSHOT_CHANGED", "source changed before resolution commit")
-    if _toolchain_identity(args.cli, scripts_root) != toolchain_identity:
+    if {**_toolchain_identity(args.cli, scripts_root), "execution_policy": policy} != toolchain_identity:
         raise CoordinatorBlocked("TOOLCHAIN_CHANGED", "review toolchain changed before commit")
     result = {
         "schema_version": RESULT_VERSION,
@@ -2249,6 +2296,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     return result
 
 
+def _batch_seconds_argument(value: str) -> int:
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError("must be an integer from 30 through 1800") from exc
+    if not MIN_BATCH_SECONDS <= seconds <= MAX_BATCH_SECONDS:
+        raise argparse.ArgumentTypeError("must be an integer from 30 through 1800")
+    return seconds
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
@@ -2260,6 +2317,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cli", required=True)
     parser.add_argument("--host-evidence", type=Path)
     parser.add_argument("--prepare", action="store_true")
+    for phase, default in BATCH_SECONDS.items():
+        parser.add_argument(f"--{phase}-batch-seconds", type=_batch_seconds_argument, default=default,
+                            help=f"shared canary/review/cleanup budget, 30..1800 seconds (default: {default})")
     return parser
 
 
@@ -2299,8 +2359,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if isinstance(details, dict) and details:
             blocked["details"] = details
         try:
-            if args.state_dir.is_dir() and not args.state_dir.resolve().is_relative_to(args.root.resolve()):
-                _atomic_write(args.state_dir / "last-failure.json", blocked)
+            if (code != "STATE_EXECUTION_POLICY_MISMATCH" and args.state_dir.is_dir()
+                and not args.state_dir.resolve().is_relative_to(args.root.resolve())):
+                path = args.state_dir / "last-failure.json"
+                if path.exists():
+                    path = args.state_dir / ("failure-" + _canonical_hash(blocked).split(":")[1] + ".json")
+                if not path.exists():
+                    _atomic_write(path, blocked)
         except (OSError, CoordinatorBlocked):
             blocked["diagnostic_persistence_error"] = "DIAGNOSTIC_WRITE_FAILED"
         print(canonical_json(blocked))
