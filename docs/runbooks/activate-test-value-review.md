@@ -26,39 +26,40 @@ metadata、alignment、deepは同じbatch policyを使う。coordinatorはselect
 | 境界 | record数とcanonical packet文字数の両方を満たす最大の連続範囲。単独recordが文字数上限を超えた場合は対象を削らず`BLOCKED` |
 | batch順 | selectionのrecord順を維持し、欠落・重複・順序変更を許さない |
 | batch時間 | metadataは300秒、alignmentは600秒、deepは900秒。canary最大120秒、cleanup最大5秒を含む |
-| phase全体 | `N × 1 batchの時間上限 + 固定10秒`。`N`はbatch数、固定10秒はcoordinator overhead |
-| worker同時実行 | 1 |
+| phase全体 | `ceil(N / C) × B + 固定10秒`。`N`はbatch数、`C`は解決済み同時実行数、`B`はphaseのbatch時間 |
+| worker同時実行 | `--batch-concurrency auto`（default）は`C=N`、正の整数は`C=min(指定値,N)` |
 | audit | 10% |
 | deep retry | 最大1回 |
 
-workerへ渡すbatch deadlineは、coordinatorのphase plan開始時に取得したmonotonic anchorからの絶対deadlineである。phase planのstartを`P`、batch予算を`B`、batch `i`（0始まり）、batch開始を`S_i`とすると、batch deadlineは`min(S_i + B, P + (i + 1) × B)`、phase全体のdeadline offsetは`N × B + 10秒`とする。同じselection、canonical packet、policyからこのrelative offsetを決定論的に計算する。monotonic anchorそのものは実行ごとに異なるため、異なるrunの絶対時刻を比較しない。phaseの時計はplan実行開始から進み、git抽出、host evidence準備、依存準備などplan前の処理をphase deadlineへ含めるとは表現しない。
+workerへ渡すbatch deadlineは、coordinatorのphase plan開始時に取得したmonotonic anchorからの絶対deadlineである。同一phaseではrecord順の連続batchをwaveに分け、wave内のworkerを同時に開始し、全workerのcleanup直後に次waveへ進む。phase planのstartを`P`、batch予算を`B`、batch `i`（0始まり）、解決済み同時実行数を`C`、batch開始を`S_i`とすると、batch deadlineは`min(S_i + B, P + (floor(i / C) + 1) × B)`、phase全体のdeadline offsetは`ceil(N / C) × B + 10秒`とする。同じselection、canonical packet、policyからこのrelative offsetを決定論的に計算する。monotonic anchorそのものは実行ごとに異なるため、異なるrunの絶対時刻を比較しない。metadata→alignment→deepはphase単位で順次実行する。phaseの時計はplan実行開始から進み、git抽出、host evidence準備、依存準備などplan前の処理をphase deadlineへ含めるとは表現しない。
 
-一つのbatchではcanary、review、cleanupが同じmonotonic deadlineを共有する。canaryの経過時間を差し引いた残り時間だけをreviewへ渡し、canaryからreviewへの切替でdeadlineを延長しない。deadline到達時は所有process treeとscratchを終了・削除し、cleanupの終了確認に失敗した場合も成功扱いにせず、専用reason codeを持つ`BLOCKED`にする。
+一つのbatchではcanary、review、cleanupが同じmonotonic deadlineを共有する。canaryの経過時間を差し引いた残り時間だけをreviewへ渡し、canaryからreviewへの切替でdeadlineを延長しない。deadline到達時は所有process treeとscratchを終了・削除し、cleanupの終了確認に失敗した場合も成功扱いにせず、専用reason codeを持つ`BLOCKED`にする。local executor／runtimeのspawn失敗もsanitizedな`BATCH_EXECUTION_FAILED`として`BLOCKED`にする。waveが失敗したら後続waveを開始せず、開始済みの兄弟workerのcleanupを待つ。`BLOCKED`は入力indexが最小の失敗を返し、`completed_batches`は同じwaveの兄弟を含む検証済み成功数を数える。
 
 metadata packetをfreezeしてからmetadataのbatch planを確定し、metadata resultをfreezeしてからalignment planを確定する。deep planはmetadata／alignment resultとroutingをfreezeしてから確定する。全batchについてrecord ID、metadata／source hash、件数、順序、結果の完全性を集約時に検証する。一つでもbatchが失敗、timeout、cleanup失敗、欠落、重複、順序不整合になれば、成功batchだけで全体を`PASS`にしない。各phaseの実行前にsanitizedな`execution-plan-{phase}.json`を保存し、最初の失敗は`last-failure.json`へ、既存の失敗がある場合は`failure-<hash>.json`へ診断を残し、以前の記録を上書きしない。validator failureはpacket本文や機密情報を返さず、sanitized detailsにphase、record ID、違反種別、不正fieldを含める。
 
 ### phase別予算を変更した再測定
 
-`--metadata-batch-seconds`、`--alignment-batch-seconds`、`--deep-batch-seconds`は各30〜1,800秒の整数を受け付ける。defaultはそれぞれ300／600／900秒。boolean・非数値・0・負数・範囲外はpacket送信前に拒否する。時間変更用の環境変数や自動倍増は用意しない。
+`--metadata-batch-seconds`、`--alignment-batch-seconds`、`--deep-batch-seconds`は各30〜1,800秒の整数を受け付ける。defaultはそれぞれ300／600／900秒。`--batch-concurrency`は`auto`（default）または1以上の整数を受け付ける。boolean・非数値・0・負数・範囲外はpacket送信前に拒否する。時間変更用の環境変数や自動倍増は用意しない。
 
-2026-09-07の実測ではmetadataの10／10／2件は完了したが、alignment batch 0（10件、39,924文字）は300秒で`REVIEW_TIMEOUT`となった。process終了と計画・失敗診断の保存は確認できた。600秒での完了は未確認であり、次の明示指定で再測定する。
+2026-09-07の従来構成の実測ではmetadataの10／10／2件は完了したが、alignment batch 0（10件、39,924文字）は300秒で`REVIEW_TIMEOUT`となった。process終了と計画・失敗診断の保存は確認できた。alignment 600秒の逐次完了とauto並列の実モデル完了は未確認であり、次の明示指定で再測定する。
 
 ```powershell
 python -X utf8 skills/review-test-value/scripts/run_test_value_review.py `
   --root <repository-root> --changed-from <task-base> `
   --state-dir <new-state-directory> --cli <native-codex-executable> `
-  --host-evidence <host-evidence-json> --alignment-batch-seconds 600
+  --host-evidence <host-evidence-json> --alignment-batch-seconds 600 `
+  --batch-concurrency auto
 ```
 
-`--prepare`にも同じ秒数指定を渡す。alignmentが3batchならoffsetは`3 × 600 + 10 = 1,810秒`となり、早く完了したbatchの後は待機せず次へ進む。時間予算はcanary・review・cleanupで共有する。
+`--prepare`にも同じ秒数と`--batch-concurrency`を渡す。22 recordsが3batchのalignmentでは、defaultのauto（`C=3`）のoffsetは`ceil(3 / 3) × 600 + 10 = 610秒`、明示`--batch-concurrency 1`の逐次offsetは`3 × 600 + 10 = 1,810秒`である。autoでは1 wave、明示上限がbatch数より小さい場合だけwaveを分け、wave内の全workerのcleanup後に余分な待機を挟まず次waveへ進む。時間予算はcanary・review・cleanupで共有する。
 
-指定した全phaseの値をtask manifestの`execution_policy`／`execution_policy_hash`、各計画の`batch_seconds`／`execution_policy_hash`／`plan_hash`へ固定する。generationのtoolchain identityにもpolicyを含める。policyの異なる既存state、またはpolicy未記録の旧stateは`STATE_EXECUTION_POLICY_MISMATCH`で停止し、計画も失敗記録も変更しない。再計画は新しいstate directoryで明示実行する方式に限定する。元のstateや未解決義務を消して完了扱いにはしない。
+指定した全phaseの値をtask manifestの`execution_policy`／`execution_policy_hash`、各計画の`batch_seconds`／解決済み`batch_concurrency`／`execution_policy_hash`／`plan_hash`へ固定する。`auto`はexecution policyでは`null`としてhashし、planには実行時の解決値を保存する。generationのtoolchain identityにもpolicyを含める。policyの異なる既存state、またはpolicy未記録の旧stateは`STATE_EXECUTION_POLICY_MISMATCH`で停止し、計画も失敗記録も変更しない。再計画は新しいstate directoryで明示実行する方式に限定する。元のstateや未解決義務を消して完了扱いにはしない。
 
-新しいtimeout診断はphase、batch index、batch count、completed batch count、packet hash、`batch_seconds`、policy／plan hashを含む。600秒でもtimeoutすれば`BLOCKED`を保存し、追加延長は自動実行しない。
+新しいtimeout診断はphase、batch index、batch count、completed batch count、packet hash、`batch_seconds`、policy／plan hashを含む。600秒でもtimeoutすれば`BLOCKED`を保存し、並列度の自動縮小、追加延長、batch workerの無条件retryは自動実行しない。native workerは`multi_agent`を無効にした独立CLIであり、`spawn_agent`のsubagent枠やcapacity signalを使わないため、親の枠を理由にした自動縮小もない。
 
 ## 実行境界
 
-Luna/maxによるmetadata／alignmentと必要なdeep reviewは、それぞれ独立した新規Codex CLI runとする。model／effort／role指示は`agents/test_value_luna.toml`と`agents/test_value_deep.toml`を正本とする。通常の子のfork、親の自己評価、別modelへのfallbackは隔離審査の代行にならない。
+Luna/maxによるmetadata／alignmentと必要なdeep reviewは、それぞれ独立した新規Codex CLI runとする。model／effort／role指示は`agents/test_value_luna.toml`と`agents/test_value_deep.toml`を正本とする。workerは`multi_agent`を無効にした独立native CLIを起動し、`spawn_agent`のsubagent枠やcapacity signalを使わない。通常の子のfork、親の自己評価、別modelへのfallbackは隔離審査の代行にならない。
 
 metadata phaseは正規metadataだけを受け取る。本文・locator・親履歴・別phase・ログ・Memory・MCPから補完できないよう、user／project／managed config、AGENTS、Skill、hook、tool、network、shellの自動入力と読取経路を確認する。`--ignore-user-config`だけで全入力が消えるとは仮定しない。管理者の安全policyは維持し、必要な境界を確認できない場合はpacket送信前に`BLOCKED`とする。
 
@@ -92,9 +93,9 @@ stateの書込みが途中で終わり未公開generationが残った場合は�
 
 既存の直接checkは[SkillのValidation](../../skills/review-test-value/SKILL.md#validation)を使う。offlineの成功と、Windows／CLI／modelを特定した実モデルE2Eを分ける。旧preflightはversionとroleのreadinessを返すだけで、exit 2の`BLOCKED`は成功ではない。
 
-candidateの回帰checkでは、batch境界、record／hash／順序の集約、canaryからreviewへの残り時間、process treeとscratchのcleanup、schema variantとsanitized validation diagnostics、途中batchの失敗を確認する。22件以上のselectionを一つの固定runでWindows native CLIへ渡し、手動分割なしに規定のphase deadline内で終了契約を得る。1件、上限ちょうど、上限超過、22件、100件、および文字数境界のoffline fixtureは、実モデルE2Eの代わりにしない。
+candidateの回帰checkでは、batch境界、解決済み`C`、record／hash／順序の集約、canaryからreviewへの残り時間、process treeとscratchのcleanup、schema variantとsanitized validation diagnostics、途中batchの失敗を確認する。22件以上のselectionを一つの固定runでWindows native CLIへ渡し、手動分割なしに規定のphase deadline内で終了契約を得る。1件、上限ちょうど、上限超過、22件、100件、および文字数境界のoffline fixtureは、実モデルE2Eの代わりにしない。
 
-22件のport入力検証fixtureは、coordinatorへ`--alignment-batch-seconds 600`を明示指定し、alignment batch 0の完了まで検証する。Windowsで既存のChatGPT Pro認証を用い、次の明示実行で再現する。通常CIではモデルを呼ばない。fixture自体の22件のassertion、抽出、`10 + 10 + 2`の分割はofflineで確認できるが、このcheckoutでは実モデルrunは未実施である。
+22件のport入力検証fixtureは、coordinatorへ`--alignment-batch-seconds 600 --batch-concurrency auto`を明示指定し、alignmentのphase offset 610秒とbatch 0の完了まで検証する。Windowsで既存のChatGPT Pro認証を用い、次のopt-in実行で再現する。通常CIではモデルを呼ばない。fixture自体の22件のassertion、抽出、`10 + 10 + 2`の分割はofflineで確認できるが、このcheckoutではauto並列の実モデルrunは未実施である。
 
 ```powershell
 $env:TEST_VALUE_E2E_CLI = 'C:\path\to\codex.exe'
@@ -102,7 +103,7 @@ $env:TEST_VALUE_E2E_STATE = 'C:\review-evidence\batch-e2e'
 python -X utf8 -m unittest skills/review-test-value/scripts/test_review_live_e2e.py
 ```
 
-指定先はcheckout外の絶対pathとする。実行ごとにfixture repository・state・`e2e-summary.json`を保持する。新規Codex sessionから同じコマンドを実行し、各runのplanとterminal gateを比較する。小さい22件fixtureでは各phase最大3batch、deep retryなしを前提に、外側watchdogを`3 × (300 + 600 + 900) + 3 × 10 + 180 = 5,610秒`とする。180秒はGit／preflight／最終保存の固定余裕であり、workerのdeadlineを延長しない。各runでは実際に生成されたphase planの時間合計とも照合する。preflight・canaryだけの失敗やskipを実モデルE2E成功と扱わず、モデル審査後の`BLOCKED`も品質確認・有効化の完了とは区別する。
+指定先はcheckout外の絶対pathとする。実行ごとにfixture repository・state・`e2e-summary.json`を保持する。新規Codex sessionから同じコマンドを実行し、各runのplanとterminal gateを比較する。このopt-in E2Eは`--batch-concurrency auto`を固定し、小さい22件fixtureの各phase最大3batch、deep retryなしを前提に、外側watchdogを`(300 + 10) + (600 + 10) + (900 + 10) + 180 = 2,010秒`とする。180秒はGit／preflight／最終保存の固定余裕であり、workerのdeadlineを延長しない。各runでは実際に生成されたphase planの時間合計とも照合する。preflight・canaryだけの失敗やskipを実モデルE2E成功と扱わず、モデル審査後の`BLOCKED`も品質確認・有効化の完了とは区別する。auto並列のWindows実モデルE2Eはこのcheckoutでは未実施であり、candidateは引き続き必須gateにしない。
 
 Luna/maxの実効起動を全phaseで確認し、循環したoracle、本文以上の過大主張、mockによるSUTの置換、必要contextの欠落を誤承認しないか、正常例とともに確認する。所要時間・利用量も記録し、旧Sol構成と同等の精度や週枠削減を未測定のまま保証しない。
 

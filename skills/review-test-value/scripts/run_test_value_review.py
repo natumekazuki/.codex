@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -127,13 +128,15 @@ class CoordinatorBlocked(RuntimeError):
         self.details = details
 
 
-def execution_policy(seconds: dict[str, int] | None = None) -> dict[str, Any]:
+def execution_policy(seconds: dict[str, int] | None = None, batch_concurrency: int | None = None) -> dict[str, Any]:
+    if batch_concurrency is not None and (type(batch_concurrency) is not int or batch_concurrency < 1):
+        raise CoordinatorBlocked("BATCH_POLICY_INVALID", "batch concurrency must be a positive integer or auto")
     values = dict(BATCH_SECONDS) if seconds is None else seconds
     if (not isinstance(values, dict) or set(values) != set(BATCH_SECONDS)
         or any(type(value) is not int or not MIN_BATCH_SECONDS <= value <= MAX_BATCH_SECONDS
                for value in values.values())):
         raise CoordinatorBlocked("BATCH_POLICY_INVALID", "batch seconds must be integers from 30 through 1800")
-    return {"batch_seconds": dict(values), "record_limit": BATCH_RECORD_LIMIT,
+    return {"batch_concurrency": batch_concurrency, "batch_seconds": dict(values), "record_limit": BATCH_RECORD_LIMIT,
             "packet_char_limit": BATCH_PACKET_CHAR_LIMIT, "overhead_seconds": PHASE_OVERHEAD_SECONDS}
 
 
@@ -934,6 +937,7 @@ def plan_phase_batches(
     record_limit: int = BATCH_RECORD_LIMIT,
     packet_char_limit: int = BATCH_PACKET_CHAR_LIMIT,
     batch_seconds: dict[str, int] | None = None,
+    batch_concurrency: int | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Freeze contiguous boundaries and relative deadlines before any phase worker."""
     if phase not in BATCH_SECONDS or any(
@@ -942,7 +946,7 @@ def plan_phase_batches(
                                (packet_char_limit, BATCH_PACKET_CHAR_LIMIT))
     ):
         raise CoordinatorBlocked("BATCH_POLICY_INVALID", "batch policy is invalid")
-    policy = execution_policy(batch_seconds)
+    policy = execution_policy(batch_seconds, batch_concurrency)
     records = global_packet.get("records")
     if not isinstance(records, list):
         raise CoordinatorBlocked("BATCH_PLAN_INVALID", "records must be an array")
@@ -967,17 +971,19 @@ def plan_phase_batches(
     if current:
         batches.append(project_phase_batch(phase, global_packet, current))
     seconds = policy["batch_seconds"][phase]
+    concurrency = min(batch_concurrency or len(batches), len(batches)) or 1
     plan = {
         "execution_policy": policy, "execution_policy_hash": _canonical_hash(policy),
         "phase": phase, "global_packet_hash": result_hash(global_packet),
         "record_limit": record_limit, "packet_char_limit": packet_char_limit,
         "batch_seconds": seconds, "overhead_seconds": PHASE_OVERHEAD_SECONDS,
-        "phase_seconds": len(batches) * seconds + PHASE_OVERHEAD_SECONDS,
+        "batch_concurrency": concurrency,
+        "phase_seconds": ((len(batches) + concurrency - 1) // concurrency) * seconds + PHASE_OVERHEAD_SECONDS,
         "batches": [
             {"index": index, "record_ids": [item["record_id"] for item in packet["records"]],
              "record_count": len(packet["records"]), "packet_hash": result_hash(packet),
              "packet_chars": len(canonical_packet_json(packet)),
-             "deadline_offset_seconds": (index + 1) * seconds}
+             "deadline_offset_seconds": (index // concurrency + 1) * seconds}
             for index, packet in enumerate(batches)
         ],
     }
@@ -989,18 +995,22 @@ def _execute_batch_round(
     phase: str, global_packet: dict[str, Any], *, cli: str, role_file: Path,
     toolchain_identity: dict[str, Any], packet_char_limit: int = BATCH_PACKET_CHAR_LIMIT,
     state_dir: Path | None = None, batch_seconds: dict[str, int] | None = None,
+    batch_concurrency: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     batches, plan = plan_phase_batches(phase, global_packet, packet_char_limit=packet_char_limit,
-                                      batch_seconds=batch_seconds)
+                                      batch_seconds=batch_seconds, batch_concurrency=batch_concurrency)
     if not batches:
         raise CoordinatorBlocked("BATCH_SELECTION_EMPTY", "review selection is empty", {"phase": phase})
     if state_dir is not None:
         _atomic_write(state_dir / f"execution-plan-{phase}.json", plan)
+    concurrency = plan["batch_concurrency"]
     started = time.monotonic()
     phase_deadline = started + plan["phase_seconds"]
     proofs = []
     merged_reviews = []
-    for index, packet in enumerate(batches):
+
+    def execute_batch(index: int) -> dict[str, Any]:
+        packet = batches[index]
         deadline = min(time.monotonic() + plan["batch_seconds"],
                        started + plan["batches"][index]["deadline_offset_seconds"])
         try:
@@ -1020,12 +1030,39 @@ def _execute_batch_round(
                        "execution_policy_hash": plan["execution_policy_hash"], "plan_hash": plan["plan_hash"]}
             raise CoordinatorBlocked(getattr(exc, "reason_code", "REVIEW_RESULT_VALIDATION_FAILED"),
                                      str(exc), details) from exc
-        merged_reviews.extend(validated["reviews"])
-        proofs.append({"index": index,
+        return {"index": index,
                        "record_ids": [item["record_id"] for item in packet["records"]],
                        "packet_input_hash": packet.get("input_hash", result_hash(packet)),
                        "result": validated, "result_hash": result_hash(validated),
-                       "worker_evidence": evidence, "worker_evidence_hash": _canonical_hash(evidence)})
+                       "worker_evidence": evidence, "worker_evidence_hash": _canonical_hash(evidence)}
+
+    # Contiguous waves bound both concurrency and the planned wall-clock budget.
+    # Workers own their process trees; join every started worker before returning.
+    try:
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            for start in range(0, len(batches), concurrency):
+                futures = [executor.submit(execute_batch, index)
+                           for index in range(start, min(start + concurrency, len(batches)))]
+                failures = []
+                for future in futures:
+                    try:
+                        proofs.append(future.result())
+                    except CoordinatorBlocked as exc:
+                        failures.append(exc)
+                if failures:
+                    failure = failures[0]  # Stable lowest input index, not completion order.
+                    failure.details["completed_batches"] = len(proofs)
+                    failure.details["batch_concurrency"] = concurrency
+                    raise failure
+    except CoordinatorBlocked:
+        raise
+    except (OSError, RuntimeError) as exc:
+        raise CoordinatorBlocked("BATCH_EXECUTION_FAILED", "batch execution could not complete",
+            {"phase": phase, "batch_count": len(batches), "completed_batches": len(proofs),
+             "batch_concurrency": concurrency, "batch_seconds": plan["batch_seconds"],
+             "plan_hash": plan["plan_hash"], "execution_policy_hash": plan["execution_policy_hash"]}) from exc
+    for proof in proofs:
+        merged_reviews.extend(proof["result"]["reviews"])
     merged = {"review_contract_version": global_packet["review_contract_version"], "reviews": merged_reviews}
     if phase == "deep":
         merged["input_hash"] = global_packet["input_hash"]
@@ -1037,8 +1074,8 @@ def _execute_batch_round(
         raise CoordinatorBlocked("PHASE_DEADLINE_EXCEEDED", "aggregation exceeded phase budget",
             {"phase": phase, "batch_index": len(batches) - 1, "batch_count": len(batches),
              "completed_batches": len(proofs), "packet_hash": result_hash(batches[-1]),
-             "batch_seconds": plan["batch_seconds"], "execution_policy_hash": plan["execution_policy_hash"],
-             "plan_hash": plan["plan_hash"]})
+             "batch_seconds": plan["batch_seconds"], "batch_concurrency": concurrency,
+             "execution_policy_hash": plan["execution_policy_hash"], "plan_hash": plan["plan_hash"]})
     return merged, envelope
 
 
@@ -1046,10 +1083,11 @@ def _execute_deep_round(global_packet: dict[str, Any], *, cli: str, role_file: P
                         toolchain_identity: dict[str, Any],
                         packet_char_limit: int = BATCH_PACKET_CHAR_LIMIT,
                         state_dir: Path | None = None,
-                        batch_seconds: dict[str, int] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+                        batch_seconds: dict[str, int] | None = None,
+                        batch_concurrency: int | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     return _execute_batch_round("deep", global_packet, cli=cli, role_file=role_file,
                                 toolchain_identity=toolchain_identity,
-                                packet_char_limit=packet_char_limit, state_dir=state_dir, batch_seconds=batch_seconds)
+                                packet_char_limit=packet_char_limit, state_dir=state_dir, batch_seconds=batch_seconds, batch_concurrency=batch_concurrency)
 
 
 def _validate_batch_execution(envelope: dict[str, Any], global_packet: dict[str, Any],
@@ -1062,7 +1100,8 @@ def _validate_batch_execution(envelope: dict[str, Any], global_packet: dict[str,
         batches, plan = plan_phase_batches(phase, global_packet,
                                            record_limit=envelope["plan"]["record_limit"],
                                            packet_char_limit=envelope["plan"]["packet_char_limit"],
-                                           batch_seconds=envelope["plan"]["execution_policy"]["batch_seconds"])
+                                           batch_seconds=envelope["plan"]["execution_policy"]["batch_seconds"],
+                                           batch_concurrency=envelope["plan"]["execution_policy"]["batch_concurrency"])
         if (set(envelope) != {"schema_version", "phase", "plan", "batches", "merged_result_hash"}
             or envelope["schema_version"] != "phase-batch-execution-v1"
             or envelope["plan"] != plan or len(envelope["batches"]) != len(batches)):
@@ -1264,8 +1303,9 @@ def _load_or_initialize_task(
     base_oid: str,
     mode: str,
     batch_seconds: dict[str, int] | None = None,
+    batch_concurrency: int | None = None,
 ) -> dict[str, Any]:
-    policy = execution_policy(batch_seconds)
+    policy = execution_policy(batch_seconds, batch_concurrency)
     _check_state_policy(state_dir, policy)
     path = state_dir / "task-manifest.json"
     identity = {
@@ -1906,7 +1946,8 @@ def _result_details(
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     policy = execution_policy({phase: getattr(args, f"{phase}_batch_seconds", default)
-                               for phase, default in BATCH_SECONDS.items()})
+                               for phase, default in BATCH_SECONDS.items()},
+                              getattr(args, "batch_concurrency", None))
     root = _resolve_repository(args.root)
     try:
         state_dir = args.state_dir.resolve(strict=True)
@@ -1927,7 +1968,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         raise CoordinatorBlocked("SNAPSHOT_CHANGED", "source changed during extraction")
     selection_hash = _canonical_hash(extractors)
     metadata_packet = build_metadata_packet_multi(extractors)
-    _, metadata_plan = plan_phase_batches("metadata", metadata_packet, batch_seconds=policy["batch_seconds"])
+    _, metadata_plan = plan_phase_batches("metadata", metadata_packet, batch_seconds=policy["batch_seconds"], batch_concurrency=policy["batch_concurrency"])
     identity_records = extractor_record_identities_multi(extractors)
     if args.host_evidence is None:
         template = {
@@ -1986,7 +2027,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         task_id=host["task_id"],
         root=root,
         base_oid=base_oid,
-        mode=mode, batch_seconds=policy["batch_seconds"],
+        mode=mode, batch_seconds=policy["batch_seconds"], batch_concurrency=policy["batch_concurrency"],
     )
     for descriptor in state["generations"]:
         historical = _load_generation(state_dir, descriptor)
@@ -2079,14 +2120,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     worker_evidence = []
     metadata_result, evidence = _execute_batch_round(
         "metadata", metadata_packet, cli=args.cli, role_file=luna_role,
-        toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"],
+        toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"], batch_concurrency=policy["batch_concurrency"],
     )
     worker_evidence.append(evidence)
     validate_phase_result("metadata", metadata_result, metadata_packet["records"])
     alignment_packet = build_alignment_packet_multi(extractors, metadata_result)
     alignment_result, evidence = _execute_batch_round(
         "alignment", alignment_packet, cli=args.cli, role_file=luna_role,
-        toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"],
+        toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"], batch_concurrency=policy["batch_concurrency"],
     )
     worker_evidence.append(evidence)
     alignment_reviews = validate_phase_result(
@@ -2128,7 +2169,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             deep_packet,
             cli=args.cli,
             role_file=deep_role,
-            toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"],
+            toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"], batch_concurrency=policy["batch_concurrency"],
         )
         worker_evidence.append(evidence)
         reviews = validate_phase_result(
@@ -2154,7 +2195,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 deep_packet,
                 cli=args.cli,
                 role_file=deep_role,
-                toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"],
+                toolchain_identity=toolchain_identity, state_dir=state_dir, batch_seconds=policy["batch_seconds"], batch_concurrency=policy["batch_concurrency"],
             )
             if (
                 evidence.get("schema_version") in {"deep-batch-execution-v1", "phase-batch-execution-v1"}
@@ -2306,6 +2347,18 @@ def _batch_seconds_argument(value: str) -> int:
     return seconds
 
 
+def _batch_concurrency_argument(value: str) -> int | None:
+    if value == "auto":
+        return None
+    try:
+        concurrency = int(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError("must be auto or a positive integer") from exc
+    if concurrency < 1:
+        raise argparse.ArgumentTypeError("must be auto or a positive integer")
+    return concurrency
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
@@ -2317,6 +2370,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cli", required=True)
     parser.add_argument("--host-evidence", type=Path)
     parser.add_argument("--prepare", action="store_true")
+    parser.add_argument("--batch-concurrency", type=_batch_concurrency_argument, default=None,
+                        help="parallel workers within each phase: auto (all batches, default) or a positive integer")
     for phase, default in BATCH_SECONDS.items():
         parser.add_argument(f"--{phase}-batch-seconds", type=_batch_seconds_argument, default=default,
                             help=f"shared canary/review/cleanup budget, 30..1800 seconds (default: {default})")
