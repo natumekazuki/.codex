@@ -10,6 +10,7 @@
 
 ## 操作範囲
 
+- Computer Use（画面・マウス・キーボードによるGUI操作）は、ユーザーがその使用を明示的に指示した場合に限る。Windowsではユーザー操作と競合し、トークン消費も大きいため、通常の作業依頼や他の手段の失敗を使用許可と解釈しない。
 - 調査・説明・review・計画の依頼はread-onlyとする。変更依頼は依頼範囲のlocal変更、非破壊的な検証、task／feature branchへの通常の追加commitを含む。
 - 外部write、購入、破壊的操作、default／main／protected branchへのcommit、履歴改変、push、依頼範囲の実質的な拡張は、操作・対象・scopeへの明示承認を要する。現在の会話で承認済みの操作を、文言や書式の違いだけで再確認しない。下記WithMate操作の継続的な許可は維持する。
 - ユーザーの未コミット・staged変更を保護し、無断の上書き、巻き戻し、stage、clean、無関係な変更の混入をしない。sandbox、管理者policy、対象repositoryの明示契約を弱めない。
