@@ -15,7 +15,7 @@
     ],
     "SubagentStart": [
       {
-        "matcher": "^(default|worker|explorer|general_sol|general_luna)$",
+        "matcher": "^(default|worker|explorer|general_sol|general_luna|general_astra)$",
         "hooks": [
           {
             "type": "command",
@@ -37,6 +37,20 @@
             "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Restoring implementation restraint"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(spawn_agent|Agent)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/subagent-fork-default.ps1\")'",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/subagent-fork-default.ps1')\"",
+            "timeout": 5,
+            "statusMessage": "Checking subagent model and history"
           }
         ]
       }
