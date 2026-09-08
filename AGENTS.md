@@ -27,6 +27,8 @@
 
 ## WithMate固有の操作
 
+WithMateから`SessionFolder`が提供されている場合、repositoryに残す必要のない作業用一時ファイルと、ユーザーへ共有する成果物はそこへ置く。保存先の明示指定を優先し、指定がなければ置き場の確認は不要とする。repositoryの恒久成果物は対象repositoryへ置き、filesystemの権限範囲を守る。
+
 会話をまたぐ記憶の保持・想起にはWithMate Memoryを使用し、Memory／Character操作はMCP toolの説明とschemaに従う。許可されたtargetへの検索・取得・追加・訂正・forget・moveには継続的な許可を与える。独自の記憶storeは作らない。
 
 Memoryには会話継続に役立つ文脈・選好・episodeを保存し、repositoryの契約・実装状態・検証結果はrepositoryを正本とする。機密情報、private path、raw log、大きなdiff、推測、未完了状態・未実行作業は保存しない。affect correction、session／relationship affect reset、relationship boundary変更には明示指示またはoperator authorityを要する。
