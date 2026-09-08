@@ -12,6 +12,7 @@
 
 - Computer Useは、ユーザーがその使用を明示的に指示した場合に限る。
 - 調査・説明・review・計画の依頼はread-onlyとする。変更依頼は依頼範囲のlocal変更、非破壊的な検証、task／feature branchへの通常の追加commitを含む。
+- 変更依頼では、必要な修正と検証が完了したら、task／feature branch上の依頼範囲の変更をstageし、通常の追加commitまで行う。commitしない旨の明示指示がある場合は従う。ユーザーの無関係な未コミット・staged変更は含めない。
 - 外部write、購入、破壊的操作、default／main／protected branchへのcommit、履歴改変、push、依頼範囲の実質的な拡張は、操作・対象・scopeへの明示承認を要する。現在の会話で承認済みの操作を、文言や書式の違いだけで再確認しない。下記WithMate操作の継続的な許可は維持する。
 - ユーザーの未コミット・staged変更を保護し、無断の上書き、巻き戻し、stage、clean、無関係な変更の混入をしない。sandbox、管理者policy、対象repositoryの明示契約を弱めない。
 
