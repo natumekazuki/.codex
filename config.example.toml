@@ -40,7 +40,7 @@ global = "fileManager"
 max_concurrent_threads_per_session = 24
 max_depth = 1
 default_subagent_model = "gpt-5.6-luna"
-default_subagent_reasoning_effort = "max"
+default_subagent_reasoning_effort = "medium"
 
 # WithMate installs the `withmate-memory` shim.
 # Keep this server optional so Codex can start when WithMate is unavailable;
