@@ -40,9 +40,10 @@ working treeのsource pathがsymlinkなどによってrepository root外へ解�
 - 対応sourceはGit属性の`-diff`やtext conversionを適用せず、raw textとしてhunkを取得する。LFとCRLFの相互変換だけではrecordを選ばず、同じfileで同時に行われた内容変更は選択対象に残す。
 - 変更していないrecordと、そのrecordだけに属するmetadata diagnosticは結果から除外する。
 - pure renameは選ばず、空の`tests`と`transitions`を返す。renameと同時に内容を変更した場合は変更recordを選ぶ。
-- Git modeは変更recordごとに`ADDED`、`SURVIVED`、`DELETED`のtransitionを返す。file pair内でrecord hashとhunkから投影したdeclaration位置を照合し、symbol名だけでは対応付けない。hashと位置が別recordを指すなど対応を一意に確定できない場合は`RECORD_TRANSITION_UNRESOLVED`で停止する。
+- Git modeは変更recordごとに`ADDED`、`SURVIVED`、`DELETED`のtransitionを返す。file pair内で`source_text`と解析済み`metadata`の直接比較、およびhunkから投影したdeclaration位置を照合し、symbol名だけでは対応付けない。内容一致と位置が別recordを指すなど対応を一意に確定できない場合は`RECORD_TRANSITION_UNRESOLVED`で停止する。
+- metadataはschema検証を通った文字列、文字列配列、辞書だけを含み、解析失敗時は`null`となる。辞書のキー順は比較へ影響せず、配列の順序は保持する。削除済みv1の解析成功は`metadata`の非nullで判定する。
 - `ADDED`と`SURVIVED`の`after`集合は、順序を含めて`tests`と一致する。`DELETED`は`tests`へ含めない。
-- 正常なv1 metadataが結合した`DELETED.before`は歴史的な削除証拠として保持する。そのblock自身の`TEST_VALUE_V2_REQUIRED`だけを現在の移行要求から除き、元version・metadata・本文・hashを審査へ渡す。削除元の不正metadata、未付与、結合不明、未知versionなど他の診断は引き続き停止する。新規・surviving・明示pathのv1にはv2を要求する。
+- 正常なv1 metadataが結合した`DELETED.before`は歴史的な削除証拠として保持する。そのblock自身の`TEST_VALUE_V2_REQUIRED`だけを現在の移行要求から除き、元version・metadata・本文を審査へ渡す。削除元の不正metadata、未付与、結合不明、未知versionなど他の診断は引き続き停止する。新規・surviving・明示pathのv1にはv2を要求する。
 - source全体の解析を信頼できなくするsyntax、decode、adapter failureは隠さない。
 - 静的に識別した未対応test declarationは内部rangeで差分と対応付け、開始行以外の本文変更も`TEST_DECLARATION_UNSUPPORTED`として返す。内部rangeは公開diagnosticへ追加しない。
 - 対象言語に変更recordがない場合は空の`tests`と`diagnostics`を返し、exit `0`とする。

@@ -113,10 +113,10 @@ class ExtractTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "contract"
-    # claim = "metadataをdecorated testへ結合しdecoratorから末尾までのsource_textとhashを投影する"
+    # claim = "metadataをdecorated testへ結合しdecoratorから末尾までのsource_textを投影する"
     # oracle = { type = "adr", ref = "ADR-0020" }
     # fault = "metadataを別testへ結合するかdecoratorやassertionをsource_textから欠落させる"
-    # observable = "抽出recordのmetadata、source範囲、source hash"
+    # observable = "抽出recordのmetadata、source範囲、source_text"
     # observation_boundary = "component-behavior"
     # scope = "python-source-extraction"
     # lifecycle = "permanent"
@@ -129,6 +129,13 @@ class ExtractTestValuesTests(unittest.TestCase):
             + "    def test_retry(self):\n"
             + "        # assertion rationale remains in source_text\n"
             + "        assert charge_count() == 1\n"
+            + "\n"
+            + "".join(
+                f"    {line}\n"
+                for line in VALID_METADATA.replace("PAYMENT-004", "PAYMENT-005").splitlines()
+            )
+            + "    def test_other(self):\n"
+            + "        assert other_count() == 2\n"
         )
         self.write("tests/test_payment.py", source)
 
@@ -139,26 +146,31 @@ class ExtractTestValuesTests(unittest.TestCase):
         self.assertEqual(result["coverage"], "python-source-declarations-v1")
         self.assertEqual(result["diagnostics"], [])
         self.assertEqual(result["warnings"], [])
-        self.assertEqual(len(result["tests"]), 1)
+        self.assertEqual(len(result["tests"]), 2)
         record = result["tests"][0]
         self.assertEqual(record["metadata_format_version"], 2)
         self.assertEqual(record["source"]["symbol"], "PaymentTests.test_retry")
         self.assertEqual(record["source"]["metadata_start_line"], 2)
         self.assertEqual(record["source"]["declaration_start_line"], 12)
         self.assertEqual(record["metadata"]["oracle"]["ref"], "PAYMENT-004")
-        self.assertTrue(
-            record["source_text"].startswith('    @parameterized("lost-response")')
+        self.assertEqual(
+            record["source_text"],
+            '    @parameterized("lost-response")\n'
+            "    def test_retry(self):\n"
+            "        # assertion rationale remains in source_text\n"
+            "        assert charge_count() == 1\n",
         )
-        self.assertIn("assertion rationale", record["source_text"])
-        self.assertNotIn("@test-value", record["source_text"])
-        self.assertRegex(record["source_hash"], r"^sha256:[0-9a-f]{64}$")
-        self.assertRegex(record["metadata_hash"], r"^sha256:[0-9a-f]{64}$")
+        other = result["tests"][1]
+        self.assertEqual(other["source"]["symbol"], "PaymentTests.test_other")
+        self.assertEqual(other["metadata"]["oracle"]["ref"], "PAYMENT-005")
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "metadata欠落testは値を推測せずmetadata nullとTEST_VALUE_MISSINGを返す"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "コメントのないtestへ架空の価値情報を補完して成功扱いする"
+    # fault = "コメントのないtestへ架空の価値情報を補完して成功扱いする"
+    # observable = "抽出結果のmetadata nullとTEST_VALUE_MISSING diagnostic"
+    # observation_boundary = "component-behavior"
     # scope = "test-value-binding"
     # lifecycle = "permanent"
     # @end-test-value
@@ -169,7 +181,6 @@ class ExtractTestValuesTests(unittest.TestCase):
 
         self.assertEqual(exit_status, 1)
         self.assertIsNone(result["tests"][0]["metadata"])
-        self.assertIsNone(result["tests"][0]["metadata_hash"])
         self.assertEqual(
             [item["code"] for item in result["diagnostics"]],
             ["TEST_VALUE_MISSING"],
@@ -593,7 +604,7 @@ def test_oracle_table_with_decoy():
     # claim = "path modeのv1を移行dataとして読取るがTEST_VALUE_V2_REQUIREDで審査開始を止める"
     # oracle = { type = "contract", ref = "skills/review-test-value/references/comment-format-v2.md" }
     # fault = "v1 recordを成功扱いするか移行に必要なmetadataを失う"
-    # observable = "exit status、diagnostic、metadata_format_version、metadata hash"
+    # observable = "exit status、diagnostic、metadata_format_version、metadata"
     # observation_boundary = "component-behavior"
     # scope = "extractor-path-mode"
     # lifecycle = "permanent"
@@ -626,7 +637,6 @@ def test_oracle_table_with_decoy():
                 "lifecycle": "permanent",
             },
         )
-        self.assertRegex(record["metadata_hash"], r"^sha256:[0-9a-f]{64}$")
 
     # @test-value v1
     # kind = "regression"
@@ -654,11 +664,13 @@ def test_oracle_table_with_decoy():
             {"SOURCE_SYNTAX_ERROR", "TEST_DECLARATION_UNSUPPORTED"},
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "invariant"
-    # claim = "入力順とLF/CRLFが違ってもcanonical JSONとsource hashを一致させる"
+    # claim = "入力順とLF/CRLFが違っても出力JSONとsource_textを一致させる"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "同じsourceのJSONやhashが列挙順または改行形式で変動する"
+    # fault = "同じsourceのJSONやsource_textが列挙順または改行形式で変動する"
+    # observable = "入力順を入れ替えた出力JSONとLF/CRLF入力から抽出したsource_text"
+    # observation_boundary = "component-behavior"
     # scope = "result-projection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -674,7 +686,7 @@ def test_oracle_table_with_decoy():
         self.assertEqual(second_status, 0)
         self.assertEqual(EXTRACTOR.render_result(first), EXTRACTOR.render_result(second))
         self.assertEqual(
-            first["tests"][0]["source_hash"], first["tests"][1]["source_hash"]
+            first["tests"][0]["source_text"], first["tests"][1]["source_text"]
         )
         self.assertNotIn("\r", first["tests"][1]["source_text"])
 
@@ -909,6 +921,63 @@ def test_oracle_table_with_decoy():
             ],
             ["test_same_symbol", "test_same_symbol"],
         )
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "移動recordは本文とmetadataで照合し、辞書のキー順だけを無視して複数候補は拒否する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "metadataのキー順で対応を失うか、配列順・本文の差を無視するか、複数の同内容recordから一つを選ぶ"
+    # observable = "Git抽出CLIのexit、SURVIVEDまたはDELETED/ADDEDのtransitionと曖昧性diagnostic"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_matches_moved_record_contents_without_guessing(self) -> None:
+        metadata = VALID_METADATA.replace(
+            "# @end-test-value", '# risk_tags = ["billing", "security"]\n# @end-test-value'
+        )
+        body = "def test_moved():\n    assert observed() == 1\n"
+        lines = metadata.splitlines(keepends=True)
+        reordered = (lines[0] + "".join(reversed(lines[1:-1])) + lines[-1]).replace(
+            '{ type = "contract", ref = "PAYMENT-004" }',
+            '{ ref = "PAYMENT-004", type = "contract" }',
+        )
+        unchanged = "".join(f"# unchanged separator {index}\n" for index in range(40))
+        cases = {
+            "key-order": (reordered + body, ["SURVIVED"]),
+            "array-order": (
+                reordered.replace('["billing", "security"]', '["security", "billing"]') + body,
+                ["DELETED", "ADDED"],
+            ),
+            "body-change": (reordered + body.replace("== 1", "== 2"), ["DELETED", "ADDED"]),
+            "duplicate-content": ((reordered + body + "\n") * 2, None),
+        }
+        for label, (moved_source, expected_kinds) in cases.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as tmp:
+                self.root = Path(tmp)
+                path = self.write("tests/test_move.py", metadata + body + unchanged)
+                base = self.initialize_git()
+                path.write_text(unchanged + moved_source, encoding="utf-8")
+
+                result, exit_status, stderr = self.extract_git(base)
+
+                if expected_kinds is None:
+                    self.assertEqual(exit_status, 1, stderr)
+                    self.assertEqual(
+                        [item["code"] for item in result["diagnostics"]],
+                        ["RECORD_TRANSITION_UNRESOLVED"],
+                    )
+                else:
+                    self.assertEqual(exit_status, 0, stderr)
+                    self.assertEqual(result["diagnostics"], [])
+                    self.assertEqual(
+                        [item["kind"] for item in result["transitions"]], expected_kinds
+                    )
+                    if expected_kinds == ["SURVIVED"]:
+                        transition = result["transitions"][0]
+                        self.assertEqual(transition["before"]["source_text"], body)
+                        self.assertEqual(transition["after"]["source_text"], body)
+                        self.assertEqual(transition["before"]["metadata"], transition["after"]["metadata"])
 
     # @test-value v2
     # kind = "regression"

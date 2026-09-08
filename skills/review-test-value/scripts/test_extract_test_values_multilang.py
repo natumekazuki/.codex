@@ -1425,11 +1425,13 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
                     ["SOURCE_OUTSIDE_ROOT"],
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "invariant"
-    # claim = "TypeScriptとC#で同じmetadataから同じcanonical metadata hashを生成する"
+    # claim = "TypeScriptとC#で同じmetadataを同じ構造化値へ投影する"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "adapterごとにmetadata projectionまたはhash規則が分岐する"
+    # fault = "adapterごとにmetadata projectionが分岐する"
+    # observable = "TypeScriptとC#の抽出recordのmetadata"
+    # observation_boundary = "component-behavior"
     # scope = "result-projection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1456,10 +1458,6 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertEqual(
             typescript["tests"][0]["metadata"],
             csharp["tests"][0]["metadata"],
-        )
-        self.assertEqual(
-            typescript["tests"][0]["metadata_hash"],
-            csharp["tests"][0]["metadata_hash"],
         )
 
 
