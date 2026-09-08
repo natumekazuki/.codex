@@ -15,7 +15,7 @@
 
 - テスト価値の正本を、test declarationへ直接隣接するversion付きの`@test-value`コメントblockとする。
 - v1のpayloadは行コメントprefixを除去したTOMLとし、claim、oracle、failure mode、scopeなどのfieldをschema validationする。
-- コメント結合、言語native parserによるtest declaration抽出、source slice、path、line locator、source／metadata hash、diagnostic、JSON projectionを決定論的なCLIが所有する。hashは同一snapshot内の抽出とGit transition対応に使い、reviewer入力・出力や完了条件の同一性証明には使わない。
+- コメント結合、言語native parserによるtest declaration抽出、source slice、path、line locator、diagnostic、JSON projectionを決定論的なCLIが所有する。Git transitionの内容照合にはLF正規化済みの`source_text`と解析済み`metadata`を直接比較し、辞書のキー順を無視する。
 - Pythonは`ast`と`tokenize`、TypeScriptはTypeScript Compiler API、C#はRoslynをsource parserとして使う。metadataのTOML parse、schema validation、binding、projectionは共通のPython CLIが所有する。
 - 一つのJSON resultは一つのsource adapterだけを表す。複数言語のpathは言語ごとにCLI呼び出しを分け、現在のextractor output schemaを維持する。
 - AIは抽出済みrecordを入力として価値コメントとtest本文を審査し、結合、補完、source range決定を行わない。

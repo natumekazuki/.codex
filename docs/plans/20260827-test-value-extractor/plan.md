@@ -36,8 +36,8 @@
 #### TVE-003: 同じ入力は同じJSONを生成する
 
 - Accepted anchor: AI入力を決定論的に生成するというユーザー要求。
-- Scope / owner: path正規化、source slice、metadata canonicalization、record順序、hash生成。
-- Failure mode: OS、filesystem列挙順、改行コード、JSON key順序によってAI入力やhashが変わる。
+- Scope / owner: path正規化、source slice、metadata projection、record順序。
+- Failure mode: OS、filesystem列挙順、改行コード、JSON key順序によってAI入力が変わる。
 - Direct verification: 入力順、CRLF / LF、Windows / POSIX形式のpath表現、parser diagnosticのUI cultureを変えてbyte-equivalentなJSONを検証する。
 - Gate: ready。
 
@@ -54,7 +54,7 @@
 - Accepted anchor: Pythonに加えてC#とTypeScriptも同じ目的で扱うというユーザー要求。
 - Scope / owner: 言語native parser、共通binding、metadata validator、JSON projection。
 - Failure mode: adapterごとにコメントschemaやprojectionが分岐し、同じ価値コメントから異なる意味のAI入力を生成する。
-- Direct verification: Python、TypeScript、C#の等価fixtureで同じmetadata objectとhashを生成し、言語固有fieldはresult-levelの`adapter`と`coverage`だけで表すことを検証する。
+- Direct verification: Python、TypeScript、C#の等価fixtureで同じmetadata objectを生成し、言語固有fieldはresult-levelの`adapter`と`coverage`だけで表すことを検証する。
 - Gate: ready。
 
 #### TVE-006: 一つの抽出結果内でrecord locatorを一意にする
@@ -197,9 +197,7 @@ TypeScriptとC#のsupported declaration、framework構文、parameterization、�
         "scope": "payment-api",
         "lifecycle": "permanent"
       },
-      "source_text": "def test_retry_after_response_loss(self):\n    ...\n",
-      "source_hash": "sha256:...",
-      "metadata_hash": "sha256:..."
+      "source_text": "def test_retry_after_response_loss(self):\n    ...\n"
     }
   ],
   "diagnostics": []
@@ -212,8 +210,7 @@ TypeScriptとC#のsupported declaration、framework構文、parameterization、�
 - 入力pathは正規化後のpath、source start line、symbolの順でsortする。
 - 一つの抽出結果かつ同じsource revision内では、`source.path`と`source.declaration_start_line`の組を一意なrecord locatorとする。`source.symbol`はrecord keyに使わない。
 - source textの改行はLFへ正規化する。Unicode normalizationは行わない。
-- `source_hash`はLFへ正規化したUTF-8のsource textから算出する。
-- `metadata_hash`はkey順を固定したcanonical JSONから算出する。
+- recordの内容照合では`source_text`と解析済み`metadata`を直接比較し、辞書のkey順を無視する。
 - `source_text`は言語adapterが返した最初のdecorator、attribute、またはtest callからdeclaration末尾までとし、構造化コメントブロックを含めない。
 - `metadata_start_line`と`metadata_end_line`は開始markerと終了markerを含む。metadataがないrecordでは両方を`null`とする。
 - `declaration_start_line`は最初のdecorator、attribute、またはtest callの行とする。
@@ -260,7 +257,7 @@ Skillは次を行う。
 - C# source adapter v1。
 - `@test-value v1`コメントblockのparseとvalidation。
 - 明示されたrepository内pathからのtest record抽出。
-- normalized JSON、hash、diagnostic、exit status。
+- normalized JSON、diagnostic、exit status。
 - parser、binding、projection、diagnosticのexecutable contract。
 
 ## Out of Scope
@@ -289,7 +286,7 @@ Skillは次を行う。
 ## Validation
 
 - 同じsourceを複数回、入力順を変えて抽出し、byte-equivalentなJSONになることを確認する。
-- CRLFとLFのfixtureが同じsource textとhashへ正規化されることを確認する。
+- CRLFとLFのfixtureが同じsource textへ正規化されることを確認する。
 - valid、missing、duplicate、unbound、parse error、schema errorの各コメントblockを検証する。
 - decorator付き、class method、async function、nested function、parameterized declarationのsource bindingを検証する。
 - repository外pathとsymlink境界を拒否することを検証する。

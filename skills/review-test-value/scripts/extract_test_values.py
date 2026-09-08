@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import hashlib
 import io
 import json
 import subprocess
@@ -163,19 +162,6 @@ def public_diagnostic(item: dict[str, Any]) -> dict[str, Any]:
         key: item[key]
         for key in ("code", "path", "line", "message")
     }
-
-
-def sha256_text(value: str) -> str:
-    return f"sha256:{hashlib.sha256(value.encode('utf-8')).hexdigest()}"
-
-
-def canonical_json(value: Any) -> str:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
 
 
 def render_result(result: dict[str, Any]) -> str:
@@ -702,7 +688,6 @@ def bind_analysis(
                 chain.insert(0, cursor)
 
         metadata: dict[str, Any] | None = None
-        metadata_hash: str | None = None
         metadata_format_version: int | None = None
         metadata_start: int | None = None
         metadata_end: int | None = None
@@ -733,8 +718,6 @@ def bind_analysis(
                         error_message or "invalid test-value metadata",
                     )
                 )
-            else:
-                metadata_hash = sha256_text(canonical_json(metadata))
             if block.metadata_format_version == 1:
                 diagnostics.append(
                     diagnostic(
@@ -769,8 +752,6 @@ def bind_analysis(
                 "metadata_format_version": metadata_format_version,
                 "metadata": metadata,
                 "source_text": extracted_source,
-                "source_hash": sha256_text(extracted_source),
-                "metadata_hash": metadata_hash,
             }
         )
 

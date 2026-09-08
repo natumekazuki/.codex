@@ -422,11 +422,11 @@ def _build_transitions(
         projected_start = _map_old_declaration_start_to_new(
             source["declaration_start_line"], item.hunks
         )
-        hash_candidates = [
+        content_candidates = [
             after
             for after in unmatched_after
-            if after["source_hash"] == before["source_hash"]
-            and after["metadata_hash"] == before["metadata_hash"]
+            if after["source_text"] == before["source_text"]
+            and after["metadata"] == before["metadata"]
         ]
         position_candidates = [
             after
@@ -436,7 +436,7 @@ def _build_transitions(
         ]
         candidate_sets = [
             candidates
-            for candidates in (hash_candidates, position_candidates)
+            for candidates in (content_candidates, position_candidates)
             if candidates
         ]
         ambiguous = any(len(candidates) != 1 for candidates in candidate_sets)
@@ -447,7 +447,7 @@ def _build_transitions(
                 _transition_diagnostic(
                     diagnostic,
                     before,
-                    "record hashes and Git hunk projection do not identify one current record",
+                    "record contents and Git hunk projection do not identify one current record",
                 )
             )
             continue
@@ -502,7 +502,6 @@ def _deleted_base_diagnostics(
         if transition["kind"] == "DELETED"
         and transition["before"]["metadata_format_version"] == 1
         and transition["before"]["metadata"] is not None
-        and transition["before"]["metadata_hash"] is not None
     }
     return [
         project_diagnostic(value)
