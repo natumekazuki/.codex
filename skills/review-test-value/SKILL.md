@@ -31,6 +31,19 @@ reviewerの起動失敗、内容のない応答、対象recordを確認してい
 
 削除・移設では`transitions`の`DELETED.before`、`ADDED.after`、`SURVIVED.after`を漏れなく確認する。削除だけで過去のreview義務が解消したとみなさず、現在の契約に対して保持、移設、削除の根拠を親が判断する。
 
+## 変更完了確認と恒久保持
+
+今回の変更で削除・非表示にした処理や表示内容が存在しないことだけを確認するために追加したtestは、恒久testとして扱わない。必要なら実装中に一時検証として実行し、確認と修正が完了したらそのtestを削除する。`lifecycle = "ephemeral"`を付けた場合も、`remove_when`の条件を満たしたら削除し、metadataを残すこと自体を恒久保持の根拠にしない。
+
+旧挙動の不在自体が現在の公開契約、security、privacy、accessibilityなどで継続して要求される場合は、恒久testの候補として評価する。「回帰対策」「以前壊れたから」だけでは保持理由にならない。保持するには、次の内容をreviewで明記する。
+
+- 現在も有効な要求または契約と、反証可能なfailure mode
+- 違反したときの利用者、データ、主要機能などへの具体的な影響
+- 既存test、type、schema、static、build、smoke、policy checkなどで代替できない理由
+- CI実行時間と保守負担を継続して負う価値
+
+metadataを使う場合は、既存の`impact`に影響、`distinction`に既存checkとの差を記載できる。これらのfieldや新しいschemaを、恒久保持の理由を隠すために追加・補完しない。
+
 ## 一回のreviewで確認する観点
 
 `general_luna`には三つの観点を一つの依頼で渡す。観点ごとに別の依頼や専用agentへ分割しない。
@@ -59,7 +72,7 @@ test sourceやproduction codeからmetadataに書かれていない意味を補�
 - testが意図したproduction pathを実際に通るか。
 - mock、fixture、helperが欠陥を隠したりproduction behaviorを迂回したりしていないか。
 - 欠陥を入れたときassertionまで観測が伝播するか。
-- production contractに対して保持価値があるか。temporary、policy check、削除、再設計が適切か。
+- production contractに対して保持価値があるか。今回の変更完了確認だけならtemporaryとして削除し、現在のcontractやpolicyを守るtestなら保持理由と継続コストを確認する。削除、移設、再設計が適切な場合はその判断も示す。
 - supplied contextだけでは判断できない具体的事項があるか。
 
 通常の自然言語reviewで、結論、理由、具体的な問題、判断に足りないcontextが分かるよう依頼する。返答のJSON schema、必須field、固定verdict、識別子の復唱を応答契約にしない。

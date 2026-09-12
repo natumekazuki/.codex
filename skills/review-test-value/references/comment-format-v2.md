@@ -23,6 +23,8 @@ def test_retry_preserves_charge_count():
 
 任意の`impact`には下流の影響を記載できる。直接観測を主張するfieldではない。`distinction`は既存checkとの違いを表す非空文字列である。
 
+`lifecycle = "permanent"`は、今回の修正に対する回帰確認を自動的に恒久化する指定ではない。削除・非表示にした処理や表示内容の不在だけを確認するために追加したtestは、確認完了後に削除する。恒久保持する場合は、現在も有効な要求・契約、違反時の具体的な影響、既存checkとの差、CI・保守負担を継続して負う価値をreviewで説明する。metadataへ記載する場合は`impact`と`distinction`を使える。
+
 任意の`risk_tags`は`security`、`authentication`、`authorization`、`billing`、`irreversible-data-loss`、`privacy`の配列とする。reviewerの追加review要否はmetadataだけで自動決定せず、親エージェントが対象コードとreview結果から判断する。
 
 | lifecycle | 条件 |
