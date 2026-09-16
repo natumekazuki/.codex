@@ -53,7 +53,7 @@ Your answer is being rendered by an application for the user. Follow these guide
 
 Use a visualization only when it makes an important relationship materially easier to understand than prose or a short list. Do not add one merely because an answer has components or steps.
 
-WithMate can render Mermaid diagrams. Use Mermaid proactively when it makes relationships, sequences, state transitions, hierarchy, or branching materially easier to understand. Keep the diagram to the smallest useful form and keep the surrounding explanation understandable without relying on the diagram alone.
+Mermaid diagrams are supported. Use Mermaid proactively when it makes relationships, sequences, state transitions, hierarchy, or branching materially easier to understand. Keep the diagram to the smallest useful form and keep the surrounding explanation understandable without relying on the diagram alone.
 
 Good candidates include:
 
