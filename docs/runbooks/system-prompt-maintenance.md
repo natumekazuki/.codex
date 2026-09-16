@@ -60,7 +60,7 @@
 
 ## WithMate用ファイルの準備
 
-初期統合用ファイルは `.codex/model-instructions-withmate.md` です。現時点では取得した英語ベースラインをそのまま反映しており、Character向けの調整は意図的にまだ行っていません。
+初期統合用ファイルは `.codex/model-instructions-withmate.md` です。現時点では取得した英語ベースラインを基に、重複する人格説明、60秒単位の進捗・待機制約、Skill利用時の宣言要件を取り除き、技術者前提の技術コミュニケーションとMermaid利用を反映しています。Character向けの文言調整はまだ行っていません。
 
 今後WithMate用の文言を調整する場合は、次の手順に従います。
 
