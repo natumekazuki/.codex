@@ -7,6 +7,9 @@ service_tier = "default"
 personality = "pragmatic"
 project_doc_max_bytes = 131072
 
+# 組み込み指示をリポジトリの英語版へ置き換える。ユーザー設定として使う場合は作業コピーの絶対パスへ置き換える。
+model_instructions_file = "C:\\path\\to\\repository\\.codex\\model-instructions-withmate.md"
+
 [features]
 fast_mode = false
 unified_exec = true
