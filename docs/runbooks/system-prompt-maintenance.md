@@ -60,15 +60,16 @@
 
 ## WithMate用ファイルの準備
 
-初期統合用ファイルは `.codex/model-instructions-withmate.md` です。現時点では取得した英語ベースラインを基に、重複する人格説明、60秒単位の進捗・待機制約、Skill利用時の宣言要件を取り除き、技術者前提の技術コミュニケーションとMermaid利用を反映しています。Character向けの文言調整はまだ行っていません。
+WithMate用の統合ファイルは `.codex/model-instructions-withmate.md`（英語版）と `.codex/model-instructions-withmate.ja.md`（日本語版）です。現時点では取得した英語ベースラインを基に、重複する人格説明、60秒単位の進捗・待機制約、Skill利用時の宣言要件を取り除き、技術者前提の技術コミュニケーションとMermaid利用を反映しています。Character向けの文言調整はまだ行っていません。
 
 今後WithMate用の文言を調整する場合は、次の手順に従います。
 
 1. 現在の英語スナップショットを出発点にします。
 2. タスク実行、ファイル安全性、報告、tool利用の要件を維持します。
 3. 応答スタイルの変更は、ユーザーに見える自然言語の応答に限定します。Characterの文言をコード、設定例、test、diff、コミットメッセージ、artifact metadataへ入れないでください。
-4. WithMate用ファイルとスナップショットを比較し、適用前にdiffをレビューします。
-5. 設定変更後は新しいCodexセッションを開始します。既存セッションでファイルが読み込まれた証拠とはみなしません。
+4. 英語版と日本語版を同じカスタマイズ内容として更新し、機械可読な文字列と要件の対応を確認します。
+5. 両方のWithMate用ファイルとスナップショットを比較し、適用前にdiffをレビューします。
+6. 設定変更後は新しいCodexセッションを開始します。既存セッションでファイルが読み込まれた証拠とはみなしません。
 
 ## `config.toml` による適用
 
@@ -82,6 +83,12 @@ WithMate用ファイルをレビューしてから適用します。実際に使
 model_instructions_file = "model-instructions-withmate.md"
 ```
 
+日本語版を使う場合は、上の設定行を次の行に置き換えます。
+
+```toml
+model_instructions_file = "model-instructions-withmate.ja.md"
+```
+
 このファイルを `.codex/config.toml` と同じディレクトリに置きます。プロジェクト設定内の相対パスは、設定ファイルを含む `.codex/` ディレクトリを基準に解決されます。プロジェクト単位の設定は、プロジェクトが信頼済みの場合だけ読み込まれます。詳細は[OpenAI公式の高度な設定ガイド](https://learn.chatgpt.com/docs/config-file/config-advanced)を参照してください。
 
 ### ユーザー単位の設定
@@ -90,6 +97,12 @@ model_instructions_file = "model-instructions-withmate.md"
 
 ```toml
 model_instructions_file = "C:\\path\\to\\repository\\.codex\\model-instructions-withmate.md"
+```
+
+日本語版を使う場合は、上の設定行を次の行に置き換えます。
+
+```toml
+model_instructions_file = "C:\\path\\to\\repository\\.codex\\model-instructions-withmate.ja.md"
 ```
 
 この設定を読むすべてのセッションで組み込み指示の取得元が変わるため、全体へ有効化する前に適用範囲を確認します。

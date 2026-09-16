@@ -8,7 +8,7 @@
 
 日本語版は翻訳参照用です。設定で明示的に選択しない限り、Codexへ渡すファイルではありません。
 
-WithMate用ファイルは編集可能な統合用コピーです。取得した英語ベースラインを基に、重複する人格説明、60秒単位の進捗・待機制約、Skill利用時の宣言要件を取り除き、技術者前提の技術コミュニケーションとMermaid利用を反映しています。Character固有の文言は後続変更で調整します。
+WithMate用ファイルは編集可能な統合用コピーです。英語版と日本語版を用意し、取得した英語ベースラインを基に、重複する人格説明、60秒単位の進捗・待機制約、Skill利用時の宣言要件を取り除き、技術者前提の技術コミュニケーションとMermaid利用を反映しています。Character固有の文言は後続変更で調整します。
 
 ## 構成
 
@@ -16,7 +16,8 @@ WithMate用ファイルは編集可能な統合用コピーです。取得した
 | --- | --- |
 | `snapshots/YYYY-MM-DD-<model>.en.md` | 日付とモデルごとの英語原文の不変スナップショット |
 | `snapshots/YYYY-MM-DD-<model>.ja.md` | 対応する英語スナップショットの日本語訳 |
-| `.codex/model-instructions-withmate.md` | 編集可能なWithMate用指示ファイル |
+| `.codex/model-instructions-withmate.md` | 編集可能なWithMate用指示ファイル（英語版） |
+| `.codex/model-instructions-withmate.ja.md` | 編集可能なWithMate用指示ファイル（日本語版） |
 | `scripts/capture-codex-system-prompt.ps1` | rolloutから組み込み指示を抽出するスクリプト |
 | `docs/runbooks/system-prompt-maintenance.md` | 取得、レビュー、翻訳、設定の手順 |
 
