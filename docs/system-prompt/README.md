@@ -1,27 +1,27 @@
-# Codex system prompt records
+# Codex system promptの記録
 
-This directory keeps versioned records of the Codex built-in instruction text used by a WithMate session.
+このディレクトリでは、WithMateセッションで使われたCodex組み込み指示のバージョン管理下の記録を保持します。
 
-## Scope
+## 範囲
 
-The English snapshot contains only `session_meta.payload.base_instructions.text` from a Codex rollout. It does not contain user prompts, Character context, `AGENTS.md`, runtime permissions, MCP environment values, authentication, or session state.
+英語スナップショットには、Codex rolloutの最初の `session_meta.payload.base_instructions.text` だけを収録します。ユーザープロンプト、Character context、`AGENTS.md`、runtimeの権限、MCP環境値、認証、セッション状態は含めません。
 
-The Japanese file is a translation reference. It is not the file used by Codex unless it is explicitly selected in configuration.
+日本語版は翻訳参照用です。設定で明示的に選択しない限り、Codexへ渡すファイルではありません。
 
-The WithMate file is the editable integration copy. Its initial content is the captured English baseline; Character-specific wording will be adjusted in a later change.
+WithMate用ファイルは編集可能な統合用コピーです。初期内容は取得した英語ベースラインで、Character固有の文言は後続変更で調整します。
 
-## Layout
+## 構成
 
-| Path | Purpose |
+| パス | 目的 |
 | --- | --- |
-| `snapshots/YYYY-MM-DD-<model>.en.md` | Immutable English capture for a date and model |
-| `snapshots/YYYY-MM-DD-<model>.ja.md` | Japanese translation of the corresponding English capture |
-| `.codex/model-instructions-withmate.md` | Editable WithMate instruction file |
-| `scripts/capture-codex-system-prompt.ps1` | Extracts the built-in instruction text from a rollout |
-| `docs/runbooks/system-prompt-maintenance.md` | Capture, review, translation, and configuration procedure |
+| `snapshots/YYYY-MM-DD-<model>.en.md` | 日付とモデルごとの英語原文の不変スナップショット |
+| `snapshots/YYYY-MM-DD-<model>.ja.md` | 対応する英語スナップショットの日本語訳 |
+| `.codex/model-instructions-withmate.md` | 編集可能なWithMate用指示ファイル |
+| `scripts/capture-codex-system-prompt.ps1` | rolloutから組み込み指示を抽出するスクリプト |
+| `docs/runbooks/system-prompt-maintenance.md` | 取得、レビュー、翻訳、設定の手順 |
 
-## Initial record
+## 初回記録
 
-The initial record was captured on 2026-09-16 from the `gpt-5.6-luna` session running Codex CLI 0.154.0. The captured text is 17,730 characters.
+初回記録は、Codex CLI 0.154.0で動作していた `gpt-5.6-luna` セッションから、2026-09-16に取得しました。取得した本文は17,730文字です。
 
-Use Git history to track changes between records. Do not overwrite an existing dated snapshot; create a new dated file when the source prompt changes.
+記録間の変更はGit履歴で追跡します。既存の日付付きスナップショットは上書きせず、元のプロンプトが変わった場合は新しい日付のファイルを作成します。
