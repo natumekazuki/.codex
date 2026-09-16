@@ -14,6 +14,7 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 | `hooks/`、`hooks.json` | 共通ルールの短い再通知、サブエージェント起動時の履歴継承既定値 |
 | `config.example.toml`、`config/` | 共有できる設定例。実configと認証は端末local |
 | `docs/runbooks/` | 必要時の運用・導入手順 |
+| `docs/system-prompt/`、`.codex/model-instructions-withmate.md` | Codex system promptの取得版、日本語訳、WithMate用編集元 |
 | `docs/adr/`、完了済みplan | 過去の判断履歴。現行の工程を義務付けない |
 
 ## modelとrole
