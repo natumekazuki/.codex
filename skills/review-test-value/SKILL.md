@@ -24,8 +24,8 @@ working treeが既定で、indexだけを対象にする場合は`--staged`、co
 
 4. exit `0`のJSONを読み、`tests`と`transitions`の全recordを確認する。exit `1`は抽出結果にdiagnosticがあるため、sourceまたはmetadataを直して再抽出する。exit `2`はCLI、adapter、I/Oなどの失敗であり、部分結果をレビューへ渡さない。
 5. 親エージェントは、相互に独立して扱えるrecordまたは小さなbatchごとに、利用できるサブエージェント枠の範囲で通常の`general_luna`へreviewを委譲する。並列に委譲できない場合は親の判断で順次扱う。
-6. 各review依頼には、repository root、task baseと対象snapshotまたは現在のdiff、対象fileとlocator、抽出recordのmetadataとtest source、対象scope、read-onlyであること、下記のreview観点を含める。production codeやfixtureを親が事前に収集せず、`general_luna`自身が対象testから必要な範囲をrepository内で探索する。
-7. 親エージェントは自然言語のreview結果を読み、必要なcontext追加、testの修正・削除・移設、完了可否を判断する。`general_luna`後も具体的な問題や不確実性が解消しないrecordだけを、親の判断で`general_sol`などへ追加reviewできる。同じ入力のままvarianceを期待する自動retryは行わない。
+6. 各review依頼には、repository root、task baseと対象snapshotまたは現在のdiff、対象fileとlocator、抽出recordのmetadataとtest source、対象scope、read-onlyであること、下記のreview観点と適用される統合基準を含める。production codeやfixtureを親が事前に収集せず、`general_luna`自身が対象testから必要な範囲をrepository内で探索する。
+7. 親エージェントは自然言語のreview結果を読み、共通`AGENTS.md`の「統合優先・修正分離」に従って各指摘の扱いと完了可否を判断する。必須確認や統合判定に必要なcontext不足、ブロッカー修正、新たな変更の確認に限り、対象recordへ追加contextや`general_sol`などの追加reviewを依頼できる。非ブロッカーの解消や同じ入力でのvarianceを期待する自動retryは行わない。
 
 reviewerの起動失敗、内容のない応答、対象recordを確認していない応答はreview済みとして扱わない。親が原因と不足内容を確認し、必要なら対象recordだけへ追加contextまたは別reviewを依頼する。
 
@@ -75,17 +75,19 @@ test sourceやproduction codeからmetadataに書かれていない意味を補�
 - production contractに対して保持価値があるか。今回の変更完了確認だけならtemporaryとして削除し、現在のcontractやpolicyを守るtestなら保持理由と継続コストを確認する。削除、移設、再設計が適切な場合はその判断も示す。
 - supplied contextだけでは判断できない具体的事項があるか。
 
-通常の自然言語reviewで、結論、理由、具体的な問題、判断に足りないcontextが分かるよう依頼する。返答のJSON schema、必須field、固定verdict、識別子の復唱を応答契約にしない。
+通常の自然言語reviewで、結論、理由、具体的な問題、統合への影響、判断に足りないcontextが分かるよう依頼する。停止を提案する場合は適用する統合基準と根拠を示し、testの改善価値だけで全指摘をブロッカーにしない。返答のJSON schema、必須field、固定verdict、識別子の復唱を応答契約にしない。
 
 ## 完了判断
 
-親エージェントは次を確認してから作業を完了する。
+親エージェントは次を確認してreviewを完了する。review完了と、指摘の全件修正・統合可否は分ける。
 
 - extractorが成功し、Git差分から得た全対象recordを確認できている。
 - `general_luna`のreview結果を全recordまたは明示したbatchについて読んでいる。
-- 指摘された具体的な修正、保持、移設、削除の判断を現在のdiffへ反映している。
-- reviewerが示したcontext不足が未解消のまま残っていない。
-- 必要と判断した追加reviewが完了している。
+- 各指摘の扱いが決まり、非ブロッカーはプロジェクトで定義した管理先へ引き継いでいる。現diffへの全件反映は要求しない。
+- context不足は、必須確認・統合判定を妨げるものと、後追い調査に分離できるものを区別し、未確認の範囲と影響を明示している。
+- 追加reviewを実施した場合は、対象と結果、未完了の確認を区別している。
+
+統合へ進むにはブロッカーの解消と必須条件の成立が必要であり、未実施の審査や失敗したcheckを後追い扱いで免除しない。抽出・全recordのreview・必要なtest実行・契約を弱めないことは維持する。
 
 抽出scriptは抽出とdiagnosticの生成だけを行い、reviewerの起動や判断を管理しない。Git commit IDは差分範囲の指定にだけ使い、追加の同一性証明をreviewの入力、出力、完了条件にしない。
 
