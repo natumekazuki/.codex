@@ -29,7 +29,7 @@ working treeが既定で、indexだけを対象にする場合は`--staged`、co
 
 reviewerの起動失敗、内容のない応答、対象recordを確認していない応答はreview済みとして扱わない。親が原因と不足内容を確認し、必要なら対象recordだけへ追加contextまたは別reviewを依頼する。
 
-削除・移設では`transitions`の`DELETED.before`、`ADDED.after`、`SURVIVED.after`を漏れなく確認する。削除だけで過去のreview義務が解消したとみなさず、現在の契約に対して保持、移設、削除の根拠を親が判断する。
+削除・移設では`transitions`の`DELETED.before`、`ADDED.after`、`SURVIVED.after`を漏れなく確認する。削除だけで過去のreview義務が解消したとみなさず、現在の契約に対して保持、移設、削除の根拠を親が判断する。固定baseの削除前testがmetadata未付与でも、`DELETED.before`の`metadata: null`を歴史的証拠として審査へ渡す。追加・surviving側の未付与／不正metadataは診断対象のままにし、pathやsymbol名だけで移設を`SURVIVED`へ対応付けない。
 
 ## 変更完了確認と恒久保持
 

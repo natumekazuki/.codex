@@ -1017,6 +1017,103 @@ def test_oracle_table_with_decoy():
                         self.assertTrue(any(d["code"] != "TEST_VALUE_V2_REQUIRED" for d in result["diagnostics"]))
 
     # @test-value v2
+    # kind = "regression"
+    # claim = "固定baseのmetadata未付与testを削除または移設してもbeforeの事実を保持したまま現行側の審査へ進める"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#80" }
+    # fault = "削除前のTEST_VALUE_MISSINGで停止するか、D+Aの移設をsymbol名だけでSURVIVEDへ結び付けてbeforeを失う"
+    # observable = "Git抽出結果のexit status、DELETED.beforeのmetadata、transition集合"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_keeps_unannotated_deleted_before_without_matching_d_plus_a(self) -> None:
+        old_source = (
+            "def test_replacement():\n"
+            + "".join(f"    assert old_observation_{index}()\n" for index in range(20))
+        )
+
+        with self.subTest(case="pure deletion"), tempfile.TemporaryDirectory() as tmp:
+            self.root = Path(tmp)
+            deleted = self.write("tests/test_removed.py", old_source)
+            base = self.initialize_git()
+            deleted.unlink()
+
+            result, exit_status, stderr = self.extract_git(base)
+
+            self.assertEqual(exit_status, 0, stderr)
+            self.assertEqual(result["diagnostics"], [])
+            self.assertEqual(result["tests"], [])
+            self.assertEqual([item["kind"] for item in result["transitions"]], ["DELETED"])
+            before = result["transitions"][0]["before"]
+            self.assertIsNone(before["metadata"])
+            self.assertEqual(before["source_text"], old_source)
+
+        with self.subTest(case="move and redesign"), tempfile.TemporaryDirectory() as tmp:
+            self.root = Path(tmp)
+            deleted = self.write("tests/test_before.py", old_source)
+            base = self.initialize_git()
+            deleted.unlink()
+            added_source = (
+                VALID_METADATA
+                + "def test_replacement():\n"
+                + "".join(f"    assert new_observation_{index}()\n" for index in range(20))
+            )
+            self.write("tests/test_after.py", added_source)
+            self.git("add", "--all")
+
+            name_status = self.git("diff", "--cached", "--find-renames", "--name-status", base)
+            self.assertIn("D\ttests/test_before.py", name_status)
+            self.assertIn("A\ttests/test_after.py", name_status)
+
+            result, exit_status, stderr = self.extract_git(base, "python", "--staged")
+
+            self.assertEqual(exit_status, 0, stderr)
+            self.assertEqual(result["diagnostics"], [])
+            self.assertEqual(
+                [transition["kind"] for transition in result["transitions"]],
+                ["ADDED", "DELETED"],
+            )
+            deleted_transition = next(
+                transition
+                for transition in result["transitions"]
+                if transition["kind"] == "DELETED"
+            )
+            added_transition = next(
+                transition
+                for transition in result["transitions"]
+                if transition["kind"] == "ADDED"
+            )
+            self.assertIsNone(deleted_transition["before"]["metadata"])
+            self.assertIsNone(deleted_transition["after"])
+            self.assertEqual(
+                added_transition["after"]["source"]["path"],
+                "tests/test_after.py",
+            )
+
+        with self.subTest(case="current metadata still required"), tempfile.TemporaryDirectory() as tmp:
+            self.root = Path(tmp)
+            deleted = self.write("tests/test_before.py", old_source)
+            base = self.initialize_git()
+            deleted.unlink()
+            self.write(
+                "tests/test_after.py",
+                "def test_replacement():\n    assert new_observation()\n",
+            )
+            self.git("add", "--all")
+
+            result, exit_status, stderr = self.extract_git(base, "python", "--staged")
+
+            self.assertEqual(exit_status, 1, stderr)
+            self.assertEqual(
+                [item["code"] for item in result["diagnostics"]],
+                ["TEST_VALUE_MISSING"],
+            )
+            self.assertEqual(
+                [transition["kind"] for transition in result["transitions"]],
+                ["ADDED", "DELETED"],
+            )
+
+    # @test-value v2
     # kind = "contract"
     # claim = "Git modeは未変更v1を選ばず、選択されたv1だけをV2_REQUIREDで停止する"
     # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }

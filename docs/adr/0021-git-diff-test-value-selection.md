@@ -25,6 +25,8 @@
 - 変更していない既存testとそのmetadata欠落diagnosticはGit modeの結果へ含めない。
 - syntax error、decode error、adapter failureなど、変更sourceの信頼できる抽出を妨げるfailureは選択範囲外として隠さない。
 - pure renameは対象にせず、renameと同時に内容が変わった場合は変更recordを対象にする。test declarationまたはfileの削除はbase snapshotのrecordを`DELETED.before`へ保持し、削除の妥当性を通常のtest価値reviewへ渡す。
+- 固定baseで削除されたtestにmetadataが無い場合も、`DELETED.before`の`metadata: null`と本文を歴史的証拠として保持し、base側の`TEST_VALUE_MISSING`だけではGit選択を停止しない。追加・surviving側の未付与／不正metadataは引き続き停止する。
+- Gitが移設＋変更を`D`＋`A`へ分けた場合は、pathやsymbol名だけで対応付けず、`DELETED`と`ADDED`を独立して返す。内容・位置で対応を一意に保証できるfile pairだけを`SURVIVED`へ対応付け、同一file pairで候補が曖昧なら`RECORD_TRANSITION_UNRESOLVED`で停止する。
 - 一つのresultは一つのsource adapterだけを表すADR-0020の契約と、現在のextractor output schemaを維持する。
 - CI gateはこの判断に含めない。運用実績から機械的なmerge gateが必要になった場合は別契約として判断する。
 

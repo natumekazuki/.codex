@@ -519,8 +519,9 @@ def _deleted_base_diagnostics(
     ]
     if not deleted_spans and item.status != "D":
         return []
-    # A valid historical block cannot be migrated in the fixed base snapshot.
-    # Keep every other diagnostic, including malformed or unbound v1 blocks.
+    # A fixed base snapshot cannot be migrated in place.  Keep every
+    # diagnostic except the migration requirement for valid historical v1
+    # blocks and the missing-metadata diagnostic for deleted records.
     historical_v1_lines = {
         transition["before"]["source"]["metadata_start_line"]
         for transition in transitions
@@ -528,12 +529,23 @@ def _deleted_base_diagnostics(
         and transition["before"]["metadata_format_version"] == 1
         and transition["before"]["metadata"] is not None
     }
+    historical_missing_lines = {
+        transition["before"]["source"]["declaration_start_line"]
+        for transition in transitions
+        if transition["kind"] == "DELETED"
+        and transition["before"]["source"]["metadata_start_line"] is None
+        and transition["before"]["metadata"] is None
+    }
     return [
         project_diagnostic(value)
         for value in base_diagnostics
         if not (
             value["code"] == "TEST_VALUE_V2_REQUIRED"
             and value["line"] in historical_v1_lines
+        )
+        and not (
+            value["code"] == "TEST_VALUE_MISSING"
+            and value["line"] in historical_missing_lines
         )
         and (item.status == "D"
         or value["code"] == "SOURCE_SYNTAX_ERROR"
