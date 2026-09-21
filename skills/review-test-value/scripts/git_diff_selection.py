@@ -441,7 +441,9 @@ def _build_transitions(
             and any(
                 hunk.old_count
                 and hunk.new_count
-                and _hunk_intersects_old_span(hunk, *_record_span(before))
+                and hunk.old_start
+                <= source["declaration_start_line"]
+                <= hunk.old_start + hunk.old_count - 1
                 and hunk.new_start
                 <= after["source"]["declaration_start_line"]
                 <= hunk.new_start + hunk.new_count - 1
