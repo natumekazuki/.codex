@@ -434,13 +434,36 @@ def _build_transitions(
             if not fully_replaced
             and after["source"]["declaration_start_line"] == projected_start
         ]
+        replacement_hunk_candidates = [
+            after
+            for after in unmatched_after
+            if not fully_replaced
+            and any(
+                hunk.old_count
+                and hunk.new_count
+                and _hunk_intersects_old_span(hunk, *_record_span(before))
+                and hunk.new_start
+                <= after["source"]["declaration_start_line"]
+                <= hunk.new_start + hunk.new_count - 1
+                for hunk in item.hunks
+            )
+        ]
         candidate_sets = [
             candidates
-            for candidates in (content_candidates, position_candidates)
+            for candidates in (
+                content_candidates,
+                position_candidates,
+                replacement_hunk_candidates,
+            )
             if candidates
         ]
+        candidate_ids = {
+            id(candidate)
+            for candidates in candidate_sets
+            for candidate in candidates
+        }
         ambiguous = any(len(candidates) != 1 for candidates in candidate_sets)
-        if len(candidate_sets) == 2 and candidate_sets[0][0] is not candidate_sets[1][0]:
+        if len(candidate_ids) > 1:
             ambiguous = True
         if ambiguous:
             diagnostics.append(
