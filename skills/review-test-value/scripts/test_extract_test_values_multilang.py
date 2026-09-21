@@ -1146,6 +1146,118 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             ["ValueTests.Changed"],
         )
 
+    # @test-value v2
+    # kind = "regression"
+    # claim = "同一置換hunkでmetadata追加とasync化を行った既存TypeScript testをSURVIVEDとして対応付ける"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#78" }
+    # fault = "新側の宣言行が旧開始行の一点投影からずれたtestをADDED扱いまたは対応不能にする"
+    # observable = "Git抽出結果のTypeScript test record、SURVIVED transition、diagnostics"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_matches_typescript_metadata_and_async_change_in_one_hunk(self) -> None:
+        before = (
+            'test("async transition", () => {\n'
+            "  assert.equal(createAuditLog(input).id, 1);\n"
+            "});\n"
+        )
+        after = (
+            metadata_block("//")
+            + 'test("async transition", async () => {\n'
+            "  assert.equal((await createAuditLog(input)).id, 1);\n"
+            "});\n"
+        )
+        path = self.root / "tests/async-transition.test.ts"
+        self.write("tests/async-transition.test.ts", before)
+        base = self.initialize_git()
+        path.write_text(after, encoding="utf-8")
+
+        working = self.extract_git(base, "typescript")
+        self.git("add", "tests/async-transition.test.ts")
+        staged = self.extract_git(base, "typescript", "--staged")
+        self.git("commit", "--quiet", "-m", "add async test metadata")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "typescript", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [transition["kind"] for transition in result["transitions"]],
+                    ["SURVIVED"],
+                )
+                self.assertEqual(
+                    [record["source"]["symbol"] for record in result["tests"]],
+                    ["async transition"],
+                )
+                transition = result["transitions"][0]
+                self.assertEqual(transition["before"]["source"]["declaration_start_line"], 1)
+                self.assertEqual(transition["after"]["source"]["declaration_start_line"], 11)
+                self.assertIn("await createAuditLog(input)", transition["after"]["source_text"])
+                self.assertEqual(transition["after"]["metadata"]["scope"], "payment-api")
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "既存TypeScript testの末尾変更と直後の追加testを同一置換hunkで誤対応付けしない"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#78" }
+    # fault = "旧recordのspanに触れただけのhunkから隣接する追加testを候補に含め、既存testをRECORD_TRANSITION_UNRESOLVEDにする"
+    # observable = "Git抽出結果の既存testと追加testのtransition、diagnostics"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # @end-test-value
+    def test_git_mode_keeps_adjacent_added_typescript_test_out_of_candidates(self) -> None:
+        before = (
+            metadata_block("//")
+            + 'test("A", () => {\n'
+            + "  assert.equal(value(), 1);\n"
+            + "});\n"
+        )
+        after = (
+            metadata_block("//")
+            + 'test("A", () => {\n'
+            + "  assert.equal(value(), 1);\n"
+            + "}); // clarified A\n"
+            + metadata_block("//")
+            + 'test("B", () => {\n'
+            + "  assert.equal(other(), 2);\n"
+            + "}); // B\n"
+        )
+        path = self.root / "tests/adjacent-transition.test.ts"
+        self.write("tests/adjacent-transition.test.ts", before)
+        base = self.initialize_git()
+        path.write_text(after, encoding="utf-8")
+
+        working = self.extract_git(base, "typescript")
+        self.git("add", "tests/adjacent-transition.test.ts")
+        staged = self.extract_git(base, "typescript", "--staged")
+        self.git("commit", "--quiet", "-m", "keep adjacent added test separate")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "typescript", "--head", head)
+
+        for mode, (result, exit_status, stderr) in {
+            "working": working,
+            "staged": staged,
+            "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(exit_status, 0, stderr)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [transition["kind"] for transition in result["transitions"]],
+                    ["SURVIVED", "ADDED"],
+                )
+                self.assertEqual(
+                    [record["source"]["symbol"] for record in result["tests"]],
+                    ["A", "B"],
+                )
+
     # @test-value v1
     # kind = "regression"
     # claim = "先頭C# attributeだけを削除したsurviving testをbase側rangeから選択する"
