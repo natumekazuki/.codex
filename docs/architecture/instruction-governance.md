@@ -11,8 +11,8 @@
 | UI変更の必須基準と専門判断 | [UI基準](../guides/ui.md)とruntimeの`design-ui-information` Skill |
 | 文書・監査・RelayGraph操作 | 適用条件に該当する`skills/*/SKILL.md` |
 | 委譲・履歴を継承しない子への入力 | [委譲](subagent-workspace.md) |
-| WithMate Memory／Characterの許可と運用 | [WithMate操作](../guides/withmate.md)。runbookは接続設定・障害調査用 |
-| Repository Glossaryの操作契約 | runtime-managed `withmate-glossary` Skill。継続的な許可とdeleteの個別承認は[WithMate操作](../guides/withmate.md) |
+| WithMate Memory／Characterの利用契機と許可 | [WithMate利用方針](../guides/withmate.md)。AGENTS.mdは提供情報に基づく読込条件、MCPは呼出契約、runbookは接続設定・障害調査を担う |
+| Repository Glossaryの操作契約 | runtime-managed `withmate-glossary` Skill。利用契機・継続的な許可とdeleteの個別承認は[WithMate利用方針](../guides/withmate.md) |
 
 `hooks/implementation-restraint.ps1`は共通ルールの短い再通知であり、別のworkflowを設けない。既存のモデル選択を再提示するが、分割先本文は注入しない。
 

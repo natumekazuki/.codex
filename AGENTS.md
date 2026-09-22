@@ -21,7 +21,7 @@
 | Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | [変更test](docs/guides/test-changes.md)とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-only general_luna審査は必須 |
 | ユーザー向けUIの設計・実装開始前、変更後の確認時 | [UI基準](docs/guides/ui.md)、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
 | サブエージェントへ委譲する前 | [委譲](docs/architecture/subagent-workspace.md)。担当範囲・適用契約・必要な参照先と権限を渡し、履歴継承を前提にしない |
-| WithMate Memory／Character／Glossaryの操作前 | [WithMate操作](docs/guides/withmate.md)。Memoryは許可targetとtool schema、Glossaryはruntime-managed Skillに従う。独自store・forkは作らない。affect correction・affect reset・relationship boundary変更、Glossary deleteの承認条件を先に確認する |
+| WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合、最初の応答前 | [WithMate利用方針](docs/guides/withmate.md)を読み、利用契機と承認条件に従う。確認済みの内容を毎turn再読する必要はない |
 
 ## 操作範囲
 
