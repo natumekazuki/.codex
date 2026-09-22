@@ -4,7 +4,7 @@
 
 | 情報 | 正本 |
 | --- | --- |
-| 統合・後追い修正・公開の判断基準 | [開発・review・統合](../guides/development.md)。バグ管理先と互換性境界は各プロジェクトの`AGENTS.md` |
+| 統合・後追い修正・公開の判断基準 | [開発・review・統合](../guides/development.md)。バグ管理先と互換性境界は各プロジェクトの規約文書（AGENTS.md、README、またはそこから明示された文書） |
 | 親・一般子の既定modelと設定例 | `config.example.toml`、`config/agents.example.toml` |
 | 汎用roleのmodel・指示 | `agents/*.toml` |
 | test価値の抽出、review観点、審査の完了条件 | `skills/review-test-value/`。発見後の修正時期・統合可否は共通基準に従う |

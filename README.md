@@ -4,11 +4,24 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 このcheckoutの`review-test-value`は、Git差分から変更testを抽出し、通常のread-onlyサブエージェントへreviewを委譲するSkillである。抽出器の成功、全recordのreview、各指摘の扱いを確認する。review完了と全件修正は分け、非ブロッカーは後追いへ引き継ぐ。
 
+## このrepositoryの管理先とリリース境界
+
+このrepositoryはCodexの共通ルールをGit管理する配布元であり、`AGENTS.md`にはrepository固有の規約を置かない。この節は`natumekazuki/.codex`の開発・保守だけに適用し、共通ルールの適用先repositoryには適用しない。
+
+- このrepositoryのバグと後追い残件は、`natumekazuki/.codex` のGitHub Issueで管理する。Issueへの登録・更新・closeは、通常の外部write権限と個別承認の対象として扱う。
+
+### 本repositoryの開発・リリース境界
+
+- Gitタグのないcommitとbranch上の変更は開発途中として扱い、途中状態との互換性を保証しない。
+- `vMAJOR.MINOR.PATCH`形式のGitタグが指すcommitをリリース状態とし、そのタグのリリースノートに記載した利用者向け契約を互換維持の対象とする。破壊的変更はmajor versionを上げ、互換修正はminorまたはpatch versionを上げて新しいタグへ記録する。
+- 初回の維持対象は`v1.0.0`であり、`review-test-value`のCLI、構造化result、metadata v2、対応adapter、Git差分選択の契約を含む。各契約の詳細は既存のSkill referenceと`docs/releases/v1.0.0.md`で確認する。
+- リリースごとに`docs/releases/README.md`の一覧と`docs/releases/vMAJOR.MINOR.PATCH.md`を更新し、変更、互換性、検証結果を記録する。
+
 ## 構成
 
 | 正本 | 内容 |
 | --- | --- |
-| `AGENTS.md` | 常時必要な原則・操作境界、条件付き参照、対象を限定した本repositoryの定義 |
+| `AGENTS.md` | 常時必要な原則・操作境界、条件付き参照 |
 | `docs/guides/` | 開発・統合、変更test、UI、WithMate操作の作業別詳細 |
 | `agents/` | 汎用のカスタムrole |
 | `skills/` | 変更testのreview、UI設計、管理・文書向けのSkill |
@@ -21,7 +34,7 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 ## 統合優先・修正分離
 
-判断基準の正本は[開発・review・統合](docs/guides/development.md)。読む条件と着手前の停止条件は[`AGENTS.md`](AGENTS.md)に残す。バグ管理先は各プロジェクトの`AGENTS.md`で定義し、未定義なら実装変更の開始前に確認する。本repositoryの共通ルールへ、全プロジェクト共通の管理サービスやrepositoryを固定しない。
+判断基準の正本は[開発・review・統合](docs/guides/development.md)。読む条件と着手前の停止条件は[`AGENTS.md`](AGENTS.md)に残す。バグ管理先は各プロジェクトの規約文書（AGENTS.md、README、またはそこから明示された文書）で定義し、未定義なら実装変更の開始前に確認する。本repositoryの共通ルールへ、全プロジェクト共通の管理サービスやrepositoryを固定しない。
 
 主要動作と後続が依存する契約を確認し、実装・必須確認・必要な初回reviewを行う。統合ブロッカーだけを解消し、残件を引き継いで権限の範囲内でmergeへ進む。統合後の必要な確認が成立すれば、依存先を着手可能にする。非ブロッカーの修正は別タスクとして扱い、その着手・完了を現在の変更の完了・統合や後続タスクの開始条件にしない。
 

@@ -6,7 +6,7 @@
 - 現在の要求を満たす最も単純な完全解を作る。完全解を全既知バグの解消と同一視せず、残件は「統合優先・修正分離」に従う。要求、既存の契約、具体的な不具合を根拠にできない機能、抽象化、依存、設定、互換層、fallback、恒久文書、testは追加しない。既存の仕組みを活用し、実装の写しや将来向けの管理基盤を増やさない。
 - 失敗を成功に見せる救済を作らない。既存処理も今回の目的と関係なく削除・整理しない。具体的に要求された互換性やmigrationへの対応は、その許可範囲で行う。
 - 必要な修正と確認が完了したら終える。安心のためだけの追加実装、成功済みcheckの理由のない反復、形式的な分業を増やさない。明示要求、必要な入力検証、安全性、accessibility、データ保護は落とさない。
-- 実装変更前に、対象repositoryのAGENTS.mdでバグ・後追い残件の管理先と、開発途中／互換維持対象の境界を確認する。いずれかが未定義なら実装変更を開始せずユーザーに確認する。境界の調査・説明・review・定義整備は可能だが、独断で定義しない。
+- 実装変更前に、対象repositoryの規約文書（AGENTS.md、README、またはそこから明示された文書）でバグ・後追い残件の管理先と、開発途中／互換維持対象の境界を確認する。いずれかが未定義なら実装変更を開始せずユーザーに確認する。境界の調査・説明・review・定義整備は可能だが、独断で定義しない。
 - 実装、review、修正、統合、公開の完了を分ける。非ブロッカー全件修正を現在の変更・統合や後続の開始条件にせず、必要な引継ぎを行う。必須確認と操作権限は免除しない。
 
 ## 条件付き参照
@@ -42,16 +42,3 @@
 ## 作業ファイル
 
 WithMateから`SessionFolder`が提供されている場合、repositoryに残す必要のない作業用一時ファイルと、ユーザーへ共有する成果物はそこへ置く。保存先の明示指定を優先し、指定がなければ置き場の確認は不要とする。repositoryの恒久成果物は対象repositoryへ置き、filesystemの権限範囲を守る。
-
-## この設定repositoryだけに適用する定義
-
-この節は、作業対象がGitHubの `natumekazuki/.codex` repository（そのcheckout・worktreeを含む）の場合だけ適用する。global AGENTS.mdとして別repositoryへ注入された場合、そのrepositoryの管理先や境界を定義するものではない。
-
-- このrepositoryのバグと後追い残件は、`natumekazuki/.codex` のGitHub Issueで管理する。Issueへの登録・更新・closeは、通常の外部write権限と個別承認の対象として扱う。
-
-### 本repositoryの開発・リリース境界
-
-- Gitタグのないcommitとbranch上の変更は開発途中として扱い、途中状態との互換性を保証しない。
-- `vMAJOR.MINOR.PATCH`形式のGitタグが指すcommitをリリース状態とし、そのタグのリリースノートに記載した利用者向け契約を互換維持の対象とする。破壊的変更はmajor versionを上げ、互換修正はminorまたはpatch versionを上げて新しいタグへ記録する。
-- 初回の維持対象は`v1.0.0`であり、`review-test-value`のCLI、構造化result、metadata v2、対応adapter、Git差分選択の契約を含む。各契約の詳細は既存のSkill referenceと`docs/releases/v1.0.0.md`で確認する。
-- リリースごとに`docs/releases/README.md`の一覧と`docs/releases/vMAJOR.MINOR.PATCH.md`を更新し、変更、互換性、検証結果を記録する。
