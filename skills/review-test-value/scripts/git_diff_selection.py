@@ -241,7 +241,9 @@ def _map_old_line_to_new(line: int, hunks: tuple[DiffHunk, ...]) -> int:
     delta = 0
     for hunk in hunks:
         if hunk.old_count == 0:
-            if line >= hunk.old_start:
+            # An insertion follows its old-side anchor; the anchor line
+            # itself must not move past text inserted into its body.
+            if line > hunk.old_start:
                 delta += hunk.new_count
             continue
         if line < hunk.old_start:
@@ -398,6 +400,30 @@ def _transition_diagnostic(
     )
 
 
+def _retained_declaration_ranges(
+    record: dict[str, Any], hunks: tuple[DiffHunk, ...]
+) -> list[tuple[int, int]]:
+    """Project only declaration lines that Git did not replace or delete."""
+    source = record["source"]
+    cursor = source["declaration_start_line"]
+    end = source["declaration_end_line"]
+    ranges: list[tuple[int, int]] = []
+    for hunk in hunks:
+        if not hunk.old_count or hunk.old_end < cursor:
+            continue
+        if hunk.old_start > end:
+            break
+        if cursor < hunk.old_start:
+            ranges.append((cursor, hunk.old_start - 1))
+        cursor = hunk.old_end + 1
+    if cursor <= end:
+        ranges.append((cursor, end))
+    return [
+        (_map_old_line_to_new(low, hunks), _map_old_line_to_new(high, hunks))
+        for low, high in ranges
+    ]
+
+
 def _build_transitions(
     item: ChangedFile,
     before_records: Sequence[dict[str, Any]],
@@ -450,6 +476,25 @@ def _build_transitions(
                 for hunk in item.hunks
             )
         ]
+        if replacement_hunk_candidates:
+            # A replaced opening line can share its hunk with newly added
+            # tests. Retained body lines must all belong to the same current
+            # declaration; neither a title nor an interpolated start proves it.
+            retained_ranges = _retained_declaration_ranges(before, item.hunks)
+            if retained_ranges:
+                def contains_retained_lines(after: dict[str, Any]) -> bool:
+                    return all(
+                        after["source"]["declaration_start_line"] <= low
+                        and high <= after["source"]["declaration_end_line"]
+                        for low, high in retained_ranges
+                    )
+
+                position_candidates = [
+                    after for after in position_candidates if contains_retained_lines(after)
+                ]
+                replacement_hunk_candidates = [
+                    after for after in replacement_hunk_candidates if contains_retained_lines(after)
+                ]
         candidate_sets = [
             candidates
             for candidates in (
