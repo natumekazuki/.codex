@@ -8,7 +8,8 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 | 正本 | 内容 |
 | --- | --- |
-| `AGENTS.md` | 短い抑制、統合優先・修正分離、UI必須基準、操作境界、個人設定、変更testのreview条件とWithMateへの入口 |
+| `AGENTS.md` | 常時必要な原則・操作境界、条件付き参照、対象を限定した本repositoryの定義 |
+| `docs/guides/` | 開発・統合、変更test、UI、WithMate操作の作業別詳細 |
 | `agents/` | 汎用のカスタムrole |
 | `skills/` | 変更testのreview、UI設計、管理・文書向けのSkill |
 | `hooks/`、`hooks.json` | 共通ルールの短い再通知、サブエージェント起動時の履歴継承既定値 |
@@ -20,7 +21,7 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 ## 統合優先・修正分離
 
-判断基準の正本は[`AGENTS.md`](AGENTS.md)の「統合優先・修正分離」。バグ管理先は各プロジェクトの`AGENTS.md`で定義し、未定義なら実装変更の開始前に確認する。本repositoryの共通ルールへ、全プロジェクト共通の管理サービスやrepositoryを固定しない。
+判断基準の正本は[開発・review・統合](docs/guides/development.md)。読む条件と着手前の停止条件は[`AGENTS.md`](AGENTS.md)に残す。バグ管理先は各プロジェクトの`AGENTS.md`で定義し、未定義なら実装変更の開始前に確認する。本repositoryの共通ルールへ、全プロジェクト共通の管理サービスやrepositoryを固定しない。
 
 主要動作と後続が依存する契約を確認し、実装・必須確認・必要な初回reviewを行う。統合ブロッカーだけを解消し、残件を引き継いで権限の範囲内でmergeへ進む。統合後の必要な確認が成立すれば、依存先を着手可能にする。非ブロッカーの修正は別タスクとして扱い、その着手・完了を現在の変更の完了・統合や後続タスクの開始条件にしない。
 
@@ -93,7 +94,7 @@ pwsh ./scripts/sync-natural-japanese.ps1
 
 `design-ui-information`は業務・操作中心のUIに限定しない。記事、作品集、商品紹介、検索・閲覧サービス、モバイルアプリ、娯楽・制作ツール等も、内容と中心となる体験から構成する。本文や作品を補足へ追いやらず、不要な情報の羅列、無計画な縦積み、画面ごとの別設計を完成扱いしない。短さや特定の見た目を全UIへ強制しない。
 
-表示内容・文言・見た目・操作の変更はSkill名の明示がなくても対象とし、誤字修正などの確認は影響範囲に限定する。UIへ影響しない内部処理の変更へUI設計工程を追加しない。短い必須基準は[`AGENTS.md`](AGENTS.md)、詳細の正本は[`SKILL.md`](skills/design-ui-information/SKILL.md)、製品固有の方針・共通部品・基準画面は対象アプリやサイト側で扱う。
+表示内容・文言・見た目・操作の変更はSkill名の明示がなくても対象とし、誤字修正などの確認は影響範囲に限定する。UIへ影響しない内部処理の変更へUI設計工程を追加しない。適用条件は[`AGENTS.md`](AGENTS.md)、必須基準は[UI基準](docs/guides/ui.md)、詳細の正本は[`SKILL.md`](skills/design-ui-information/SKILL.md)、製品固有の方針・共通部品・基準画面は対象アプリやサイト側で扱う。
 
 Metadataの`allow_implicit_invocation: true`は暗黙呼出しの許可であり、個々の依頼で適用された証拠ではない。公式の[Skill呼び出しとmetadataの説明](https://learn.chatgpt.com/docs/build-skills)も参照し、配布元の編集、実行環境への反映、実際の出力を分けて検証する。
 
@@ -124,6 +125,12 @@ Metadataの`allow_implicit_invocation: true`は暗黙呼出しの許可であり
 上記は検証手順であって実施記録ではない。ルールを変更したこと、sessionで適用されたこと、出力品質を確認したことを区別し、未実施は未実施として残す。利用者調査をしていない場合、使いやすさや好みが実証されたとは扱わない。専用の採点・台帳・CI基盤は追加しない。
 
 ## 配置と検証
+
+このrepository自体をCodex homeとして使う配置と、別checkoutからCodex homeへ必要なファイルをコピー・linkする配置を区別する。共通指示を導入・更新する際は、`AGENTS.md`だけでなく`docs/guides/`と`docs/architecture/subagent-workspace.md`を同じ相対配置で揃える。WithMateの接続手順も利用する配置では`docs/runbooks/withmate-character-context.md`と`docs/runbooks/withmate-repository-glossary.md`を揃える。AGENTS.mdだけを別repositoryへコピーしたり、link先の親ディレクトリをcwdと取り違えたりしない。symlink配置でも通知されるAGENTS.mdの配置元から参照先へ到達できることを確認する。実環境の更新は配布元の編集と別の操作であり、無関係な設定を上書きしない。
+
+[公式のAGENTS.md探索](https://developers.openai.com/codex/guides/agents-md/)はglobalとrepository rootからcwdまでの指示を組み合わせる。通常のMarkdownリンクはその本文の自動注入ではなく、配下すべてのAGENTS.mdを読む仕組みでもない。[Skill](https://developers.openai.com/codex/skills/)は名前・説明から選択した後に本文を読む別の仕組みである。履歴を継承しない子へは必要な条件・実path・権限を依頼に含める。
+
+配置後は別repositoryのrootと下位ディレクトリから、読み込まれたAGENTS.mdの実path、該当する詳細への到達、対象repositoryの管理先・互換性定義を確認する。`.codex`専用のIssue管理先・リリース契約を他repositoryへ適用しない。参照先が欠けた場合は配置を修復してから該当作業へ進み、本文をhookへ全注入して代用しない。
 
 端末への適用時は既存`config.toml`へ設定例の必要sectionだけを反映する。MCP binding、認証、private path、無関係な設定を共有例へ持ち込まず、live全体を上書きしない。`agents/`とregistry例、選択profileを同じCodex homeへ配置する。
 
