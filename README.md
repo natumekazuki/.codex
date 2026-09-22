@@ -64,7 +64,7 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 ## modelとrole
 
-使用modelは`gpt-6-astra`、`gpt-6-sol`、`gpt-6-luna`に限定する。世代を省略したalias、旧modelへのfallback、旧profileの互換aliasは設けない。
+使用modelは`gpt-6-astra`、`gpt-6-sol`、`gpt-6-luna`に限定し、正式なmodel IDを指定する。
 
 ### 公式情報と運用判断
 
@@ -103,9 +103,9 @@ codex --profile sol
 codex --profile astra
 ```
 
-どちらも同じ3つの汎用role・共通ルールを使う。新modelがruntimeで未提供の場合は旧modelへ戻さず、親で可能な作業を続ける。必須の専門審査等が実行できなければ未実施として報告する。配布元の更新だけでlive設定や起動中sessionの変更・新modelの実行成功を主張しない。
+どちらも同じ3つの汎用role・共通ルールを使う。指定modelがruntimeで利用できない場合は、許可された構成の親で可能な作業を続ける。必須の専門審査等が実行できなければ未実施として報告する。配布元の設定とlive設定・実行結果を区別する。
 
-### 棚卸しの範囲
+### model選択の定義箇所
 
 | 対象 | model選択を持つ箇所・扱い |
 | --- | --- |
@@ -114,8 +114,6 @@ codex --profile astra
 | 委譲とhook | `docs/architecture/subagent-workspace.md`、`hooks/implementation-restraint.ps1`、`hooks/subagent-fork-default.ps1`、`hooks.json` |
 | test価値審査 | `AGENTS.md`、`docs/guides/test-changes.md`、`skills/review-test-value/`、比較runbookはmodel IDではなく`general_luna`を参照するため、role更新を利用する |
 | 指示ファイル・Skill・CI・script | `.codex/model-instructions-withmate*.md`を含め確認。上記以外に運用modelの固定指定はない |
-| 過去の運用定義 | model配分専用のADR-0014・ADR-0023を削除し、他ADRに混在した廃止routingの記述も除去する。削除前の内容はGit履歴にのみ残す |
-| system prompt取得記録・リリース記録 | 不変の原文・取得元・過去の実施事実であり、model選択の定義ではない。旧model名を新modelへ改ざんしない |
 
 ## Skill
 

@@ -1,8 +1,11 @@
 # ADR-0004: reviewをblocking findingと明示的なrisk acceptanceで収束させる
 
+> 2026-09-23: 本ADRは判断履歴として保存し、本文の運用定義は適用しない。現行のmodel・role構成は[README](../../README.md#modelとrole)、委譲基準は[Subagent Review Boundary](../architecture/subagent-workspace.md)、review・統合基準は[開発・review・統合](../guides/development.md)を参照する。本文と当時の参照先は履歴として保持する。
+
 > 2026-09-06: 一般開発の固定工程・文書作成義務・職種別role・routingに関する判断は[Issue #52](https://github.com/natumekazuki/.codex/issues/52)でsuperseded。本文は履歴として保持する。現在の構成は[README](../../README.md)、専門test価値審査は[review-test-value](../../skills/review-test-value/SKILL.md)を参照する。
 
-- Status: accepted, amended by ADR-0012 and ADR-0013
+- Status: superseded（現行運用の適用対象外）
+- Historical status: accepted, amended by ADR-0012 and ADR-0013
 - Date: 2026-07-18
 - Supersedes: ADR-0003
 - Amended by: ADR-0012 (2026-08-03), ADR-0013 (2026-08-03)
@@ -33,6 +36,7 @@ ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一�
 - 3回目の後も`blocking`が残る場合は完了扱いにせず、要求、設計、責務境界、contractまたはユーザー判断へ戻る。同一論理変更の4回目のfull-diff reviewは行わず、高リスクなscope拡張を続ける場合はユーザー確認後に新しいaccepted contractを持つ別の論理変更として切り出す
 - 完了条件はfinding総数が0であることではなく、未解決の`blocking`がなく、その他のfinding、accepted risk、validation gap、残リスクが根拠付きで分類されていることである
 - review運用は`AGENTS.md`、holistic reviewerの責務と出力は`agents/reviewer.toml`、targeted review、specialist review、targeted closureの責務と出力は`agents/targeted_reviewer.toml`、contract-closure時の展開は`skills/contract-closure/SKILL.md`を正本とする。自然言語ポリシーの完全一致はstatic checkで固定しない
+- `hooks/test-subagent-routing.ps1`は`subagent-routing.ps1`と`set-spark-routing.ps1`を実行し、runtime mode、fallback、state precedence、出力だけを検証する。review cycleを機械制御するruntimeを導入した場合は、その状態遷移を別のexecutable contractとして検証する
 
 ## Alternatives
 
@@ -58,4 +62,4 @@ ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一�
 ## Policy Anchors
 
 - Source: `AGENTS.md`、`agents/reviewer.toml`、`agents/targeted_reviewer.toml`、`agents/fast_reviewer.toml`、`skills/contract-closure/SKILL.md`
-- Executable contract: なし。本文のreview分類と収束は自然言語の運用契約として記録したものである。2026-09-23のmodel運用刷新により、廃止したrouting checkの説明・参照は除去した。
+- Executable contract: なし。現在のreview分類と収束は自然言語の運用契約であり、`hooks/test-subagent-routing.ps1`の責務には含めない

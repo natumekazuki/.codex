@@ -1,8 +1,11 @@
 # ADR-0013: review kindごとにsubagent roleとrouting責務を分離する
 
+> 2026-09-23: 本ADRは判断履歴として保存し、本文の運用定義は適用しない。現行のmodel・role構成は[README](../../README.md#modelとrole)、委譲基準は[Subagent Review Boundary](../architecture/subagent-workspace.md)、review・統合基準は[開発・review・統合](../guides/development.md)を参照する。本文と当時の参照先は履歴として保持する。
+
 > 2026-09-06: 一般開発の固定工程・文書作成義務・職種別role・routingに関する判断は[Issue #52](https://github.com/natumekazuki/.codex/issues/52)でsuperseded。本文は履歴として保持する。現在の構成は[README](../../README.md)、専門test価値審査は[review-test-value](../../skills/review-test-value/SKILL.md)を参照する。
 
-- Status: accepted, partially superseded by ADR-0018 and ADR-0019
+- Status: superseded（現行運用の適用対象外）
+- Historical status: accepted, partially superseded by ADR-0018 and ADR-0019
 - Date: 2026-08-03
 - Amends: ADR-0004, ADR-0007, ADR-0012
 - Related: ADR-0008, ADR-0011
@@ -14,6 +17,8 @@ ADR-0007は初期導入としてtargeted review、specialist review、holistic r
 
 単一roleにはcomplete diffから新しいfinding familyを探索する責務と、指定slice、lens、finding familyだけを反証する責務が併存していた。Review Briefでscopeを限定しても、静的role契約がcomplete diff探索を許すため、targeted closureからholistic探索へ広がる余地が残った。plannerにも`non-trivial`または`final review`を理由に`reviewer`を選択する表現があり、root sessionの`Full-review gate`を迂回し得た。
 
+一方、routing hookはSpark modeとquota fallbackのcontextだけを注入し、review kind、回数、deadline、finding closureを制御していない。role分割のためにreview lifecycleをhookへ移すと、repository policy、role契約、runtime routingの正本が分散する。
+
 ## Decision
 
 - `agents/reviewer.toml`をholistic complete-diff review専用roleとする。root sessionが`Full-review gate=run`と判定した場合だけ、一つの論理変更につき一度選択できる。
@@ -24,6 +29,8 @@ ADR-0007は初期導入としてtargeted review、specialist review、holistic r
 - `fast_reviewer`は小規模、局所的、低リスクなsanity checkに限定し、`contract-closure`が要求する独立review、高リスクなtargeted review、specialist review、holistic reviewの代用にしない。
 - plannerはreview kind、scope、具体的trigger、前提check、有限のdeadlineを計画へ含める。`Full-review gate=run`だけが`reviewer`を選択でき、targeted review、specialist review、targeted closureは`targeted_reviewer`を選択する。file数、diff量、finding数、`non-trivial`、`final review`、未使用のreviewer、または「念のため」を選択理由にしない。
 - Candidate-bound reviewでは、root sessionが`Candidate preflight`を完了してからReview Briefを発行する。どちらのreview roleも、宣言済みread-only verification recipeによるsource identityの独立検証を省略しない。roleはCandidate形式を設計または修復しない。
+- `targeted_reviewer`を端末固有の`config.toml`と配布用の`config/agents.example.toml`へstandard roleとして登録する。`standard-only` modeでは通常のstandard roleとして選択でき、`fast_reviewer`はユーザーがexact roleを明示した場合以外に自動選択しない。
+- `hooks/subagent-routing.ps1`はruntime modeとSpark fallback contextだけを所有し、review kind、review回数、finding closure、deadline超過後の再投入を所有しない。新roleを阻害またはremapしないことをrouting testで検証できるため、hook本体は変更しない。
 - review lifecycle、review回数、Candidate Definition、Review Brief、deadline、Finding Promotion、完了条件はADR-0012、`AGENTS.md`、`skills/contract-closure/SKILL.md`の既存契約を維持する。
 
 ## Alternatives
@@ -51,5 +58,5 @@ ADR-0007は初期導入としてtargeted review、specialist review、holistic r
 - Low-risk sanity reviewer contract: `agents/fast_reviewer.toml`
 - Planner routing contract: `agents/planner.toml`, `agents/fast_planner.toml`
 - Role registration: `config/agents.example.toml`、端末固有の`config.toml`
-
-2026-09-23のmodel運用刷新により、廃止したmodel routing・fallbackの定義と参照は本文から除去した。現在の委譲基準は[Subagent Review Boundary](../architecture/subagent-workspace.md)を参照する。
+- Runtime mode and Spark fallback: `hooks/subagent-routing.ps1`
+- Routing executable contract: `hooks/test-subagent-routing.ps1`
