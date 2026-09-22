@@ -1203,6 +1203,112 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
                 self.assertEqual(transition["after"]["metadata"]["scope"], "payment-api")
 
     # @test-value v2
+    # kind = "contract"
+    # claim = "metadata前置と宣言直後への本文追加を伴うtestを、同一pathでもrenameでも元宣言に対応付ける"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "宣言行をanchorとする本文挿入の行数まで開始位置へ加算して旧recordを対応不能にする"
+    # observable = "CLIのexit、SURVIVEDの旧新path・宣言行・本文、testsとafter集合"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # distinction = "既存の末尾追加や宣言置換では通らない、宣言前後のzero-count hunk境界を実Git差分で検証する"
+    # @end-test-value
+    def test_git_mode_matches_metadata_prepend_and_body_insert(self) -> None:
+        unchanged = "".join(f"const fixture{index} = {index};\n" for index in range(40))
+        body = 'test("observes storage", () => {\n  assert.equal(readStorage(), null);\n});\n'
+        for rename in (False, True):
+            with self.subTest(rename=rename), tempfile.TemporaryDirectory() as tmp:
+                self.root = Path(tmp)
+                old_path = "scripts/tests/storage.test.ts"
+                new_path = "tests/main/storage.test.ts" if rename else old_path
+                self.write(old_path, unchanged + body)
+                base = self.initialize_git()
+                if rename:
+                    (self.root / new_path).parent.mkdir(parents=True)
+                    self.git("mv", old_path, new_path)
+                changed_body = body.replace(
+                    '() => {\n', '() => {\n  let calls = 0;\n  observeReads(() => calls++);\n'
+                )
+                self.write(new_path, unchanged + metadata_block("//") + changed_body)
+                self.git("add", new_path)
+                if rename:
+                    self.assertTrue(self.git("diff", "--cached", "--find-renames", "--name-status", base).startswith("R"))
+                working = self.extract_git(base, "typescript")
+                staged = self.extract_git(base, "typescript", "--staged")
+                self.git("commit", "--quiet", "-m", "annotate and observe storage")
+                committed = self.extract_git(base, "typescript", "--head", self.git("rev-parse", "HEAD"))
+                for result, status, stderr in (working, staged, committed):
+                    self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                    self.assertEqual(result["diagnostics"], [])
+                    self.assertEqual([t["kind"] for t in result["transitions"]], ["SURVIVED"])
+                    transition = result["transitions"][0]
+                    self.assertEqual(transition["before"]["source"]["path"], old_path)
+                    self.assertEqual(transition["after"]["source"]["path"], new_path)
+                    self.assertEqual(transition["before"]["source"]["declaration_start_line"], 41)
+                    self.assertEqual(transition["after"]["source"]["declaration_start_line"], 51)
+                    self.assertEqual(transition["before"]["source_text"], body)
+                    self.assertEqual(transition["after"]["source_text"], changed_body)
+                    self.assertEqual(result["tests"], [transition["after"]])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "宣言置換hunkに前段test追加が混在しても旧本文の未変更行が一つの現行宣言内に残る場合だけ対応付ける"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "複数宣言を含むhunkで旧recordを失うか、未変更本文が複数testに分割された対応をSURVIVEDとして通す"
+    # observable = "CLIのexit、diagnostics、旧新sourceを持つSURVIVEDとADDED、testsとafter集合"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # distinction = "本文一致も宣言の一点投影も使えない宣言置換と隣接追加を扱い、保持行の分割を対照入力にする"
+    # @end-test-value
+    def test_git_mode_uses_retained_body_to_disambiguate_replaced_declaration(self) -> None:
+        unchanged = "".join(f"const fixture{index} = {index};\n" for index in range(160))
+        body = (
+            'test("old close", () => {\n'
+            '  const service = createService();\n'
+            '  const bundle = initialize(service);\n'
+            '  assert.doesNotThrow(() => service.close(bundle));\n'
+            '  assert.equal(warnings.length, 1);\n'
+            '});\n'
+        )
+        added = metadata_block("//") + 'test("worker close", async () => {\n  await closeWorker();\n});\n'
+        changed_body = body.replace('"old close", ()', '"renamed close", async ()').replace(
+            'assert.doesNotThrow', 'await assert.doesNotReject'
+        )
+        split_body = changed_body.replace(
+            '  await assert.doesNotReject(() => service.close(bundle));\n',
+            '});\n' + metadata_block("//") + 'test("split tail", () => {\n',
+        )
+        for split in (False, True):
+            with self.subTest(split=split), tempfile.TemporaryDirectory() as tmp:
+                self.root = Path(tmp)
+                old_path = "scripts/tests/close.test.ts"
+                new_path = "tests/main/close.test.ts"
+                self.write(old_path, unchanged + body)
+                base = self.initialize_git()
+                (self.root / new_path).parent.mkdir(parents=True)
+                self.git("mv", old_path, new_path)
+                self.write(new_path, unchanged + added + metadata_block("//") + (split_body if split else changed_body))
+                self.git("add", new_path)
+                self.assertTrue(self.git("diff", "--cached", "--find-renames", "--name-status", base).startswith("R"))
+                result, status, stderr = self.extract_git(base, "typescript")
+                if split:
+                    self.assertEqual(status, 1, stderr)
+                    self.assertEqual([d["code"] for d in result["diagnostics"]], ["RECORD_TRANSITION_UNRESOLVED"])
+                    self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED"] * 3)
+                    self.assertEqual(len(result["tests"]), 3)
+                else:
+                    self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                    self.assertEqual(result["diagnostics"], [])
+                    self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED", "SURVIVED"])
+                    survived = result["transitions"][1]
+                    self.assertEqual(survived["before"]["source_text"], body)
+                    self.assertEqual(survived["after"]["source_text"], changed_body)
+                    self.assertEqual(survived["before"]["source"]["path"], old_path)
+                    self.assertEqual(survived["after"]["source"]["path"], new_path)
+                self.assertEqual(result["tests"], [t["after"] for t in result["transitions"]])
+
+    # @test-value v2
     # kind = "regression"
     # claim = "既存TypeScript testの末尾変更と直後の追加testを同一置換hunkで誤対応付けしない"
     # oracle = { type = "issue", ref = "natumekazuki/.codex#78" }
