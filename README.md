@@ -1,5 +1,7 @@
 # Codex 個人設定
 
+本書は`natumekazuki/.codex`の配布資産、保守、配置の案内である。各repositoryでCodexが従う共通ルールの入口は`AGENTS.md`、作業別の本文は`docs/guides/`等の明示された参照先に置く。本書の配布元固有の管理先・リリース境界・検証手順を、他repositoryの作業ルールとして適用しない。
+
 Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追加の共通ルールは過剰実装の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
 
 このcheckoutの`review-test-value`は、Git差分から変更testを抽出し、通常のread-onlyサブエージェントへreviewを委譲するSkillである。抽出器の成功、全recordのreview、各指摘の扱いを確認する。review完了と全件修正は分け、非ブロッカーは後追いへ引き継ぐ。
@@ -19,6 +21,8 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 ## 構成
 
+共通ルール本文は`AGENTS.md`、`docs/guides/`、`docs/architecture/subagent-workspace.md`と各Skill・roleの指示に置く。`docs/architecture/instruction-governance.md`は配布構成の案内、`docs/runbooks/`は指定された導入・保守作業の手順である。`docs/system-prompt/`は編集元資産、`docs/adr/`と`docs/releases/`は本repositoryの記録であり、共通ルール本文の置き場ではない。
+
 | 正本 | 内容 |
 | --- | --- |
 | `AGENTS.md` | 常時必要な原則・操作境界、条件付き参照 |
@@ -32,17 +36,13 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 | `docs/system-prompt/`、`.codex/model-instructions-withmate.md` | Codex system promptの取得版、日本語訳、WithMate用編集元 |
 | `docs/adr/` | 判断履歴。適用状態を明記し、置換・撤回後も本文を保持する |
 
-## 統合優先・修正分離
+## 共通ルールの保守と検証
 
-判断基準の正本は[開発・review・統合](docs/guides/development.md)。読む条件と着手前の停止条件は[`AGENTS.md`](AGENTS.md)に残す。バグ管理先は各プロジェクトの規約文書（AGENTS.md、README、またはそこから明示された文書）で定義し、未定義なら実装変更の開始前に確認する。本repositoryの共通ルールへ、全プロジェクト共通の管理サービスやrepositoryを固定しない。
-
-主要動作と後続が依存する契約を確認し、実装・必須確認・必要な初回reviewを行う。統合ブロッカーだけを解消し、残件を引き継いで権限の範囲内でmergeへ進む。統合後の必要な確認が成立すれば、依存先を着手可能にする。非ブロッカーの修正は別タスクとして扱い、その着手・完了を現在の変更の完了・統合や後続タスクの開始条件にしない。
-
-修正は統合済みコードを基点とする別タスクとして扱い、同一バージョンに間に合う確認済み修正は取り込む。間に合わない非ブロッカーは修正リリース等へ回し、全Issueのcloseを公開条件にしない。統合可否と公開可否は別に判断し、自動公開を伴うmergeでは公開条件も確認する。Issue操作・merge・公開の権限は従来どおり別途必要となる。
+統合・後追い修正の共通基準は[開発・review・統合](docs/guides/development.md)、読む条件は[`AGENTS.md`](AGENTS.md)が正本である。以下は本repositoryでそれらの指示を変更・配置する際の保守手順と検証ケースである。
 
 ### 設計判断と文書の更新
 
-共通の判断方法と手順は[設計判断・文書化](docs/guides/design-decisions.md)に置く。対象変更に必要な共有判断の不足・矛盾を検出したら、必要な調査・推奨案・草案を作り、未合意の判断単位で採否を確認する。要求・保証と継続負担で過剰設計を評価し、採用と適用、branchの現行説明と判断履歴を分ける。既存の情報で足りる変更へ文書一式やADRを要求せず、権限・着手禁止・統合基準は維持する。
+共通の判断方法、文書の更新・保存、リリースノートのリンク規則は[設計判断・文書化](docs/guides/design-decisions.md)に置く。配布元の案内やリリースノートへ共通ルール本文を重複させず、正本を更新する。
 
 入口とhookは検出条件と詳細への参照にとどめる。検証では、単純な変更、共有境界の不足、事実と方針、一部採用・保留、read-only、未定義境界、要求変更、branch統合・置換・廃止等を必要な範囲で確認する。確認結果は既存の作業報告・PR等へ残し、文書上の判断確認、実際の草案・応答、live配置・新規session等の実効確認を区別する。新しい恒久test・承認台帳・文書同期基盤は設けない。
 
@@ -64,7 +64,7 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 ## modelとrole
 
-使用modelは`gpt-6-astra`、`gpt-6-sol`、`gpt-6-luna`に限定し、正式なmodel IDを指定する。
+本repositoryの設定例・role定義は`gpt-6-astra`、`gpt-6-sol`、`gpt-6-luna`で構成する。この節は配布設定と採用理由の説明であり、作業時の委譲基準は[Subagent Review Boundary](docs/architecture/subagent-workspace.md)が正本である。
 
 ### 公式情報と運用判断
 
