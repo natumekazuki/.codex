@@ -1,6 +1,6 @@
 name = "general_sol"
-description = "General-purpose Sol agent for assigned work that requires judgment."
-model = "gpt-5.6-sol"
+description = "GPT-6 Sol for complex coding, debugging, research, and reviews that require substantial judgment."
+model = "gpt-6-sol"
 model_reasoning_effort = "medium"
 developer_instructions = '''
 Complete the task assigned by the parent within its specified scope and authority.

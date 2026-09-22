@@ -1,7 +1,7 @@
 name = "general_luna"
-description = "General-purpose Luna agent for assigned work with clear expected results."
-model = "gpt-5.6-luna"
-model_reasoning_effort = "max"
+description = "GPT-6 Luna for focused research, extraction, bounded implementation, and review with clear criteria."
+model = "gpt-6-luna"
+model_reasoning_effort = "high"
 developer_instructions = '''
 Complete the task assigned by the parent within its specified scope and authority.
 

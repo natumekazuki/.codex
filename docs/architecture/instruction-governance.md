@@ -1,5 +1,7 @@
 # Instruction Governance
 
+本書は、このrepositoryが配布する指示・設定・Skillの構成と正本の案内である。各repositoryの作業へ適用する共通ルール本文は、以下に示すAGENTS.md・guide・Skill等が担う。
+
 共通ルールの入口は`AGENTS.md`。常時必要な抑制・操作境界と、作業別の詳細を読む条件・参照先を置く。AGENTS.mdとhookの共通文書参照は`~/.codex/...`で明示し、`~`を実行環境のユーザーhomeへ解決する。作業対象repositoryのcwd、配布元checkout、`CODEX_HOME`による別配置へ参照先を切り替えない。本書等の通常の相対リンクは参照元文書を基準とし、共通文書の利用時の配置先とは区別する。reviewの固定回数や専用の進行管理基盤は設けない。
 
 | 情報 | 正本 |
@@ -16,4 +18,4 @@
 
 `hooks/implementation-restraint.ps1`は共通ルールの短い再通知であり、別のworkflowを設けない。既存のモデル選択を再提示するが、分割先本文は注入しない。
 
-過去ADR・完了済みplanは判断履歴であり、現行の起動義務ではない。
+文書更新・履歴保存・リリースノートのリンクに関する共通ルールの正本は[設計判断・文書化](../guides/design-decisions.md)である。このrepository自身の判断履歴は`docs/adr/`、公開記録は`docs/releases/`に置かれている。

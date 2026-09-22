@@ -1,5 +1,7 @@
 # Codex 個人設定
 
+本書は`natumekazuki/.codex`の配布資産、保守、配置の案内である。各repositoryでCodexが従う共通ルールの入口は`AGENTS.md`、作業別の本文は`docs/guides/`等の明示された参照先に置く。本書の配布元固有の管理先・リリース境界・検証手順を、他repositoryの作業ルールとして適用しない。
+
 Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追加の共通ルールは過剰実装の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
 
 このcheckoutの`review-test-value`は、Git差分から変更testを抽出し、通常のread-onlyサブエージェントへreviewを委譲するSkillである。抽出器の成功、全recordのreview、各指摘の扱いを確認する。review完了と全件修正は分け、非ブロッカーは後追いへ引き継ぐ。
@@ -19,6 +21,8 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 ## 構成
 
+共通ルール本文は`AGENTS.md`、`docs/guides/`、`docs/architecture/subagent-workspace.md`と各Skill・roleの指示に置く。`docs/architecture/instruction-governance.md`は配布構成の案内、`docs/runbooks/`は指定された導入・保守作業の手順である。`docs/system-prompt/`は編集元資産、`docs/adr/`と`docs/releases/`は本repositoryの記録であり、共通ルール本文の置き場ではない。
+
 | 正本 | 内容 |
 | --- | --- |
 | `AGENTS.md` | 常時必要な原則・操作境界、条件付き参照 |
@@ -30,19 +34,15 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 | `docs/runbooks/` | 必要時の運用・導入手順 |
 | `docs/releases/` | Gitタグごとのリリースノートと互換性・検証結果 |
 | `docs/system-prompt/`、`.codex/model-instructions-withmate.md` | Codex system promptの取得版、日本語訳、WithMate用編集元 |
-| `docs/adr/`、完了済みplan | 過去の判断履歴。現行の工程を義務付けない |
+| `docs/adr/` | 判断履歴。適用状態を明記し、置換・撤回後も本文を保持する |
 
-## 統合優先・修正分離
+## 共通ルールの保守と検証
 
-判断基準の正本は[開発・review・統合](docs/guides/development.md)。読む条件と着手前の停止条件は[`AGENTS.md`](AGENTS.md)に残す。バグ管理先は各プロジェクトの規約文書（AGENTS.md、README、またはそこから明示された文書）で定義し、未定義なら実装変更の開始前に確認する。本repositoryの共通ルールへ、全プロジェクト共通の管理サービスやrepositoryを固定しない。
-
-主要動作と後続が依存する契約を確認し、実装・必須確認・必要な初回reviewを行う。統合ブロッカーだけを解消し、残件を引き継いで権限の範囲内でmergeへ進む。統合後の必要な確認が成立すれば、依存先を着手可能にする。非ブロッカーの修正は別タスクとして扱い、その着手・完了を現在の変更の完了・統合や後続タスクの開始条件にしない。
-
-修正は統合済みコードを基点とする別タスクとして扱い、同一バージョンに間に合う確認済み修正は取り込む。間に合わない非ブロッカーは修正リリース等へ回し、全Issueのcloseを公開条件にしない。統合可否と公開可否は別に判断し、自動公開を伴うmergeでは公開条件も確認する。Issue操作・merge・公開の権限は従来どおり別途必要となる。
+統合・後追い修正の共通基準は[開発・review・統合](docs/guides/development.md)、読む条件は[`AGENTS.md`](AGENTS.md)が正本である。以下は本repositoryでそれらの指示を変更・配置する際の保守手順と検証ケースである。
 
 ### 設計判断と文書の更新
 
-共通の判断方法と手順は[設計判断・文書化](docs/guides/design-decisions.md)に置く。対象変更に必要な共有判断の不足・矛盾を検出したら、必要な調査・推奨案・草案を作り、未合意の判断単位で採否を確認する。要求・保証と継続負担で過剰設計を評価し、採用と適用、branchの現行説明と判断履歴を分ける。既存の情報で足りる変更へ文書一式やADRを要求せず、権限・着手禁止・統合基準は維持する。
+共通の判断方法、文書の更新・保存、リリースノートのリンク規則は[設計判断・文書化](docs/guides/design-decisions.md)に置く。配布元の案内やリリースノートへ共通ルール本文を重複させず、正本を更新する。
 
 入口とhookは検出条件と詳細への参照にとどめる。検証では、単純な変更、共有境界の不足、事実と方針、一部採用・保留、read-only、未定義境界、要求変更、branch統合・置換・廃止等を必要な範囲で確認する。確認結果は既存の作業報告・PR等へ残し、文書上の判断確認、実際の草案・応答、live配置・新規session等の実効確認を区別する。新しい恒久test・承認台帳・文書同期基盤は設けない。
 
@@ -64,26 +64,56 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 ## modelとrole
 
+本repositoryの設定例・role定義は`gpt-6-astra`、`gpt-6-sol`、`gpt-6-luna`で構成する。この節は配布設定と採用理由の説明であり、作業時の委譲基準は[Subagent Review Boundary](docs/architecture/subagent-workspace.md)が正本である。
+
+### 公式情報と運用判断
+
+2026-09-23にOpenAI公式のモデルページ、[GPT-6 guide](https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra.md)、[Codexのモデル選択](https://learn.chatgpt.com/docs/models)を確認した。公式の位置づけと、このrepositoryで採用する担当範囲を区別する。
+
+| model | 公式の位置づけ | このrepositoryでの担当 |
+| --- | --- | --- |
+| [GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) | 最も高い能力を持ち、code・apps・researchをまたぐ最難関の一貫作業向け | 親として要件・統合・最終判断を担う。非Astra親からは、最難関の横断的推論・設計判断に限定して委譲する |
+| [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) | 複雑なcodingとagentic workflow向け | 複雑な実装、debug、調査、複数の契約を照合するreview。必要な判断の難しさから直接選べる |
+| [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) | 明確で反復可能な大量処理を効率よく行うmodel | 限定調査、抽出・要約、設計済みの小実装、明確な基準を持つreview。未解決の設計判断は親へ返す |
+
+公式はSol・Lunaのcoding、事実の信頼性、伝達の改善を説明し、Astraについて複数の評価で出力token削減と高い成果を報告している。ただし、今回取得した公式docから3モデルの同条件での定量比較は確定できない。独立評価およびこのrepositoryでの実測比較も未確認であり、上表の担当分けは公式の位置づけに基づく運用判断である。
+
+[API価格](https://developers.openai.com/api/docs/pricing)はStandard・272K以下の入力・100万tokenあたり、Astraが入力$10／出力$50、Solが$2／$10、Lunaが$0.10／$0.50。これはtoken単価であり、Codexの実消費枠や1タスクの費用比ではない。再作業、推論token、cache、長文料金、実行時間を含む効果は[比較手順](docs/runbooks/compare-subagent-roles.md)で別途確認する。
+
+### 設定と委譲
+
 | 用途 | model | effort |
 | --- | --- | --- |
-| 通常の親 | `gpt-6-astra` | medium、Standard速度 |
-| 一般childの既定 | `gpt-5.6-luna` | max |
+| 通常の親／`astra` profile | `gpt-6-astra` | low、Standard速度 |
+| 手動切替の`sol` profile | `gpt-6-sol` | medium、Standard速度 |
+| 一般childの既定／`general_luna` | `gpt-6-luna` | high |
+| `general_sol` | `gpt-6-sol` | medium |
 | `general_astra` | `gpt-6-astra` | medium |
-| `general_sol` | `gpt-5.6-sol` | medium |
-| `general_luna` | `gpt-5.6-luna` | max |
 
-汎用roleは調査・設計・実装・review・検証に使え、必要な仕事は起動時の依頼で表す。モデル選択方針は`hooks/implementation-restraint.ps1`から毎回注入する。標準`default`／`worker`／`explorer`はカスタムroleとは別である。
-設定例はCLI `0.153.4`を対象にする。汎用roleの権限は親から継承し、調査依頼のread-only境界が必要な場合はruntimeで制限する。`review-test-value`のreviewは、抽出record、repository root、対象scopeを起動時のpromptで`general_luna`へ渡す。親はreview結果を読んで追加contextや別reviewerの要否を判断する。
+Codex公式の開始推奨はAstra Light（設定値`low`）、Sol Medium、Luna High。Astra子は難しい判断を限定して渡すため`medium`を維持する。これらは最適値を実証したものではなく、具体的な品質不足がある時だけ対応modelで利用可能なeffortを調整する。
 
-`PreToolUse` hookは`spawn_agent`の`fork_turns`を明示値も含め常に`none`へ置き換え、他の引数は保持する。Astra親からの`general_astra`とAstraの直接model指定は拒否する。必要な文脈は起動時の依頼へ含める。設定例の`features.multi_agent_v2`は待機timeoutの最小値と既定値を120000 msにする。実環境への配置後、hookのtrust・到達と新規sessionの実効設定を確認する。
-親をSolへ明示切替する場合は、有効な`CODEX_HOME`直下へ配置した`gpt56.config.toml`を使う。
+委譲基準の正本は[Subagent Review Boundary](docs/architecture/subagent-workspace.md)。hookはその要点を再通知する。標準`default`／`worker`／`explorer`はカスタムroleとは別であり、model省略時は設定例の一般child既定値を使う。汎用roleの権限は親から継承し、read-only依頼は起動時に明示し、利用可能なruntimeの制限も適用する。`review-test-value`は引き続き`general_luna`へ委譲し、抽出契約・全recordの審査・統合基準は変えない。
+
+`PreToolUse` hookは3モデル以外の明示的な`model`指定を拒否する。Astra親からの`general_astra`とAstraの直接指定も拒否する。許可された`spawn_agent`／`Agent`の`fork_turns`は常に`none`へ置き換え、他の引数は保持する。roleの実modelやmodel未指定時の既定値はconfigと新規sessionで確認し、hookが任意の外部role定義まで検証すると扱わない。設定例の待機timeoutの最小値と既定値は120000 msを維持する。
+
+親をSolへ切り替える場合は、有効な`CODEX_HOME`直下へ配置した`sol.config.toml`を使う。
 
 ```powershell
-codex --profile gpt56
+codex --profile sol
 codex --profile astra
 ```
 
-どちらも同じ汎用role・短い共通ルールを使う。model配置とreasoning effortは運用上の設定値であり、性能の最適値や週リミット消費の解消を保証しない。設定例の値と新規sessionの実効値を区別する。
+どちらも同じ3つの汎用role・共通ルールを使う。指定modelがruntimeで利用できない場合は、許可された構成の親で可能な作業を続ける。必須の専門審査等が実行できなければ未実施として報告する。配布元の設定とlive設定・実行結果を区別する。
+
+### model選択の定義箇所
+
+| 対象 | model選択を持つ箇所・扱い |
+| --- | --- |
+| 共有config・profile・registry | `config.example.toml`、`config/*.toml`。親、一般child、3 roleの登録を揃える |
+| カスタムrole | `agents/general_{astra,sol,luna}.toml`。model ID、effort、担当範囲を定義する |
+| 委譲とhook | `docs/architecture/subagent-workspace.md`、`hooks/implementation-restraint.ps1`、`hooks/subagent-fork-default.ps1`、`hooks.json` |
+| test価値審査 | `AGENTS.md`、`docs/guides/test-changes.md`、`skills/review-test-value/`、比較runbookはmodel IDではなく`general_luna`を参照するため、role更新を利用する |
+| 指示ファイル・Skill・CI・script | `.codex/model-instructions-withmate*.md`を含め確認。上記以外に運用modelの固定指定はない |
 
 ## Skill
 

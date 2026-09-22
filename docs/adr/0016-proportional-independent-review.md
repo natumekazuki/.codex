@@ -1,8 +1,11 @@
 # ADR-0016: 独立reviewを高リスク境界と直接検証不能なinteractionへ限定する
 
+> 2026-09-23: 本ADRは判断履歴として保存し、本文の運用定義は適用しない。現行のmodel・role構成は[README](../../README.md#modelとrole)、委譲基準は[Subagent Review Boundary](../architecture/subagent-workspace.md)、review・統合基準は[開発・review・統合](../guides/development.md)を参照する。本文と当時の参照先は履歴として保持する。
+
 > 2026-09-06: 一般開発の固定工程・文書作成義務・職種別role・routingに関する判断は[Issue #52](https://github.com/natumekazuki/.codex/issues/52)でsuperseded。本文は履歴として保持する。現在の構成は[README](../../README.md)、専門test価値審査は[review-test-value](../../skills/review-test-value/SKILL.md)を参照する。
 
-- Status: accepted
+- Status: superseded（現行運用の適用対象外）
+- Historical status: accepted
 - Date: 2026-08-10
 - Amends: ADR-0013, ADR-0014
 - Related: ADR-0011, ADR-0012

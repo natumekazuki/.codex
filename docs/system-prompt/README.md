@@ -1,6 +1,6 @@
 # Codex system promptの記録
 
-このディレクトリでは、WithMateセッションで使われたCodex組み込み指示のバージョン管理下の記録を保持します。
+このディレクトリでは、WithMate用指示の現行ベースラインとなるCodex組み込み指示と日本語訳を管理します。
 
 ## 範囲
 
@@ -14,15 +14,13 @@ WithMate用ファイルは編集可能な統合用コピーです。英語版と
 
 | パス | 目的 |
 | --- | --- |
-| `snapshots/YYYY-MM-DD-<model>.en.md` | 日付とモデルごとの英語原文の不変スナップショット |
+| `snapshots/YYYY-MM-DD-<model>.en.md` | 現行ベースラインの英語原文。取得内容は改変しない |
 | `snapshots/YYYY-MM-DD-<model>.ja.md` | 対応する英語スナップショットの日本語訳 |
 | `.codex/model-instructions-withmate.md` | 編集可能なWithMate用指示ファイル（英語版） |
 | `.codex/model-instructions-withmate.ja.md` | 編集可能なWithMate用指示ファイル（日本語版） |
 | `scripts/capture-codex-system-prompt.ps1` | rolloutから組み込み指示を抽出するスクリプト |
 | `docs/runbooks/system-prompt-maintenance.md` | 取得、レビュー、翻訳、設定の手順 |
 
-## 初回記録
+## 更新と保存
 
-初回記録は、Codex CLI 0.154.0で動作していた `gpt-5.6-luna` セッションから、2026-09-16に取得しました。取得した本文は17,730文字です。
-
-記録間の変更はGit履歴で追跡します。既存の日付付きスナップショットは上書きせず、元のプロンプトが変わった場合は新しい日付のファイルを作成します。
+現行ベースラインとして必要な原文と訳だけを置きます。ベースラインの更新時は参照とWithMate用ファイルを揃え、役割を終えたスナップショットと訳を削除します。過去の内容はGit履歴で参照し、履歴保存を目的としたファイルの併存は行いません。
