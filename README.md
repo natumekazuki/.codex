@@ -145,11 +145,11 @@ Metadataの`allow_implicit_invocation: true`は暗黙呼出しの許可であり
 
 ## 配置と検証
 
-このrepository自体をCodex homeとして使う配置と、別checkoutからCodex homeへ必要なファイルをコピー・linkする配置を区別する。共通指示を導入・更新する際は、`AGENTS.md`だけでなく`docs/guides/`と`docs/architecture/subagent-workspace.md`を同じ相対配置で揃える。WithMateの接続手順も利用する配置では`docs/runbooks/withmate-character-context.md`と`docs/runbooks/withmate-repository-glossary.md`を揃える。AGENTS.mdだけを別repositoryへコピーしたり、link先の親ディレクトリをcwdと取り違えたりしない。symlink配置でも通知されるAGENTS.mdの配置元から参照先へ到達できることを確認する。実環境の更新は配布元の編集と別の操作であり、無関係な設定を上書きしない。
+共通ルールの利用時の配置先は、ユーザーhome直下の`~/.codex/`に固定する。このrepositoryを同ディレクトリへcheckoutする配置と、別checkoutから必要なファイルをコピー・linkする配置を区別する。共通指示を導入・更新する際は、`AGENTS.md`だけでなく`docs/guides/`と`docs/architecture/subagent-workspace.md`を`~/.codex/`配下に同じ相対配置で揃える。WithMateの接続手順も利用する配置では`docs/runbooks/withmate-character-context.md`と`docs/runbooks/withmate-repository-glossary.md`を揃える。AGENTS.mdとhookの共通文書参照は`~/.codex/...`というコード・path表記とし、`~`を実行環境のユーザーhomeへ解決する。作業対象repositoryのcwd、配布元checkout、`CODEX_HOME`による別配置へ参照先を切り替えない。symlink配置でも`~/.codex/`から各参照先へ到達できることを確認する。本README等の通常の相対リンクは配布元の文書閲覧用として残す。実環境の更新は配布元の編集と別の操作であり、無関係な設定を上書きしない。
 
 [公式のAGENTS.md探索](https://developers.openai.com/codex/guides/agents-md/)はglobalとrepository rootからcwdまでの指示を組み合わせる。通常のMarkdownリンクはその本文の自動注入ではなく、配下すべてのAGENTS.mdを読む仕組みでもない。[Skill](https://developers.openai.com/codex/skills/)は名前・説明から選択した後に本文を読む別の仕組みである。履歴を継承しない子へは必要な条件・実path・権限を依頼に含める。
 
-配置後は別repositoryのrootと下位ディレクトリから、読み込まれたAGENTS.mdの実path、該当する詳細への到達、対象repositoryの管理先・互換性定義を確認する。`.codex`専用のIssue管理先・リリース契約を他repositoryへ適用しない。参照先が欠けた場合は配置を修復してから該当作業へ進み、本文をhookへ全注入して代用しない。
+配置後は別repositoryのrootと下位ディレクトリから、読み込まれたAGENTS.mdの実path、`~/.codex/`配下の該当する詳細への到達、対象repositoryの管理先・互換性定義を確認する。`.codex`専用のIssue管理先・リリース契約を他repositoryへ適用しない。参照先が欠けた場合は配置を修復してから該当作業へ進み、同名のrepository内文書や本文のhook全注入で代用しない。
 
 端末への適用時は既存`config.toml`へ設定例の必要sectionだけを反映する。MCP binding、認証、private path、無関係な設定を共有例へ持ち込まず、live全体を上書きしない。`agents/`とregistry例、選択profileを同じCodex homeへ配置する。
 

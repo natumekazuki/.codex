@@ -12,18 +12,18 @@
 
 ## 条件付き参照
 
-以下の共通文書は、このAGENTS.mdが置かれたディレクトリを基準に解決する。global配置では有効なCodex home（CODEX_HOME指定時はその値、未指定時はユーザーhomeの.codex）を使い、別repositoryのcwdを基準にしない。repositoryのcheckoutとして読んだ場合はそのcheckoutを使う。runtimeの通知pathを優先し、配置が不明・参照先が欠ける場合は推測で別の文書へ置き換えず、該当作業に必要な規約を確認する。
+以下の共通文書は、ユーザーhome直下の`~/.codex/`配下に固定する。`~`は実行環境のユーザーhomeを表す。参照はMarkdownによる自動展開を前提とせず、読み取り前に絶対pathへ解決する。作業対象repositoryのcwdや共通ルール配布元のcheckoutを参照基準にせず、`CODEX_HOME`による別配置へも切り替えない。参照先が欠ける場合は同名のrepository内文書等で代用せず、該当作業に必要な規約の配置を確認する。
 
 リンク本文は自動展開されない。全参照先を常時読むのではなく、次の条件が成立した時点で対象を読む。ユーザーの依頼語だけでなく、作業途中に自分で選ぶ変更・操作にも適用する。範囲が変われば新たに該当する詳細を読み、確認済みの無関係な文書を理由なく再読しない。
 
 | 作業・読むタイミング | 必須参照 |
 | --- | --- |
-| 開発の完了条件を決める時、実装変更着手前、review開始前、統合・公開判断前 | [開発・review・統合](docs/guides/development.md)。互換性対象の契約を変更する前にも確認する |
-| 調査・設計・実装・reviewで共有判断の不足・矛盾を検出した時、共有方針の新設・変更や、それに伴う現行説明の更新・統合を判断する時 | [設計判断・文書化](docs/guides/design-decisions.md)。文書作成の明示依頼を待たず、単なる設計書の不在を毎回監査する工程にはしない |
-| Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | [変更test](docs/guides/test-changes.md)とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-only general_luna審査は必須 |
-| ユーザー向けUIの設計・実装開始前、変更後の確認時 | [UI基準](docs/guides/ui.md)、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
-| サブエージェントへ委譲する前 | [委譲](docs/architecture/subagent-workspace.md)。担当範囲・適用契約・必要な参照先と権限を渡し、履歴継承を前提にしない |
-| WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合、最初の応答前 | [WithMate利用方針](docs/guides/withmate.md)を読み、利用契機と承認条件に従う。確認済みの内容を毎turn再読する必要はない |
+| 開発の完了条件を決める時、実装変更着手前、review開始前、統合・公開判断前 | 開発・review・統合: `~/.codex/docs/guides/development.md`。互換性対象の契約を変更する前にも確認する |
+| 調査・設計・実装・reviewで共有判断の不足・矛盾を検出した時、共有方針の新設・変更や、それに伴う現行説明の更新・統合を判断する時 | 設計判断・文書化: `~/.codex/docs/guides/design-decisions.md`。文書作成の明示依頼を待たず、単なる設計書の不在を毎回監査する工程にはしない |
+| Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-only general_luna審査は必須 |
+| ユーザー向けUIの設計・実装開始前、変更後の確認時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
+| サブエージェントへ委譲する前 | 委譲: `~/.codex/docs/architecture/subagent-workspace.md`。担当範囲・適用契約・必要な参照先と権限を渡し、履歴継承を前提にしない |
+| WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合、最初の応答前 | WithMate利用方針: `~/.codex/docs/guides/withmate.md`を読み、利用契機と承認条件に従う。確認済みの内容を毎turn再読する必要はない |
 
 ## 操作範囲
 
