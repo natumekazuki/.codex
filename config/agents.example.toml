@@ -4,8 +4,11 @@
 [agents]
 max_concurrent_threads_per_session = 24
 max_depth = 1
-default_subagent_model = "gpt-5.6-luna"
-default_subagent_reasoning_effort = "medium"
+default_subagent_model = "gpt-6-luna"
+default_subagent_reasoning_effort = "high"
+
+[agents.general_astra]
+config_file = "agents/general_astra.toml"
 
 [agents.general_sol]
 config_file = "agents/general_sol.toml"

@@ -64,26 +64,58 @@ Astraを親に使い、一般の仕事の進め方はモデルへ任せる。追
 
 ## modelとrole
 
+使用modelは`gpt-6-astra`、`gpt-6-sol`、`gpt-6-luna`に限定する。世代を省略したalias、旧modelへのfallback、旧profileの互換aliasは設けない。
+
+### 公式情報と運用判断
+
+2026-09-23にOpenAI公式のモデルページ、[GPT-6 guide](https://developers.openai.com/api/docs/guides/latest-model/gpt-6-astra.md)、[Codexのモデル選択](https://learn.chatgpt.com/docs/models)を確認した。公式の位置づけと、このrepositoryで採用する担当範囲を区別する。
+
+| model | 公式の位置づけ | このrepositoryでの担当 |
+| --- | --- | --- |
+| [GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) | 最も高い能力を持ち、code・apps・researchをまたぐ最難関の一貫作業向け | 親として要件・統合・最終判断を担う。非Astra親からは、最難関の横断的推論・設計判断に限定して委譲する |
+| [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) | 複雑なcodingとagentic workflow向け | 複雑な実装、debug、調査、複数の契約を照合するreview。必要な判断の難しさから直接選べる |
+| [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) | 明確で反復可能な大量処理を効率よく行うmodel | 限定調査、抽出・要約、設計済みの小実装、明確な基準を持つreview。未解決の設計判断は親へ返す |
+
+公式はSol・Lunaのcoding、事実の信頼性、伝達の改善を説明し、Astraについて複数の評価で出力token削減と高い成果を報告している。ただし、今回取得した公式docから3モデルの同条件での定量比較は確定できない。独立評価およびこのrepositoryでの実測比較も未確認であり、上表の担当分けは公式の位置づけに基づく運用判断である。
+
+[API価格](https://developers.openai.com/api/docs/pricing)はStandard・272K以下の入力・100万tokenあたり、Astraが入力$10／出力$50、Solが$2／$10、Lunaが$0.10／$0.50。これはtoken単価であり、Codexの実消費枠や1タスクの費用比ではない。再作業、推論token、cache、長文料金、実行時間を含む効果は[比較手順](docs/runbooks/compare-subagent-roles.md)で別途確認する。
+
+### 設定と委譲
+
 | 用途 | model | effort |
 | --- | --- | --- |
-| 通常の親 | `gpt-6-astra` | medium、Standard速度 |
-| 一般childの既定 | `gpt-5.6-luna` | max |
+| 通常の親／`astra` profile | `gpt-6-astra` | low、Standard速度 |
+| 手動切替の`sol` profile | `gpt-6-sol` | medium、Standard速度 |
+| 一般childの既定／`general_luna` | `gpt-6-luna` | high |
+| `general_sol` | `gpt-6-sol` | medium |
 | `general_astra` | `gpt-6-astra` | medium |
-| `general_sol` | `gpt-5.6-sol` | medium |
-| `general_luna` | `gpt-5.6-luna` | max |
 
-汎用roleは調査・設計・実装・review・検証に使え、必要な仕事は起動時の依頼で表す。モデル選択方針は`hooks/implementation-restraint.ps1`から毎回注入する。標準`default`／`worker`／`explorer`はカスタムroleとは別である。
-設定例はCLI `0.153.4`を対象にする。汎用roleの権限は親から継承し、調査依頼のread-only境界が必要な場合はruntimeで制限する。`review-test-value`のreviewは、抽出record、repository root、対象scopeを起動時のpromptで`general_luna`へ渡す。親はreview結果を読んで追加contextや別reviewerの要否を判断する。
+Codex公式の開始推奨はAstra Light（設定値`low`）、Sol Medium、Luna High。Astra子は難しい判断を限定して渡すため`medium`を維持する。これらは最適値を実証したものではなく、具体的な品質不足がある時だけ対応modelで利用可能なeffortを調整する。
 
-`PreToolUse` hookは`spawn_agent`の`fork_turns`を明示値も含め常に`none`へ置き換え、他の引数は保持する。Astra親からの`general_astra`とAstraの直接model指定は拒否する。必要な文脈は起動時の依頼へ含める。設定例の`features.multi_agent_v2`は待機timeoutの最小値と既定値を120000 msにする。実環境への配置後、hookのtrust・到達と新規sessionの実効設定を確認する。
-親をSolへ明示切替する場合は、有効な`CODEX_HOME`直下へ配置した`gpt56.config.toml`を使う。
+委譲基準の正本は[Subagent Review Boundary](docs/architecture/subagent-workspace.md)。hookはその要点を再通知する。標準`default`／`worker`／`explorer`はカスタムroleとは別であり、model省略時は設定例の一般child既定値を使う。汎用roleの権限は親から継承し、read-only依頼は起動時に明示し、利用可能なruntimeの制限も適用する。`review-test-value`は引き続き`general_luna`へ委譲し、抽出契約・全recordの審査・統合基準は変えない。
+
+`PreToolUse` hookは3モデル以外の明示的な`model`指定を拒否する。Astra親からの`general_astra`とAstraの直接指定も拒否する。許可された`spawn_agent`／`Agent`の`fork_turns`は常に`none`へ置き換え、他の引数は保持する。roleの実modelやmodel未指定時の既定値はconfigと新規sessionで確認し、hookが任意の外部role定義まで検証すると扱わない。設定例の待機timeoutの最小値と既定値は120000 msを維持する。
+
+親をSolへ切り替える場合は、有効な`CODEX_HOME`直下へ配置した`sol.config.toml`を使う。
 
 ```powershell
-codex --profile gpt56
+codex --profile sol
 codex --profile astra
 ```
 
-どちらも同じ汎用role・短い共通ルールを使う。model配置とreasoning effortは運用上の設定値であり、性能の最適値や週リミット消費の解消を保証しない。設定例の値と新規sessionの実効値を区別する。
+どちらも同じ3つの汎用role・共通ルールを使う。新modelがruntimeで未提供の場合は旧modelへ戻さず、親で可能な作業を続ける。必須の専門審査等が実行できなければ未実施として報告する。配布元の更新だけでlive設定や起動中sessionの変更・新modelの実行成功を主張しない。
+
+### 棚卸しの範囲
+
+| 対象 | model選択を持つ箇所・扱い |
+| --- | --- |
+| 共有config・profile・registry | `config.example.toml`、`config/*.toml`。親、一般child、3 roleの登録を揃える |
+| カスタムrole | `agents/general_{astra,sol,luna}.toml`。model ID、effort、担当範囲を定義する |
+| 委譲とhook | `docs/architecture/subagent-workspace.md`、`hooks/implementation-restraint.ps1`、`hooks/subagent-fork-default.ps1`、`hooks.json` |
+| test価値審査 | `AGENTS.md`、`docs/guides/test-changes.md`、`skills/review-test-value/`、比較runbookはmodel IDではなく`general_luna`を参照するため、role更新を利用する |
+| 指示ファイル・Skill・CI・script | `.codex/model-instructions-withmate*.md`を含め確認。上記以外に運用modelの固定指定はない |
+| 過去の運用定義 | model配分専用のADR-0014・ADR-0023を削除し、他ADRに混在した廃止routingの記述も除去する。削除前の内容はGit履歴にのみ残す |
+| system prompt取得記録・リリース記録 | 不変の原文・取得元・過去の実施事実であり、model選択の定義ではない。旧model名を新modelへ改ざんしない |
 
 ## Skill
 

@@ -14,8 +14,6 @@ ADR-0007は初期導入としてtargeted review、specialist review、holistic r
 
 単一roleにはcomplete diffから新しいfinding familyを探索する責務と、指定slice、lens、finding familyだけを反証する責務が併存していた。Review Briefでscopeを限定しても、静的role契約がcomplete diff探索を許すため、targeted closureからholistic探索へ広がる余地が残った。plannerにも`non-trivial`または`final review`を理由に`reviewer`を選択する表現があり、root sessionの`Full-review gate`を迂回し得た。
 
-一方、routing hookはSpark modeとquota fallbackのcontextだけを注入し、review kind、回数、deadline、finding closureを制御していない。role分割のためにreview lifecycleをhookへ移すと、repository policy、role契約、runtime routingの正本が分散する。
-
 ## Decision
 
 - `agents/reviewer.toml`をholistic complete-diff review専用roleとする。root sessionが`Full-review gate=run`と判定した場合だけ、一つの論理変更につき一度選択できる。
@@ -26,8 +24,6 @@ ADR-0007は初期導入としてtargeted review、specialist review、holistic r
 - `fast_reviewer`は小規模、局所的、低リスクなsanity checkに限定し、`contract-closure`が要求する独立review、高リスクなtargeted review、specialist review、holistic reviewの代用にしない。
 - plannerはreview kind、scope、具体的trigger、前提check、有限のdeadlineを計画へ含める。`Full-review gate=run`だけが`reviewer`を選択でき、targeted review、specialist review、targeted closureは`targeted_reviewer`を選択する。file数、diff量、finding数、`non-trivial`、`final review`、未使用のreviewer、または「念のため」を選択理由にしない。
 - Candidate-bound reviewでは、root sessionが`Candidate preflight`を完了してからReview Briefを発行する。どちらのreview roleも、宣言済みread-only verification recipeによるsource identityの独立検証を省略しない。roleはCandidate形式を設計または修復しない。
-- `targeted_reviewer`を端末固有の`config.toml`と配布用の`config/agents.example.toml`へstandard roleとして登録する。`standard-only` modeでは通常のstandard roleとして選択でき、`fast_reviewer`はユーザーがexact roleを明示した場合以外に自動選択しない。
-- `hooks/subagent-routing.ps1`はruntime modeとSpark fallback contextだけを所有し、review kind、review回数、finding closure、deadline超過後の再投入を所有しない。新roleを阻害またはremapしないことをrouting testで検証できるため、hook本体は変更しない。
 - review lifecycle、review回数、Candidate Definition、Review Brief、deadline、Finding Promotion、完了条件はADR-0012、`AGENTS.md`、`skills/contract-closure/SKILL.md`の既存契約を維持する。
 
 ## Alternatives
@@ -55,5 +51,5 @@ ADR-0007は初期導入としてtargeted review、specialist review、holistic r
 - Low-risk sanity reviewer contract: `agents/fast_reviewer.toml`
 - Planner routing contract: `agents/planner.toml`, `agents/fast_planner.toml`
 - Role registration: `config/agents.example.toml`、端末固有の`config.toml`
-- Runtime mode and Spark fallback: `hooks/subagent-routing.ps1`
-- Routing executable contract: `hooks/test-subagent-routing.ps1`
+
+2026-09-23のmodel運用刷新により、廃止したmodel routing・fallbackの定義と参照は本文から除去した。現在の委譲基準は[Subagent Review Boundary](../architecture/subagent-workspace.md)を参照する。

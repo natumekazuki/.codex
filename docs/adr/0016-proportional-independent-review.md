@@ -4,7 +4,7 @@
 
 - Status: accepted
 - Date: 2026-08-10
-- Amends: ADR-0013, ADR-0014
+- Amends: ADR-0013, [ADR-0014（削除前のGit記録）](https://github.com/natumekazuki/.codex/blob/8919b064b57ca1d63c90d65e370d554b07867e33/docs/adr/0014-bounded-role-and-runtime-routing-separation.md)
 - Related: ADR-0011, ADR-0012
 
 ## Context
@@ -18,7 +18,6 @@ ADR-0013とADR-0014はreview kindとroleを分離したが、通常のcompleted 
 - 高リスク境界、`contract-closure`が要求するtargeted / specialist review、`Full-review gate=run`のholistic complete-diff reviewは従来どおり維持する。
 - review findingの`current-scope repair`はdirect checkと同じfinding family / resulting deltaのtargeted closureで閉じ、同じscopeの探索reviewまたはcomplete-diff reviewを再開しない。
 - `fast_reviewer`はユーザーがexact roleを明示した場合だけ使い、通常workflowでは自動選択しない。
-- routing modeはfast roleの実行可否とfallback contextだけを定め、独立reviewの必要性やtriggerを追加しない。
 
 ## Alternatives
 
@@ -39,4 +38,3 @@ ADR-0013とADR-0014はreview kindとroleを分離したが、通常のcompleted 
 - Review lifecycle and completion gates: `AGENTS.md`
 - Static review role contracts: `agents/slice_reviewer.toml`、`agents/targeted_reviewer.toml`、`agents/reviewer.toml`、`agents/fast_reviewer.toml`
 - Planning contracts: `agents/planner.toml`、`agents/fast_planner.toml`
-- Executable routing contract: `hooks/test-subagent-routing.ps1`

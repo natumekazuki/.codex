@@ -33,7 +33,6 @@ ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一�
 - 3回目の後も`blocking`が残る場合は完了扱いにせず、要求、設計、責務境界、contractまたはユーザー判断へ戻る。同一論理変更の4回目のfull-diff reviewは行わず、高リスクなscope拡張を続ける場合はユーザー確認後に新しいaccepted contractを持つ別の論理変更として切り出す
 - 完了条件はfinding総数が0であることではなく、未解決の`blocking`がなく、その他のfinding、accepted risk、validation gap、残リスクが根拠付きで分類されていることである
 - review運用は`AGENTS.md`、holistic reviewerの責務と出力は`agents/reviewer.toml`、targeted review、specialist review、targeted closureの責務と出力は`agents/targeted_reviewer.toml`、contract-closure時の展開は`skills/contract-closure/SKILL.md`を正本とする。自然言語ポリシーの完全一致はstatic checkで固定しない
-- `hooks/test-subagent-routing.ps1`は`subagent-routing.ps1`と`set-spark-routing.ps1`を実行し、runtime mode、fallback、state precedence、出力だけを検証する。review cycleを機械制御するruntimeを導入した場合は、その状態遷移を別のexecutable contractとして検証する
 
 ## Alternatives
 
@@ -59,4 +58,4 @@ ADR-0012は、blocking修正後のfresh-context full-diff closure reviewと一�
 ## Policy Anchors
 
 - Source: `AGENTS.md`、`agents/reviewer.toml`、`agents/targeted_reviewer.toml`、`agents/fast_reviewer.toml`、`skills/contract-closure/SKILL.md`
-- Executable contract: なし。現在のreview分類と収束は自然言語の運用契約であり、`hooks/test-subagent-routing.ps1`の責務には含めない
+- Executable contract: なし。本文のreview分類と収束は自然言語の運用契約として記録したものである。2026-09-23のmodel運用刷新により、廃止したrouting checkの説明・参照は除去した。

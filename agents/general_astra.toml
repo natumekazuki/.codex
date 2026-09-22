@@ -1,5 +1,5 @@
 name = "general_astra"
-description = "General-purpose Astra agent for difficult tasks delegated by a non-Astra parent."
+description = "GPT-6 Astra for the hardest cross-system reasoning and unresolved design decisions, delegated by a non-Astra parent."
 model = "gpt-6-astra"
 model_reasoning_effort = "medium"
 developer_instructions = '''
