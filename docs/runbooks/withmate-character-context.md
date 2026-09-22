@@ -1,6 +1,6 @@
 # WithMate Memory / Characterの接続設定と障害調査
 
-通常操作はMCP toolの説明・schemaと`AGENTS.md`の保存方針に従う。このrunbookはセットアップと接続障害の調査時に参照する。
+通常操作はMCP toolの説明・schemaと[WithMate操作](../guides/withmate.md)の保存方針に従う。このrunbookはセットアップと接続障害の調査時に参照する。
 
 ## セットアップ
 

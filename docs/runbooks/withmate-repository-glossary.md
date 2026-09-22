@@ -27,14 +27,14 @@ MCP serverはWithMateのSession-bound runtimeへ接続する。Session ID、repo
 
 ## Codexの操作権限
 
-`AGENTS.md`は次のstanding authorizationを所有する。
+[WithMate操作](../guides/withmate.md)は次のstanding authorizationを所有する。
 
 - read、search、validate、create、create-batch、updateは自律実行できる。
 - proactive createはWithMate Settings、active turn capability、1 turnあたりの上限、managed Skillの登録条件に従う。
 - updateはsource、accepted document、executable contractとの不一致、明確に古い定義、canonical termまたはaliasの誤りを直す場合に限る。単なる表現変更は行わない。
 - deleteはcurrent entryとrevisionを読み、対象entryごとの明示確認を得てから実行する。
 
-update requestの`explicitUserRequest: true`は、`AGENTS.md`に記録された継続的な明示authorizationを表す。deleteではstanding authorizationを使わず、対象entryに対する現在の明示確認を必要とする。
+update requestの`explicitUserRequest: true`は、[WithMate操作](../guides/withmate.md)に記録された継続的な明示authorizationを表す。deleteではstanding authorizationを使わず、対象entryに対する現在の明示確認を必要とする。
 
 ## Integration scenarios
 

@@ -1,6 +1,10 @@
 # Subagent Review Boundary
 
-汎用`general_sol`と`general_luna`には、対象、必要な結果、権限を依頼ごとに渡す。調査だけの依頼では編集しない。履歴継承に頼らず、review依頼には主要動作、後続の依存、共通`AGENTS.md`の統合基準と、非ブロッカーを全件修正待ちにしないことを含める。
+委譲前に読む。汎用`general_sol`と`general_luna`には、対象、必要な結果、権限を依頼ごとに渡す。調査だけの依頼では編集しない。履歴継承に頼らず、review依頼には主要動作、後続の依存、[開発・review・統合](../guides/development.md)の統合基準と、非ブロッカーを全件修正待ちにしないことを含める。必要な参照先は参照元から解決した実pathで渡し、全規約を無条件に複製しない。
+
+委譲はLuna優先。SolはLunaで未解決の具体的問題・専門審査の指定・ユーザー指定に限る。Astraは非Astra親から難しい設計判断・未解決問題を絞って委譲する場合に使う。Astra→Astraは禁止。形式的な下位modelの試行は不要。専門審査は該当Skillに従う。履歴継承はhookでnoneに固定されるため、対象・必要な文脈・完了条件を起動時の依頼へ含める。
+
+`wait_agent` を呼ぶたびに、`timeout_ms` には完了までの推定残り時間の2倍をミリ秒で明示する。ツール定義の最短・最大待機時間の範囲に収め、見積もれない場合は既定時間を明示する。通知で途中解除されるため、短い確認のために待機時間を縮めない。タイムアウト後は完了見込みを更新して同じ基準で待つ。
 
 test価値reviewの抽出、`general_luna`への委譲、review観点、完了判断は[review-test-value](../../skills/review-test-value/SKILL.md)を正本とする。専用roleや独自のworker、scheduler、artifact storeは使わない。
 
@@ -8,4 +12,4 @@ test価値reviewの抽出、`general_luna`への委譲、review観点、完了�
 
 worktreeやcommit固定は具体的な隔離・再現の必要に応じて使う。全reviewへ一律に別worktreeを要求しない。
 
-非ブロッカーは共通`AGENTS.md`に従って別の修正タスクとして扱い、その着手・完了を現在の変更の完了・統合条件にしない。
+非ブロッカーは上記の統合基準に従って別の修正タスクとして扱い、その着手・完了を現在の変更の完了・統合条件にしない。
