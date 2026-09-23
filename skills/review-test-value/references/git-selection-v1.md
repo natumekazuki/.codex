@@ -43,6 +43,7 @@ working treeのsource pathがsymlinkなどによってrepository root外へ解�
 - pure renameは選ばず、空の`tests`と`transitions`を返す。renameと同時に内容を変更した場合は変更recordを選ぶ。
 - Git modeは変更recordごとに`ADDED`、`SURVIVED`、`DELETED`のtransitionを返す。file pair内で`source_text`と解析済み`metadata`の直接比較、およびhunkから投影したdeclaration位置を照合し、symbol名だけでは対応付けない。内容一致と位置が別recordを指すなど対応を一意に確定できない場合は`RECORD_TRANSITION_UNRESOLVED`で停止する。
 - 宣言開始行の置換hunkに複数の現行宣言がある場合は、Gitが未変更として残した旧宣言本文の行範囲を投影し、その全範囲を内包する宣言へ位置候補を絞る。本文が複数宣言へ分かれる、候補が残らない、内容一致の候補と競合する等の場合は停止する。対応不能な旧recordを削除扱いへ逃がさず、成功時は旧本文と現行本文を`SURVIVED`へ保持する。
+- 宣言開始行が削除・置換された旧recordは、未変更の旧宣言行が同じ現行宣言に属する場合だけ位置による対応を認める。metadataや閉じ行が隣接recordと共通でも、それだけで存続を確定しない。対応先の宣言がなく、開始行の変更hunkにも現行宣言がなければ`DELETED`として旧recordを保持する。
 - metadataはschema検証を通った文字列、文字列配列、辞書だけを含み、解析失敗時は`null`となる。辞書のキー順は比較へ影響せず、配列の順序は保持する。削除済みv1の解析成功は`metadata`の非nullで判定する。
 - `ADDED`と`SURVIVED`の`after`集合は、順序を含めて`tests`と一致する。`DELETED`は`tests`へ含めない。
 - `DELETED.before`は、metadataが正常なv1でも未付与でも歴史的な削除証拠として保持する。正常なv1のblock自身の`TEST_VALUE_V2_REQUIRED`と、削除前test自身の`TEST_VALUE_MISSING`だけを固定baseへ適用する現在の移行要求から除き、元version・metadata（未付与なら`null`）・本文を審査へ渡す。削除元の不正metadata、結合不明、未知versionなど他の診断は引き続き停止する。追加・surviving・明示pathの未付与／不正metadataと、新規・surviving・明示pathのv1には従来どおり診断を返す。

@@ -445,6 +445,15 @@ def _build_transitions(
     for before in sorted(affected_before, key=_record_sort_key):
         source = before["source"]
         fully_replaced = _record_was_fully_replaced(item, before)
+        opening_hunks = [
+            hunk
+            for hunk in item.hunks
+            if hunk.old_count
+            and hunk.old_start
+            <= source["declaration_start_line"]
+            <= hunk.old_end
+        ]
+        retained_ranges = _retained_declaration_ranges(before, item.hunks)
         projected_start = _map_old_declaration_start_to_new(
             source["declaration_start_line"], item.hunks
         )
@@ -458,6 +467,7 @@ def _build_transitions(
             after
             for after in unmatched_after
             if not fully_replaced
+            and (not opening_hunks or retained_ranges)
             and after["source"]["declaration_start_line"] == projected_start
         ]
         replacement_hunk_candidates = [
@@ -476,25 +486,22 @@ def _build_transitions(
                 for hunk in item.hunks
             )
         ]
-        if replacement_hunk_candidates:
-            # A replaced opening line can share its hunk with newly added
-            # tests. Retained body lines must all belong to the same current
-            # declaration; neither a title nor an interpolated start proves it.
-            retained_ranges = _retained_declaration_ranges(before, item.hunks)
-            if retained_ranges:
-                def contains_retained_lines(after: dict[str, Any]) -> bool:
-                    return all(
-                        after["source"]["declaration_start_line"] <= low
-                        and high <= after["source"]["declaration_end_line"]
-                        for low, high in retained_ranges
-                    )
+        if opening_hunks and retained_ranges:
+            # A deleted opening can project onto the next test. Unchanged
+            # lines must still belong to the same current declaration.
+            def contains_retained_lines(after: dict[str, Any]) -> bool:
+                return all(
+                    after["source"]["declaration_start_line"] <= low
+                    and high <= after["source"]["declaration_end_line"]
+                    for low, high in retained_ranges
+                )
 
-                position_candidates = [
-                    after for after in position_candidates if contains_retained_lines(after)
-                ]
-                replacement_hunk_candidates = [
-                    after for after in replacement_hunk_candidates if contains_retained_lines(after)
-                ]
+            position_candidates = [
+                after for after in position_candidates if contains_retained_lines(after)
+            ]
+            replacement_hunk_candidates = [
+                after for after in replacement_hunk_candidates if contains_retained_lines(after)
+            ]
         candidate_sets = [
             candidates
             for candidates in (
@@ -524,13 +531,22 @@ def _build_transitions(
 
         matched = candidate_sets[0][0] if candidate_sets else None
         if matched is None and not fully_replaced:
-            diagnostics.append(
-                _transition_diagnostic(
-                    diagnostic,
-                    before,
-                    "a partially changed base record has no reliable current record mapping",
+            if opening_hunks and not any(
+                hunk.new_start
+                <= after["source"]["declaration_start_line"]
+                < hunk.new_start + hunk.new_count
+                for hunk in opening_hunks
+                for after in after_records
+            ):
+                transitions.append({"kind": "DELETED", "before": before, "after": None})
+            else:
+                diagnostics.append(
+                    _transition_diagnostic(
+                        diagnostic,
+                        before,
+                        "a partially changed base record has no reliable current record mapping",
+                    )
                 )
-            )
             continue
         if matched is None:
             transitions.append({"kind": "DELETED", "before": before, "after": None})
