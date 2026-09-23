@@ -1364,6 +1364,126 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
                     ["A", "B"],
                 )
 
+    # @test-value v2
+    # kind = "regression"
+    # claim = "削除testのmetadataが残っても、その宣言を後続の部分変更testへ誤対応せずDELETEDとSURVIVEDへ分ける"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#90" }
+    # fault = "削除宣言の投影位置が後続testに一致して誤ったSURVIVEDを作り、本来の存続testを対応不能にする"
+    # observable = "Git抽出結果の旧新symbolを持つtransitionとdiagnostics"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # distinction = "metadataを共有した前段削除と後続testの本文変更を同じfileで扱う"
+    # @end-test-value
+    def test_git_mode_separates_deleted_test_from_changed_successor(self) -> None:
+        before = (
+            metadata_block("//")
+            + 'test("removed", () => {\n  assert.equal(oldValue(), 1);\n});\n'
+            + 'test("kept", () => {\n  assert.equal(value(), "旧値");\n});\n'
+        )
+        after = (
+            metadata_block("//")
+            + 'test("kept", () => {\n  assert.equal(value(), "new value");\n});\n'
+        )
+        path = self.root / "tests/adjacent-deletion.test.ts"
+        self.write("tests/adjacent-deletion.test.ts", before)
+        base = self.initialize_git()
+        path.write_text(after, encoding="utf-8")
+
+        result, status, stderr = self.extract_git(base, "typescript")
+
+        self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+        self.assertEqual(result["diagnostics"], [])
+        self.assertCountEqual(
+            [(t["kind"], (t["before"] or t["after"])["source"]["symbol"]) for t in result["transitions"]],
+            [("DELETED", "removed"), ("SURVIVED", "kept")],
+        )
+        self.assertEqual([t["after"] for t in result["transitions"] if t["after"]], result["tests"])
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "削除testの終端だけが隣のtestとGit共通行になっても旧recordをDELETEDとして保持する"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#90" }
+    # fault = "共通の閉じ行を存続証拠とみなし部分変更recordの対応不能診断で停止する"
+    # observable = "DELETED.beforeのsourceとmetadata、Git抽出exit、diagnostics"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # distinction = "宣言と本文を削除し終端だけが前段testの変更行に隣接する形を扱う"
+    # @end-test-value
+    def test_git_mode_deletes_test_with_shared_closing_line(self) -> None:
+        before = (
+            metadata_block("//")
+            + 'test("before", () => {\n  assert.equal(label(), "旧値");\n});\n'
+            + 'test("removed", () => {\n  assert.equal(missing(), true);\n});\n'
+            + metadata_block("//")
+            + 'test("after", () => {\n  assert.equal(visible(), true);\n});\n'
+        )
+        after = (
+            metadata_block("//")
+            + 'test("before", () => {\n  assert.equal(label(), "new value");\n});\n'
+            + metadata_block("//")
+            + 'test("after", () => {\n  assert.equal(visible(), true);\n});\n'
+        )
+        path = self.root / "tests/shared-closing.test.ts"
+        self.write("tests/shared-closing.test.ts", before)
+        base = self.initialize_git()
+        path.write_text(after, encoding="utf-8")
+
+        result, status, stderr = self.extract_git(base, "typescript")
+
+        self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+        deleted = [t for t in result["transitions"] if t["kind"] == "DELETED"]
+        self.assertEqual(len(deleted), 1)
+        self.assertEqual(deleted[0]["before"]["source"]["symbol"], "removed")
+        self.assertIsNone(deleted[0]["before"]["metadata"])
+        self.assertIn("missing()", deleted[0]["before"]["source_text"])
+        self.assertIsNone(deleted[0]["after"])
+        self.assertEqual(result["diagnostics"], [])
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "削除testのmetadata先頭だけが後続testと共通でも旧recordをDELETEDとして保持する"
+    # oracle = { type = "issue", ref = "natumekazuki/.codex#90" }
+    # fault = "共通metadata行によって削除recordを部分変更扱いし、遷移不明として停止する"
+    # observable = "DELETED.beforeのmetadataとsource、後続SURVIVED、diagnostics"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # distinction = "本文でなくmetadata境界の共通行が削除hunk外に残る形を扱う"
+    # @end-test-value
+    def test_git_mode_deletes_test_with_shared_metadata_header(self) -> None:
+        removed_metadata = metadata_block("//").replace("同じkeyによる再試行で請求件数が1件を超えない", "削除されるtestの主張")
+        successor_metadata = metadata_block("//").replace("同じkeyによる再試行で請求件数が1件を超えない", "後続testの主張")
+        before = (
+            'test("before", () => {\n  assert.equal(ready(), true);\n});\n'
+            + removed_metadata
+            + 'test("removed", () => {\n  assert.equal(oldPreview(), 1);\n});\n'
+            + successor_metadata
+            + 'test("successor", () => {\n  assert.equal(emptyState(), "旧値");\n});\n'
+        )
+        after = (
+            'test("before", () => {\n  assert.equal(ready(), true);\n});\n'
+            + successor_metadata
+            + 'test("successor", () => {\n  assert.equal(emptyState(), "new value");\n});\n'
+        )
+        path = self.root / "tests/shared-metadata.test.ts"
+        self.write("tests/shared-metadata.test.ts", before)
+        base = self.initialize_git()
+        path.write_text(after, encoding="utf-8")
+
+        result, status, stderr = self.extract_git(base, "typescript")
+
+        self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [(t["kind"], (t["before"] or t["after"])["source"]["symbol"]) for t in result["transitions"]],
+            [("DELETED", "removed"), ("SURVIVED", "successor")],
+        )
+        deleted = result["transitions"][0]["before"]
+        self.assertEqual(deleted["metadata"]["claim"], "削除されるtestの主張")
+        self.assertIn("oldPreview()", deleted["source_text"])
+
     # @test-value v1
     # kind = "regression"
     # claim = "先頭C# attributeだけを削除したsurviving testをbase側rangeから選択する"
