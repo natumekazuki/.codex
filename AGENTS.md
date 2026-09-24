@@ -17,9 +17,11 @@
 
 リンク本文は自動展開されない。全参照先を常時読むのではなく、次の条件が成立した時点で対象を読む。ユーザーの依頼語だけでなく、作業途中に自分で選ぶ変更・操作にも適用する。範囲が変われば新たに該当する詳細を読み、確認済みの無関係な文書を理由なく再読しない。
 
+プロジェクト固有の課題・対応予定・リリース運用は、対象repositoryのAGENTS.mdから、読む条件とREADMEの節・既存の運用文書等の正本を明示する。共通の入口で参照先と読む条件が明確な場合は、その定義を再利用する。入口には常時必要な最小原則だけを残し、管理手順や個々の課題の予定・進捗を重複させない。参照先は対象repository内で解決し、配布元`.codex`のREADMEや別プロジェクトの運用を代用しない。
+
 | 作業・読むタイミング | 必須参照 |
 | --- | --- |
-| 開発の完了条件を決める時、実装変更着手前、review開始前、統合・公開判断前 | 開発・review・統合: `~/.codex/docs/guides/development.md`。互換性対象の契約を変更する前にも確認する |
+| 課題・対応予定の確認・登録・変更・完了判断前、開発の完了条件を決める時、実装変更着手前、review開始前、リリース範囲の確定・統合・公開判断前 | 開発・review・統合: `~/.codex/docs/guides/development.md`と、対象repositoryの`README.md`にある管理先・リリース境界等の関連節、または同repositoryのAGENTS.mdが明示する運用文書。実装を伴わない課題管理にも適用し、互換性対象の契約を変更する前にも確認する |
 | 調査・設計・実装・reviewで共有判断の不足・矛盾を検出した時、共有方針の新設・変更や、それに伴う現行説明の更新・統合を判断する時 | 設計判断・文書化: `~/.codex/docs/guides/design-decisions.md`。文書作成の明示依頼を待たず、単なる設計書の不在を毎回監査する工程にはしない |
 | Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-only general_luna審査は必須 |
 | ユーザー向けUIの設計・実装開始前、変更後の確認時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
