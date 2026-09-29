@@ -146,6 +146,7 @@ codex --profile astra
 | `natural-japanese` | 明示的な自然さの推敲・採点・文体調整 |
 | `audit-codex-work-quality` | 日次・固定期間の作業監査 |
 | `relaygraph` | 採用済みrepositoryの関係調査・変更・検証。新規導入は明示依頼時 |
+| `session-graph` | SessionFolderの共有図へ指示を先行記録し、状態更新・訂正・Compact後の復元を行う |
 
 UIの新設・変更では`AGENTS.md`から`design-ui-information`の参照を求め、同Skillの`agents/openai.yaml`は暗黙呼出しを許可する。二つの文書Skillは各Skillの明示呼出し設定を維持する。`review-test-value`は通常のSkillとして利用する。通常のREADME編集、commit、短報告へ自動の校正工程を付けない。明示された文書modeの必要工程は保つ。
 
@@ -159,6 +160,12 @@ pwsh ./scripts/sync-natural-japanese.ps1
 ```
 
 同期scriptはlocal adaptationと明示起動policyを再現し、同Skillに未コミット変更があれば拒否する。通常の作業中に無関係な同期を行う必要はない。
+
+### Session Graphの配置と検証
+
+入口は共通AGENTS.md、記録・表示・共有編集の手順は[`session-graph` Skill](skills/session-graph/SKILL.md)を正本とする。`skills/session-graph/`全体を既存のSkill配置方法で導入し、更新したAGENTS.md・hookと併せて新規sessionから確認する。Python 3.10以降を使う保存helperは標準ライブラリのみ。実SessionFolderのpathを共通設定へ固定しない。
+
+[検証手順](skills/session-graph/references/validation.md)に従い、指示の先行記録、訂正、同じFolderを共有する2セッション、startup／resume／手動・自動Compactを確認する。保存処理は既存CIでWindows／Linuxのtestを実行する。モデルの指示遵守、実環境のhook発火・trust、Mermaidを描画した読みやすさは別に確認し、未実施をPRへ残す。作業中の記録・表示結果をrepositoryへ恒久保存する必要はない。
 
 ### UI Skillの適用と検証
 

@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 
 @"
 Implementation restraint / delegation:
+- SessionFolderが提供された開発・調査・設計・reviewでは、runtimeの実pathのsession-graph Skillを必ず使う。開始・再開・Compact後は現在のSession情報から共有pathを解決し、Skillと最新グラフを読む。新しい指示・訂正を先に記録・照合してから依存する作業を進め、状態の区切りと終了前に同期する。保存失敗を成功扱いしない。
 - 現在の要求・契約・具体的な不具合に根拠を持つ、最も単純な完全解を作る。不要な抽象化、互換層、fallback、管理文書、testや無関係な整理を増やさない。
 - 共通文書の参照先はユーザーhome直下の~/.codex/に固定する。~は実行環境のユーザーhomeを指し、読み取り前に絶対pathへ解決する。作業対象repositoryや配布元checkout、CODEX_HOMEによる別配置へ切り替えず、参照先が欠けても同名文書で代用しない。
 - 複雑さは必要な保証への効果と継続負担で評価する。共有判断の不足・矛盾や方針・現行説明の変更を扱う時は、~/.codex/docs/guides/design-decisions.mdを読む。必要な調査・推奨案・草案まで自ら進め、未合意の判断の採否を確認する。草案を有効な方針とせず、権限・着手禁止を維持する。
