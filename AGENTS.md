@@ -24,7 +24,7 @@
 | --- | --- |
 | 課題・対応予定の確認・登録・変更・完了判断前、開発の完了条件を決める時、実装変更着手前、review開始前、リリース範囲の確定・統合・公開判断前 | 開発・review・統合: `~/.codex/docs/guides/development.md`と、対象repositoryの`README.md`にある管理先・リリース境界等の関連節、または同repositoryのAGENTS.mdが明示する運用文書。実装を伴わない課題管理にも適用し、互換性対象の契約を変更する前にも確認する |
 | 調査・設計・実装・reviewで共有判断の不足・矛盾を検出した時、共有方針の新設・変更や、それに伴う現行説明の更新・統合を判断する時 | 設計判断・文書化: `~/.codex/docs/guides/design-decisions.md`。文書作成の明示依頼を待たず、単なる設計書の不在を毎回監査する工程にはしない |
-| Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-only general_luna審査は必須 |
+| Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-onlyサブエージェント審査は必須 |
 | ユーザー向けUIの設計・実装開始前、変更後の確認時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
 | サブエージェントへ委譲する前 | 委譲: `~/.codex/docs/architecture/subagent-workspace.md`。担当範囲・適用契約・必要な参照先と権限を渡し、履歴継承を前提にしない |
 | WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合、最初の応答前 | WithMate利用方針: `~/.codex/docs/guides/withmate.md`を読み、利用契機と承認条件に従う。確認済みの内容を毎turn再読する必要はない |

@@ -1,5 +1,5 @@
 name = "general_luna"
-description = "GPT-6 Luna for focused research, extraction, bounded implementation, and review with clear criteria."
+description = "GPT-6 Luna for work whose approach, steps, and expected result are already largely determined."
 model = "gpt-6-luna"
 model_reasoning_effort = "high"
 developer_instructions = '''
