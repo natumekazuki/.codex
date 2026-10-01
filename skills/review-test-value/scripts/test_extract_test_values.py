@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -9,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -2099,6 +2102,104 @@ def test_oracle_table_with_decoy():
         self.assertEqual(exit_status, 1)
         self.assertEqual(result["tests"], [])
         self.assertEqual(result["diagnostics"][0]["code"], "SOURCE_OUTSIDE_ROOT")
+
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "対象sourceの旧新snapshotが不正UTF-8なら成功結果を返さず、未追跡sourceのdecode診断も保持する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "pipeのdecode失敗や不正sourceを無視して空または部分的な抽出を成功として返す"
+    # observable = "CLIのexit、stdout JSONの有無、stderr、SOURCE_DECODE_ERROR"
+    # observation_boundary = "public-boundary"
+    # scope = "git-source-decode"
+    # lifecycle = "permanent"
+    # distinction = "実Git出力の旧新両側と未追跡読取を使い、対象外binaryを除外するtestでは確認できない失敗境界を守る"
+    # @end-test-value
+    def test_git_mode_rejects_invalid_utf8_in_selected_source(self) -> None:
+        valid = (VALID_METADATA + "def test_value():\n    assert value() == 1\n").encode("utf-8")
+        invalid = valid + b"# \xb5\xff\n"
+        for side in ("base", "current", "deleted", "untracked"):
+            with self.subTest(side=side), tempfile.TemporaryDirectory() as tmp:
+                self.root = Path(tmp)
+                path = self.root / "test_value.py"
+                if side != "untracked":
+                    path.write_bytes(invalid if side in {"base", "deleted"} else valid)
+                base = self.initialize_git()
+                if side == "deleted":
+                    path.unlink()
+                else:
+                    path.write_bytes(valid if side == "base" else invalid)
+                for mode in ("working", "staged", "head"):
+                    extra = []
+                    if mode == "staged":
+                        self.git("add", "--all")
+                        extra = ["--staged"]
+                    elif mode == "head":
+                        self.git("commit", "--quiet", "-m", "change source encoding")
+                        extra = ["--head", self.git("rev-parse", "HEAD")]
+                    with self.subTest(mode=mode):
+                        result, status, stderr = self.extract_git(base, "python", *extra)
+                        if side == "untracked" and mode == "working":
+                            self.assertEqual(status, 1, stderr)
+                            self.assertEqual(stderr, "")
+                            self.assertEqual([d["code"] for d in result["diagnostics"]], ["SOURCE_DECODE_ERROR"])
+                            self.assertEqual(result["tests"], [])
+                            self.assertEqual(result["transitions"], [])
+                        else:
+                            self.assertEqual(status, 2, (result, stderr))
+                            self.assertEqual(result, {})
+                            self.assertIn("utf-8", stderr)
+                            self.assertNotIn("Traceback", stderr)
+                            self.assertNotIn("Exception in thread", stderr)
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "Git選択後のsource読取失敗は部分JSONを出さずCLIのexit 2へ伝播する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/SKILL.md" }
+    # fault = "sourceのI/O失敗を握りつぶして抽出を成功させる"
+    # observable = "CLI mainの戻り値、stdout、stderr"
+    # observation_boundary = "public-boundary"
+    # scope = "git-source-read"
+    # lifecycle = "permanent"
+    # distinction = "OS権限に依存せず読取境界へOSErrorを注入し、decode診断とは別のI/O伝播を確認する"
+    # @end-test-value
+    def test_git_mode_propagates_source_read_failure(self) -> None:
+        base = self.initialize_git()
+        self.write("test_value.py", VALID_METADATA + "def test_value():\n    assert True\n")
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with mock.patch("git_diff_selection._snapshot", side_effect=OSError("source read failed")), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            status = EXTRACTOR.main(["--root", str(self.root), "--changed-from", base, "--language", "python"])
+        self.assertEqual(status, 2)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("source read failed", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "adapterのstdoutまたはstderrが不正UTF-8なら終了code 0でもCLIをexit 2にする"
+    # oracle = { type = "contract", ref = "skills/review-test-value/SKILL.md" }
+    # fault = "Windowsのreader threadだけでdecode例外が発生しadapter失敗を成功扱いする"
+    # observable = "実subprocessを通るCLI mainの戻り値、stdout、stderr"
+    # observation_boundary = "public-boundary"
+    # scope = "adapter-output-decode"
+    # lifecycle = "permanent"
+    # distinction = "実pipeへ不正byteを書き、非zero終了やadapter未配置だけの既存testと異なるdecode失敗を検出する"
+    # @end-test-value
+    def test_cli_rejects_invalid_utf8_adapter_output(self) -> None:
+        self.write("value.ts", 'test("value", () => {});\n')
+        for stream in ("stdout", "stderr"):
+            with self.subTest(stream=stream):
+                command = [sys.executable, "-c", f"import sys; sys.{stream}.buffer.write(bytes([0xb5]))"]
+                stdout, stderr = io.StringIO(), io.StringIO()
+                def invalid_adapter(*args):
+                    return EXTRACTOR.run_process(command, "", "TypeScript")
+                with mock.patch.object(EXTRACTOR, "analyze_typescript_source", side_effect=invalid_adapter), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    status = EXTRACTOR.main(["--root", str(self.root), "value.ts"])
+                self.assertEqual(status, 2)
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertIn("adapter output is not valid UTF-8", stderr.getvalue())
+                self.assertNotIn("Traceback", stderr.getvalue())
+                self.assertNotIn("Exception in thread", stderr.getvalue())
 
 
 if __name__ == "__main__":

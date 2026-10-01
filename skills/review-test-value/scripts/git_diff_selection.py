@@ -71,17 +71,19 @@ def _git(root: Path, args: Sequence[str], *, text: bool = True) -> str | bytes:
             cwd=root,
             check=False,
             capture_output=True,
-            text=text,
-            encoding="utf-8" if text else None,
         )
     except OSError as e:
         raise ValueError(f"git is unavailable: {e}") from e
+    # Decode in the calling thread: Windows pipe reader exceptions do not
+    # propagate out of subprocess.run(text=True).
+    stdout = p.stdout.decode("utf-8") if text else p.stdout
+    stderr = p.stderr.decode("utf-8") if text else p.stderr
     if p.returncode:
-        detail = (p.stderr or p.stdout or b"").strip()
+        detail = (stderr or stdout or b"").strip()
         if isinstance(detail, bytes):
             detail = detail.decode("utf-8", "replace")
         raise ValueError(f"git command failed: {detail}")
-    return p.stdout
+    return stdout
 
 
 def _diff_args(base: str, mode: str, head: str | None) -> list[str]:
@@ -107,6 +109,8 @@ def changed_files(
     base: str,
     mode: str = "working",
     head: str | None = None,
+    *,
+    extensions: tuple[str, ...],
 ) -> tuple[ChangedFile, ...]:
     if mode not in {"working", "staged", "head"} or (mode == "head" and not head):
         raise ValueError("invalid git diff mode")
@@ -147,6 +151,8 @@ def changed_files(
             break
         path = tokens[i].decode("utf-8", "surrogateescape")
         i += 1
+        if Path(path).suffix.lower() not in extensions:
+            continue
         files.setdefault(path, _ChangedFileBuilder(code, [], [], old_path))
     for path, item in files.items():
         paths = [item.old_path, path] if item.old_path is not None else [path]
@@ -178,6 +184,8 @@ def changed_files(
         )
         for raw_path in filter(None, untracked.split(b"\0")):
             path = raw_path.decode("utf-8", "surrogateescape")
+            if Path(path).suffix.lower() not in extensions:
+                continue
             files.setdefault(
                 path.replace("\\", "/"),
                 _ChangedFileBuilder("A", [], [], whole_file=True),
@@ -628,11 +636,7 @@ def select_git(
     mode: str = "working",
     head: str | None = None,
 ) -> dict:
-    files = [
-        item
-        for item in changed_files(root, base, mode, head)
-        if Path(item.path).suffix.lower() in profile.extensions
-    ]
+    files = changed_files(root, base, mode, head, extensions=profile.extensions)
     tests: list[dict] = []
     transitions: list[dict] = []
     diagnostics: list[dict] = []
