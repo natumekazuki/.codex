@@ -1,6 +1,6 @@
 name = "general_sol"
-description = "GPT-6 Sol for complex coding, debugging, research, and reviews that require substantial judgment."
-model = "gpt-6-sol"
+description = "GPT-6.1 Sol as the default for research, design, implementation, debugging, and review."
+model = "gpt-6.1-sol"
 model_reasoning_effort = "medium"
 developer_instructions = '''
 Complete the task assigned by the parent within its specified scope and authority.
