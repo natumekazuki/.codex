@@ -5,7 +5,7 @@ description: Python、TypeScript、C#の変更testをGit差分から決定論的
 
 # Review Test Value
 
-このSkillは、変更されたtestの選定と構造化recordの抽出を決定論的なscriptへ任せ、意味判断を親エージェントと通常のread-onlyサブエージェントへ委譲する。review担当は`general_sol`を既定とし、Luna・Astraの選択は共通`AGENTS.md`の「条件付き参照」から解決した`docs/architecture/subagent-workspace.md`の委譲基準に従う。対象の選定、metadataの構文、test declarationとsource範囲の対応付けはscriptの結果を正本とし、親がrecordを都合よく選び直したりmetadataを補完したりしない。
+このSkillは、変更されたtestの選定と構造化recordの抽出を決定論的なscriptへ任せ、意味判断を親エージェントと通常のread-onlyサブエージェントへ委譲する。review担当の選択は、共通`AGENTS.md`の「条件付き参照」から解決した`docs/architecture/subagent-workspace.md`の委譲基準に従う。対象の選定、metadataの構文、test declarationとsource範囲の対応付けはscriptの結果を正本とし、親がrecordを都合よく選び直したりmetadataを補完したりしない。
 
 ## Workflow
 

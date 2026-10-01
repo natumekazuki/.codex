@@ -113,7 +113,7 @@ OpenAI公式は[GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6
 
 上記のeffortは配布設定の開始値であり、最適値を実証したものではない。具体的な品質不足がある時に、対応modelで利用可能なeffortを調整する。端末の実configやsessionで選択したeffortは配布設定とは区別する。
 
-委譲基準の正本は[Subagent Review Boundary](docs/architecture/subagent-workspace.md)。hookはその要点を再通知する。標準`default`／`worker`／`explorer`はカスタムroleとは別であり、model省略時は設定例の一般child既定値を使う。汎用roleの権限は親から継承し、read-only依頼は起動時に明示し、利用可能なruntimeの制限も適用する。`review-test-value`も`general_sol`を既定として同じ委譲基準で担当を選び、抽出契約・全recordの審査・統合基準を維持する。
+委譲基準の正本は[Subagent Review Boundary](docs/architecture/subagent-workspace.md)。hookはその要点を再通知する。標準`default`／`worker`／`explorer`はカスタムroleとは別であり、model省略時は設定例の一般child既定値を使う。汎用roleの権限は親から継承し、read-only依頼は起動時に明示し、利用可能なruntimeの制限も適用する。`review-test-value`も同じ委譲基準で担当を選び、抽出契約・全recordの審査・統合基準を維持する。
 
 `PreToolUse` hookは3モデル以外の明示的な`model`指定を拒否する。Astra親からの`general_astra`とAstraの直接指定も拒否する。許可された`spawn_agent`／`Agent`の`fork_turns`は常に`none`へ置き換え、他の引数は保持する。roleの実modelやmodel未指定時の既定値はconfigと新規sessionで確認し、hookが任意の外部role定義まで検証すると扱わない。設定例の待機timeoutの最小値と既定値は120000 msを維持する。
 
@@ -133,7 +133,7 @@ codex --profile astra
 | 共有config・profile・registry | `config.example.toml`、`config/*.toml`。親、一般child、3 roleの登録を揃える |
 | カスタムrole | `agents/general_{astra,sol,luna}.toml`。model ID、effort、担当範囲を定義する |
 | 委譲とhook | `docs/architecture/subagent-workspace.md`、`hooks/implementation-restraint.ps1`、`hooks/subagent-fork-default.ps1`、`hooks.json` |
-| test価値審査 | `AGENTS.md`と`docs/guides/test-changes.md`がSkillへ導き、`skills/review-test-value/`が`general_sol`を既定とする。model IDと担当の選択基準はrole・委譲規約を参照する |
+| test価値審査 | `AGENTS.md`と`docs/guides/test-changes.md`がSkillへ導く。`skills/review-test-value/`は固有のmodel・role既定値を持たず、model IDと担当の選択基準はrole・委譲規約を参照する |
 | 指示ファイル・Skill・CI・script | `.codex/model-instructions-withmate*.md`を含め確認。上記以外に運用modelの固定指定はない |
 
 ## Skill
