@@ -551,20 +551,23 @@ def run_process(command: Sequence[str], source: str, adapter_name: str) -> str:
     try:
         completed = subprocess.run(
             command,
-            input=source,
+            input=source.encode("utf-8"),
             check=False,
             capture_output=True,
-            text=True,
-            encoding="utf-8",
         )
     except OSError as error:
         raise AdapterError(f"{adapter_name} adapter is unavailable: {error}") from error
+    try:
+        stdout = completed.stdout.decode("utf-8")
+        stderr = completed.stderr.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise AdapterError(f"{adapter_name} adapter output is not valid UTF-8: {error}") from error
     if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip()
+        detail = stderr.strip() or stdout.strip()
         raise AdapterError(
             f"{adapter_name} adapter failed with exit {completed.returncode}: {detail}"
         )
-    return completed.stdout
+    return stdout
 
 
 def analyze_typescript_source(

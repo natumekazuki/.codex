@@ -1799,5 +1799,59 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         )
 
 
+    # @test-value v2
+    # kind = "contract"
+    # claim = "対象外binaryの追加・変更・削除が混在しても各snapshotの対象言語の全transitionを抽出する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "言語選択前に対象外差分をUTF-8 decodeし、抽出失敗またはstderr例外を伴う成功にする"
+    # observable = "CLIのexit、stderr、diagnostics、SURVIVEDの旧新本文とtests集合"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # impact = "対象外資産の変更でtest審査が止まるか、不完全な結果を正常として渡す"
+    # distinction = "実Gitと実adapterを使うbinary混在のCLI検証であり、構文checkや単一source抽出では検出できない"
+    # @end-test-value
+    def test_git_mode_ignores_binary_changes_outside_selected_language(self) -> None:
+        sources = {
+            "typescript": (".ts", metadata_block("//") + 'test("value", () => {\n  check(1);\n});\n'),
+            "csharp": (".cs", "class Tests {\n" + metadata_block("//") + "[Fact]\npublic void Value() {\n  Check(1);\n}\n}\n"),
+        }
+        for suffix, source in sources.values():
+            self.write("changed" + suffix, source)
+        for name in ("deleted.xlsx", "changed.xlsx", "other.py"):
+            (self.root / name).write_bytes(b"\x00\xb5\xff\n")
+        base = self.initialize_git()
+        for suffix, source in sources.values():
+            self.write("changed" + suffix, source.replace("(1)", "(2)"))
+        (self.root / "deleted.xlsx").unlink()
+        (self.root / "changed.xlsx").write_bytes(b"\x00\xff\xb5\n")
+        (self.root / "added.xlsx").write_bytes(b"\x00\xb5\xff\n")
+        (self.root / "other.py").write_bytes(b"\x00\xff\xb5\n")
+        for mode in ("working", "staged", "head"):
+            extra = []
+            if mode == "staged":
+                self.git("add", "--all")
+                extra = ["--staged"]
+            elif mode == "head":
+                self.git("commit", "--quiet", "-m", "change sources and binary assets")
+                extra = ["--head", self.git("rev-parse", "HEAD")]
+            for language, (suffix, source) in sources.items():
+                with self.subTest(mode=mode, language=language):
+                    result, status, stderr = self.extract_git(base, language, *extra)
+                    self.assertEqual(status, 0, stderr)
+                    self.assertEqual(stderr, "")
+                    self.assertEqual(result["diagnostics"], [])
+                    transitions = result["transitions"]
+                    self.assertEqual([t["kind"] for t in transitions], ["SURVIVED"])
+                    self.assertEqual(
+                        [(t["after"] or t["before"])["source"]["path"] for t in transitions],
+                        ["changed" + suffix],
+                    )
+                    before_body = 'test("value", () => {\n  check(1);\n});\n' if language == "typescript" else "[Fact]\npublic void Value() {\n  Check(1);\n}\n"
+                    self.assertEqual(transitions[0]["before"]["source_text"], before_body)
+                    self.assertEqual(transitions[0]["after"]["source_text"], before_body.replace("(1)", "(2)"))
+                    self.assertEqual(result["tests"], [t["after"] for t in transitions if t["after"]])
+
+
 if __name__ == "__main__":
     unittest.main()
