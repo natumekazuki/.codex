@@ -1,0 +1,14 @@
+flowchart TB
+    %% 架空の説明例。exampleの所在は実在するADR・Issue・実装等へ置き換える。
+    R_keep["現在も有効: 公開物は削除しない"]
+    D_release["採用判断: 検証済みの公開物を配布<br/>未完了の補助機能はIssueへ分離"]
+    I_release["公開: 完了<br/>環境整理の受入を待って再開しない"]:::done
+    ADR["判断の正本: ADR-001<br/>artifact://example/adr/001<br/>公開時点の参照・説明用"]
+    SOURCE["実装対象: 配布処理<br/>artifact://example/source/publish<br/>公開時点の参照・説明用"]
+    ISSUE["後続対応: Issue-002<br/>artifact://example/issues/002<br/>現行参照・説明用"]
+    D_release -->|判断の正本| ADR
+    D_release -->|実装対象| SOURCE
+    D_release -->|補助機能の後続対応| ISSUE
+    D_release -->|実施結果| I_release
+    R_keep -->|保持対象| I_release
+    classDef done fill:#e5f4e8,stroke:#32703f,color:#111

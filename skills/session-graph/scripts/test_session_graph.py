@@ -17,6 +17,8 @@ sg = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sg)
 FIRST = 'flowchart TB\n    R1["独自実装しない"]\n'
 SECOND = FIRST + '    R2["高さを変更できる"]\n'
+INDEX = "index.mmd"
+TOPIC = "actual-topic.mmd"
 
 
 class SessionGraphTests(unittest.TestCase):
@@ -24,7 +26,8 @@ class SessionGraphTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.folder = Path(self.temp.name).resolve()
-        self.graph = self.folder / sg.GRAPH_NAME
+        (self.folder / sg.GRAPH_DIR).mkdir()
+        self.graph = self.folder / sg.GRAPH_DIR / INDEX
         self.draft = self.folder / "draft.mmd"
 
     def stage(self, text=FIRST):
@@ -32,7 +35,7 @@ class SessionGraphTests(unittest.TestCase):
         return self.draft
 
     def publish(self, snapshot, text=FIRST):
-        return sg.save(self.folder, Path(snapshot["snapshot_path"]), self.stage(text))
+        return sg.save(self.folder, INDEX, Path(snapshot["snapshot_path"]), self.stage(text))
 
     # @test-value v2
     # kind = "invariant"
@@ -47,12 +50,12 @@ class SessionGraphTests(unittest.TestCase):
     # distinction = "構文検査では保存後の文字保持と無変更時の挙動を確認できない"
     # @end-test-value
     def test_roundtrip_and_unchanged_save(self):
-        initial = sg.snapshot(self.folder)
+        initial = sg.snapshot(self.folder, INDEX)
         self.assertFalse(initial["exists"])
         text = SECOND.replace("\n", "\r\n")
         self.assertTrue(self.publish(initial, text)["changed"])
         self.assertEqual(self.graph.read_bytes(), text.encode("utf-8"))
-        latest = sg.snapshot(self.folder)
+        latest = sg.snapshot(self.folder, INDEX)
         self.assertEqual(latest["content"], text)
         before = self.graph.stat().st_mtime_ns
         self.assertFalse(self.publish(latest, text)["changed"])
@@ -75,7 +78,7 @@ class SessionGraphTests(unittest.TestCase):
             with self.subTest(existing=existing):
                 if existing:
                     self.graph.write_bytes(FIRST.encode())
-                a, b = sg.snapshot(self.folder), sg.snapshot(self.folder)
+                a, b = sg.snapshot(self.folder, INDEX), sg.snapshot(self.folder, INDEX)
                 drafts = [self.folder / "a.mmd", self.folder / "b.mmd"]
                 texts = [FIRST + '    A["条件A"]\n', FIRST + '    B["条件B"]\n']
                 for draft, text in zip(drafts, texts):
@@ -83,7 +86,7 @@ class SessionGraphTests(unittest.TestCase):
                 def save_one(args):
                     snap, draft = args
                     try:
-                        sg.save(self.folder, Path(snap["snapshot_path"]), draft)
+                        sg.save(self.folder, INDEX, Path(snap["snapshot_path"]), draft)
                         return "saved"
                     except sg.ConflictError:
                         return "conflict"
@@ -91,7 +94,7 @@ class SessionGraphTests(unittest.TestCase):
                     results = list(pool.map(save_one, zip([a, b], drafts)))
                 self.assertCountEqual(results, ["saved", "conflict"])
                 self.assertIn(self.graph.read_bytes(), [text.encode() for text in texts])
-                latest = sg.snapshot(self.folder)
+                latest = sg.snapshot(self.folder, INDEX)
                 combined = FIRST + '    A["条件A"]\n    B["条件B"]\n'
                 self.publish(latest, combined)
                 self.assertEqual(self.graph.read_bytes(), combined.encode())
@@ -109,8 +112,8 @@ class SessionGraphTests(unittest.TestCase):
     # distinction = "実filesystemの正常保存だけでは置換失敗境界に到達しない"
     # @end-test-value
     def test_replace_failure_preserves_graph(self):
-        self.publish(sg.snapshot(self.folder))
-        base = sg.snapshot(self.folder)
+        self.publish(sg.snapshot(self.folder, INDEX))
+        base = sg.snapshot(self.folder, INDEX)
         with patch.object(sg.os, "replace", side_effect=OSError("disk failure")):
             with self.assertRaises(OSError):
                 self.publish(base, SECOND)
@@ -149,13 +152,14 @@ class SessionGraphTests(unittest.TestCase):
             self.assertTrue(ready.exists())
             blocked = subprocess.run(
                 [sys.executable, str(SCRIPT), "snapshot", "--session-folder", str(self.folder),
+                 "--graph", INDEX,
                  "--lock-timeout", "0.1"], capture_output=True, text=True, timeout=5)
             self.assertEqual(blocked.returncode, 2, blocked.stderr)
             self.assertIn("busy", blocked.stderr)
         finally:
             owner.kill()
             owner.wait(timeout=5)
-        self.publish(sg.snapshot(self.folder))
+        self.publish(sg.snapshot(self.folder, INDEX))
         self.assertEqual(self.graph.read_bytes(), FIRST.encode())
 
     # @test-value v2
@@ -174,21 +178,21 @@ class SessionGraphTests(unittest.TestCase):
         for bad in (b"", b"\xff", b"not a graph"):
             self.graph.write_bytes(bad)
             with self.assertRaises(ValueError):
-                sg.snapshot(self.folder)
+                sg.snapshot(self.folder, INDEX)
             self.assertEqual(self.graph.read_bytes(), bad)
         self.graph.unlink()
         other = self.folder / "other"
         other.mkdir()
-        foreign = sg.snapshot(other)
+        foreign = sg.snapshot(other, INDEX)
         local_copy = self.folder / Path(foreign["snapshot_path"]).name
         local_copy.write_bytes(Path(foreign["snapshot_path"]).read_bytes())
         with self.assertRaises(ValueError):
-            sg.save(self.folder, local_copy, self.stage())
+            sg.save(self.folder, INDEX, local_copy, self.stage())
         self.assertFalse(self.graph.exists())
-        self.assertFalse((other / sg.GRAPH_NAME).exists())
+        self.assertFalse((other / sg.GRAPH_DIR / INDEX).exists())
         missing = self.folder / "not-provided"
         with self.assertRaises(FileNotFoundError):
-            sg.snapshot(missing)
+            sg.snapshot(missing, INDEX)
         self.assertFalse(missing.exists())
 
     # @test-value v2
@@ -207,21 +211,122 @@ class SessionGraphTests(unittest.TestCase):
         def cli(*args):
             return subprocess.run(
                 [sys.executable, "-X", "utf8", str(SCRIPT), *args,
-                 "--session-folder", str(self.folder)],
+                 "--session-folder", str(self.folder), "--graph", INDEX],
                 capture_output=True, text=True, encoding="utf-8", timeout=5)
         read = cli("snapshot")
         self.assertEqual(read.returncode, 0, read.stderr)
         old = json.loads(read.stdout)
-        self.publish(sg.snapshot(self.folder))
+        self.publish(sg.snapshot(self.folder, INDEX))
         draft = self.stage(SECOND)
         conflict = cli("save", "--snapshot", old["snapshot_path"], "--input", str(draft))
         self.assertEqual(conflict.returncode, 3, conflict.stderr)
         self.assertEqual(self.graph.read_bytes(), FIRST.encode())
-        current = sg.snapshot(self.folder)
+        current = sg.snapshot(self.folder, INDEX)
         self.stage("```mermaid\n" + SECOND + "```\n")
         invalid = cli("save", "--snapshot", current["snapshot_path"], "--input", str(draft))
         self.assertEqual(invalid.returncode, 2, invalid.stderr)
         self.assertEqual(self.graph.read_bytes(), FIRST.encode())
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "異なる話題のsnapshotは互いに代用できず、一方の更新は他方を変更しない"
+    # oracle = { type = "contract", ref = "skills/session-graph/SKILL.md#共有ファイルの保存" }
+    # fault = "snapshot対象を確認せず別話題へ保存するか全体単位で競合を誤検出する"
+    # observable = "対象不一致の例外、両正本のbytesと各保存結果"
+    # observation_boundary = "public-boundary"
+    # scope = "session-graph-target-isolation"
+    # lifecycle = "permanent"
+    # impact = "異なる話題の要求が混入・消失する"
+    # distinction = "単一対象の並行testでは別対象の独立性とsnapshot誤用を検出できない"
+    # @end-test-value
+    def test_target_isolation_and_snapshot_binding(self):
+        index = sg.snapshot(self.folder, INDEX)
+        topic = sg.snapshot(self.folder, TOPIC)
+        draft = self.stage(FIRST)
+        with self.assertRaises(ValueError):
+            sg.save(self.folder, TOPIC, Path(index["snapshot_path"]), draft)
+        self.assertFalse(self.graph.exists())
+        sg.save(self.folder, INDEX, Path(index["snapshot_path"]), draft)
+        self.assertTrue(sg.save(self.folder, TOPIC, Path(topic["snapshot_path"]),
+                                self.stage(SECOND))["changed"])
+        self.assertEqual(self.graph.read_bytes(), FIRST.encode())
+        self.assertEqual((self.graph.parent / TOPIC).read_bytes(), SECOND.encode())
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "詳細保存後に入口更新が失敗しても詳細だけ残り、再読後に入口を更新できる"
+    # oracle = { type = "contract", ref = "skills/session-graph/SKILL.md#共有ファイルの保存" }
+    # fault = "複数ファイルを成功と誤報するか部分保存後の再読と再開を妨げる"
+    # observable = "失敗後および再開後の両正本とsnapshot内容"
+    # observation_boundary = "public-boundary"
+    # scope = "session-graph-partial-save"
+    # lifecycle = "permanent"
+    # impact = "入口と詳細の食い違いが見逃され要求復元を誤る"
+    # distinction = "単一ファイルの置換失敗testでは複数fileの部分保存状態を確認できない"
+    # @end-test-value
+    def test_partial_save_can_be_reread_and_completed(self):
+        index = sg.snapshot(self.folder, INDEX)
+        topic = sg.snapshot(self.folder, TOPIC)
+        sg.save(self.folder, TOPIC, Path(topic["snapshot_path"]), self.stage(FIRST))
+        with patch.object(sg.os, "replace", side_effect=OSError("disk failure")):
+            with self.assertRaises(OSError):
+                sg.save(self.folder, INDEX, Path(index["snapshot_path"]), self.stage(SECOND))
+        self.assertFalse(self.graph.exists())
+        self.assertEqual(sg.snapshot(self.folder, TOPIC)["content"], FIRST)
+        reread = sg.snapshot(self.folder, INDEX)
+        self.assertIsNone(reread["content"])
+        sg.save(self.folder, INDEX, Path(reread["snapshot_path"]), self.stage(SECOND))
+        self.assertEqual(self.graph.read_bytes(), SECOND.encode())
+
+    # @test-value v2
+    # kind = "invariant"
+    # claim = "対象名の脱出・別名とリンク経由の保存を拒否する"
+    # oracle = { type = "contract", ref = "skills/session-graph/SKILL.md#共有ファイルの保存" }
+    # fault = "任意pathまたはリンク先へ意図しない読み書きを行う"
+    # observable = "拒否例外と外部ファイルの不変なbytes"
+    # observation_boundary = "public-boundary"
+    # scope = "session-graph-path-safety"
+    # lifecycle = "permanent"
+    # impact = "SessionFolder外のファイル破損または誤った記録の読込"
+    # distinction = "正常な対象名の保存testではpath境界を検査できない"
+    # @end-test-value
+    def test_rejects_unsafe_names_and_redirected_paths(self):
+        for name in ("../index.mmd", "sub/index.mmd", "C:\\index.mmd", "index.mmd:ads",
+                     "CON.mmd", "NUL .mmd", "index.MMD", ".mmd"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                sg.snapshot(self.folder, name)
+        outside = self.folder / "outside.mmd"
+        outside.write_bytes(FIRST.encode())
+        try:
+            self.graph.symlink_to(outside)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"symlink creation unavailable: {exc}")
+        with self.assertRaises(ValueError):
+            sg.snapshot(self.folder, INDEX)
+        self.assertEqual(outside.read_bytes(), FIRST.encode())
+        self.graph.unlink()
+        snap = sg.snapshot(self.folder, INDEX)
+        self.draft.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            sg.save(self.folder, INDEX, Path(snap["snapshot_path"]), self.draft)
+        self.assertFalse(self.graph.exists())
+        self.assertEqual(outside.read_bytes(), FIRST.encode())
+        linked_snapshot = self.folder / ".session-graph-snapshot-linked.json"
+        linked_snapshot.symlink_to(Path(snap["snapshot_path"]))
+        with self.assertRaises(ValueError):
+            sg.save(self.folder, INDEX, linked_snapshot, outside)
+        lock = self.folder / sg.LOCK_NAME
+        lock.unlink()
+        lock.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            sg.snapshot(self.folder, INDEX)
+        lock.unlink()
+        linked_session = self.folder / "linked-session"
+        linked_session.mkdir()
+        (linked_session / sg.GRAPH_DIR).symlink_to(self.graph.parent,
+                                                   target_is_directory=True)
+        with self.assertRaises(ValueError):
+            sg.snapshot(linked_session, INDEX)
 
 
 if __name__ == "__main__":

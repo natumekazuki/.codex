@@ -28,7 +28,7 @@
 | ユーザー向けUIの設計・実装開始前、変更後の確認時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
 | サブエージェントへ委譲する前 | 委譲: `~/.codex/docs/architecture/subagent-workspace.md`。担当範囲・適用契約・必要な参照先と権限を渡し、履歴継承を前提にしない |
 | WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合、最初の応答前 | WithMate利用方針: `~/.codex/docs/guides/withmate.md`を読み、利用契機と承認条件に従う。確認済みの内容を毎turn再読する必要はない |
-| SessionFolderが提供された開発・調査・設計・reviewの開始・再開・Compact後、新しい指示・訂正を受けた時 | runtimeの実pathの`session-graph` Skillを必ず使う。共有SessionFolderの最新記録を読み、指示を記録・照合してから依存する作業へ進み、判断・実装・検証の区切りと終了前に同期する |
+| SessionFolderが提供された開発・調査・設計・reviewの開始・再開・Compact後、新しい指示・訂正を受けた時 | runtimeの実pathの`session-graph` Skillを必ず使う。共有記録の入口と関連図の最新版を読み、指示を記録・照合してから依存する作業へ進む。判断・実装・検証の区切りと終了前に同期し、読書き・復元の詳細は同Skillに従う |
 
 ## 操作範囲
 
