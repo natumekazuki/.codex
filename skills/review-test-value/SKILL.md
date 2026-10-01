@@ -5,7 +5,7 @@ description: Python、TypeScript、C#の変更testをGit差分から決定論的
 
 # Review Test Value
 
-このSkillは、変更されたtestの選定と構造化recordの抽出を決定論的なscriptへ任せ、意味判断を親エージェントと通常の`general_luna`へ委譲する。対象の選定、metadataの構文、test declarationとsource範囲の対応付けはscriptの結果を正本とし、親がrecordを都合よく選び直したりmetadataを補完したりしない。
+このSkillは、変更されたtestの選定と構造化recordの抽出を決定論的なscriptへ任せ、意味判断を親エージェントと通常のread-onlyサブエージェントへ委譲する。review担当の選択は、共通`AGENTS.md`の「条件付き参照」から解決した`docs/architecture/subagent-workspace.md`の委譲基準に従う。対象の選定、metadataの構文、test declarationとsource範囲の対応付けはscriptの結果を正本とし、親がrecordを都合よく選び直したりmetadataを補完したりしない。
 
 ## Workflow
 
@@ -23,9 +23,9 @@ python -X utf8 skills/review-test-value/scripts/extract_test_values.py `
 working treeが既定で、indexだけを対象にする場合は`--staged`、commitへ固定する場合は`--head <commit>`を追加する。[Git選択契約](references/git-selection-v1.md)のsnapshot semanticsを維持する。
 
 4. exit `0`のJSONを読み、`tests`と`transitions`の全recordを確認する。exit `1`は抽出結果にdiagnosticがあるため、sourceまたはmetadataを直して再抽出する。exit `2`はCLI、adapter、I/Oなどの失敗であり、部分結果をレビューへ渡さない。
-5. 親エージェントは、相互に独立して扱えるrecordまたは小さなbatchごとに、利用できるサブエージェント枠の範囲で通常の`general_luna`へreviewを委譲する。並列に委譲できない場合は親の判断で順次扱う。
-6. 各review依頼には、repository root、task baseと対象snapshotまたは現在のdiff、対象fileとlocator、抽出recordのmetadataとtest source、対象scope、read-onlyであること、下記のreview観点と適用される統合基準を含める。production codeやfixtureを親が事前に収集せず、`general_luna`自身が対象testから必要な範囲をrepository内で探索する。
-7. 親エージェントは自然言語のreview結果を読み、共通`AGENTS.md`の「条件付き参照」から解決した`docs/guides/development.md`の「統合優先・修正分離」に従って各指摘の扱いと完了可否を判断する。必須確認や統合判定に必要なcontext不足、ブロッカー修正、新たな変更の確認に限り、対象recordへ追加contextや`general_sol`などの追加reviewを依頼できる。非ブロッカーの解消や同じ入力でのvarianceを期待する自動retryは行わない。
+5. 親エージェントは、相互に独立して扱えるrecordまたは小さなbatchごとに、利用できるサブエージェント枠の範囲で選択した担当へreviewを委譲する。並列に委譲できない場合は親の判断で順次扱う。
+6. 各review依頼には、repository root、task baseと対象snapshotまたは現在のdiff、対象fileとlocator、抽出recordのmetadataとtest source、対象scope、read-onlyであること、下記のreview観点と適用される統合基準を含める。production codeやfixtureを親が事前に収集せず、reviewer自身が対象testから必要な範囲をrepository内で探索する。
+7. 親エージェントは自然言語のreview結果を読み、共通`AGENTS.md`の「条件付き参照」から解決した`docs/guides/development.md`の「統合優先・修正分離」に従って各指摘の扱いと完了可否を判断する。必須確認や統合判定に必要なcontext不足、ブロッカー修正、新たな変更の確認に限り、対象recordへ追加contextや追加reviewを依頼できる。担当は同じ委譲基準で選ぶ。非ブロッカーの解消や同じ入力でのvarianceを期待する自動retryは行わない。
 
 reviewerの起動失敗、内容のない応答、対象recordを確認していない応答はreview済みとして扱わない。親が原因と不足内容を確認し、必要なら対象recordだけへ追加contextまたは別reviewを依頼する。
 
@@ -46,7 +46,7 @@ metadataを使う場合は、既存の`impact`に影響、`distinction`に既存
 
 ## 一回のreviewで確認する観点
 
-`general_luna`には三つの観点を一つの依頼で渡す。観点ごとに別の依頼や専用agentへ分割しない。
+reviewerには三つの観点を一つの依頼で渡す。観点ごとに別の依頼や専用agentへ分割しない。
 
 ### metadata
 
@@ -67,7 +67,7 @@ test sourceやproduction codeからmetadataに書かれていない意味を補�
 
 ### test本文とproduction code
 
-`general_luna`はtest sourceからproduction code、fixture、helper、mock、oracle、SUT、契約を自分で辿る。
+reviewerはtest sourceからproduction code、fixture、helper、mock、oracle、SUT、契約を自分で辿る。
 
 - testが意図したproduction pathを実際に通るか。
 - mock、fixture、helperが欠陥を隠したりproduction behaviorを迂回したりしていないか。
@@ -82,7 +82,7 @@ test sourceやproduction codeからmetadataに書かれていない意味を補�
 親エージェントは次を確認してreviewを完了する。review完了と、指摘の全件修正・統合可否は分ける。
 
 - extractorが成功し、Git差分から得た全対象recordを確認できている。
-- `general_luna`のreview結果を全recordまたは明示したbatchについて読んでいる。
+- 担当サブエージェントのreview結果を全recordまたは明示したbatchについて読んでいる。
 - 各指摘の扱いが決まり、非ブロッカーはプロジェクトで定義した管理先へ引き継いでいる。現diffへの全件反映は要求しない。
 - context不足は、必須確認・統合判定を妨げるものと、後追い調査に分離できるものを区別し、未確認の範囲と影響を明示している。
 - 追加reviewを実施した場合は、対象と結果、未完了の確認を区別している。

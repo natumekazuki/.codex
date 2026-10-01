@@ -24,16 +24,17 @@
 | --- | --- |
 | 課題・対応予定の確認・登録・変更・完了判断前、開発の完了条件を決める時、実装変更着手前、review開始前、リリース範囲の確定・統合・公開判断前 | 開発・review・統合: `~/.codex/docs/guides/development.md`と、対象repositoryの`README.md`にある管理先・リリース境界等の関連節、または同repositoryのAGENTS.mdが明示する運用文書。実装を伴わない課題管理にも適用し、互換性対象の契約を変更する前にも確認する |
 | 調査・設計・実装・reviewで共有判断の不足・矛盾を検出した時、共有方針の新設・変更や、それに伴う現行説明の更新・統合を判断する時 | 設計判断・文書化: `~/.codex/docs/guides/design-decisions.md`。文書作成の明示依頼を待たず、単なる設計書の不在を毎回監査する工程にはしない |
-| Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-only general_luna審査は必須 |
+| Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-onlyサブエージェント審査は必須 |
 | ユーザー向けUIの設計・実装開始前、変更後の確認時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
 | サブエージェントへ委譲する前 | 委譲: `~/.codex/docs/architecture/subagent-workspace.md`。担当範囲・適用契約・必要な参照先と権限を渡し、履歴継承を前提にしない |
 | WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合、最初の応答前 | WithMate利用方針: `~/.codex/docs/guides/withmate.md`を読み、利用契機と承認条件に従う。確認済みの内容を毎turn再読する必要はない |
-| SessionFolderが提供された開発・調査・設計・reviewの開始・再開・Compact後、新しい指示・訂正を受けた時 | runtimeの実pathの`session-graph` Skillを必ず使う。共有SessionFolderの最新記録を読み、指示を記録・照合してから依存する作業へ進み、判断・実装・検証の区切りと終了前に同期する |
+| SessionFolderが提供された開発・調査・設計・reviewの開始・再開・Compact後、新しい指示・訂正を受けた時 | runtimeの実pathの`session-graph` Skillを必ず使う。共有記録の入口と関連図の最新版を読み、指示を記録・照合してから依存する作業へ進む。判断・実装・検証の区切りと終了前に同期し、読書き・復元の詳細は同Skillに従う |
 
 ## 操作範囲
 
 - Computer Use（デスクトップ全体やネイティブアプリのGUI操作）は、ユーザーがその使用を明示的に指示した場合に限る。
 - Browser Use（ブラウザー専用の操作手段によるタブ内の閲覧・操作・描画確認）は、依頼の範囲内であれば使用の明示指示や追加の使用許可を求めず利用できる。同じtoolやpluginが両方を提供していても、名称ではなく操作対象と手段で区別する。デスクトップ操作手段でブラウザーを操作する場合はComputer Useとして扱う。
+- ブラウザーを使う描画確認は原則headless／非表示で行い、ユーザーの画面へウインドウやタブを出さない。表示の明示依頼がある場合を除き、可視表示が必要なら理由を説明して事前に了承を得る。非表示であることを理由に、必要な実描画・操作・スクリーンショットの確認を省略しない。
 - Browser Useの使用許可は、個々の操作への承認を代替しない。read-only依頼の境界、外部write・購入・破壊的操作等の承認条件、runtime・サイト・管理者policyの権限制御は引き続き守る。
 - 調査・説明・review・計画の依頼はread-onlyとする。変更依頼は依頼範囲のlocal変更、非破壊的な検証、task／feature branchへの通常の追加commitを含む。 `session-graph`の対象では、指定SessionFolderの共有記録と更新に必要な自分の一時ファイルの操作だけを許容する。記録を含む変更禁止の明示指示とruntime権限は優先し、ソース変更・外部writeの許可へ広げない。
 - 変更依頼では、必要な修正と検証が完了したら、task／feature branch上の依頼範囲の変更をstageし、通常の追加commitまで行う。commitしない旨の明示指示がある場合は従う。ユーザーの無関係な未コミット・staged変更は含めない。
