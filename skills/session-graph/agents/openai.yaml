@@ -1,6 +1,6 @@
 interface:
   display_name: "Session Graph"
-  short_description: "指示を先行記録し、要求・状態・依存を共有する"
-  default_prompt: "$session-graph を使い、提供されたSessionFolderの最新グラフへ指示を記録してから作業してください。"
+  short_description: "入口と話題別の図へ指示を先行記録し、現在地・判断経緯・関連先を共有する"
+  default_prompt: "$session-graph を使い、提供されたSessionFolderの入口と関連図の最新版を読み、指示を記録・照合してから作業してください。"
 policy:
   allow_implicit_invocation: true
