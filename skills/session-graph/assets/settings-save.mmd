@@ -1,0 +1,33 @@
+flowchart TB
+    %% 架空の説明例。Character・役割・結果・根拠pathは実作業の事実ではない。
+    R_request["架空のユーザー要求<br/>設定保存の不具合を修正"]
+
+    subgraph ACTOR_A["担当A"]
+        D_fix["採用判断: 既存の保存処理を修正"]
+        I_patch["初回修正: 実装済み"]:::done
+        I_follow["指摘対応: 作業中"]:::active
+        Q_retest["指摘対応後の検証: 未実施"]:::pending
+    end
+
+    subgraph ACTOR_B["担当B"]
+        R_scope["範囲: 差分レビューのみ<br/>ソース変更なし"]
+        V_review["レビュー: 完了<br/>対象: 指摘対応前の差分"]:::done
+        F_empty["指摘: 空文字で旧値が残る"]
+        E_report["結果の正本: review.md<br/>架空のレビュー結果"]
+    end
+
+    Q_accept["統合判断: 保留"]:::pending
+    R_request -->|実装依頼| D_fix
+    R_request -->|レビュー依頼| R_scope
+    I_patch -->|採用した方針| D_fix
+    V_review -->|確認対象| I_patch
+    V_review -->|権限・確認範囲| R_scope
+    V_review -->|結果の所在| E_report
+    F_empty -->|検出元| V_review
+    I_follow -->|対応根拠| F_empty
+    Q_retest -->|確認対象| I_follow
+    Q_accept -->|指摘修正待ち| I_follow
+    Q_accept -->|検証待ち| Q_retest
+    classDef active fill:#e6f0ff,stroke:#2866ad,color:#111,stroke-width:3px
+    classDef pending fill:#fff1cc,stroke:#806000,color:#111
+    classDef done fill:#e5f4e8,stroke:#32703f,color:#111

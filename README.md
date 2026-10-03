@@ -167,7 +167,7 @@ pwsh ./scripts/sync-natural-japanese.ps1
 
 必須利用の入口と権限境界は共通AGENTS.md、読書き・表示・共有編集・復元の詳細は[`session-graph` Skill](skills/session-graph/SKILL.md)を正本とする。共有記録は`SessionFolder/session-graph/index.mmd`と話題別mmdで構成し、実SessionFolderのpathを共通設定へ固定しない。`skills/session-graph/`全体を既存のSkill配置方法で導入し、AGENTS.md・再通知hookと併せて確認する。Python 3.10以降の保存helperは標準ライブラリのみで、対象mmdを`--graph`で指定する。
 
-[検証手順](skills/session-graph/references/validation.md)に従い、関連する定義・呼出し・配置経路、指示の先行記録、訂正・判断変更、関連図からの復元、共有競合・部分保存を確認する。保存処理は既存CIでWindows／Linuxのtestを実行する。入口と詳細の実描画・導線、初運用例の情報保持は、構文やtest成功とは別に評価する。配布元改修、runtime配置とstartup／resume／手動・自動Compactの実効確認、既存セッションの移行を分けて報告し、未実施をPR等へ残す。他repositoryに固有の呼出指示がある場合は影響を伝え、一律変更しない。作業記録・表示結果の恒久保存は不要。
+通常のmmd更新の確認はSkill本文に従う。Skill指示・保存helperの改修、runtime配置、既存記録の移行では[変更対象別の検証](skills/session-graph/references/validation.md)から必要な確認を選ぶ。保存処理の既存CIはWindows／Linuxで実行する。配布元改修・runtime反映・実セッション確認・移行の結果は区別し、影響範囲の未確認を既存の作業報告へ残す。作業記録・表示結果の恒久保存は不要。
 
 ### UI Skillの適用と検証
 

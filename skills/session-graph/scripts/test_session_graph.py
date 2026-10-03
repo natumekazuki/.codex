@@ -70,7 +70,7 @@ class SessionGraphTests(unittest.TestCase):
     # observation_boundary = "public-boundary"
     # scope = "session-graph-concurrency"
     # lifecycle = "permanent"
-    # impact = "MainまたはAuxiliaryが記録した要求が失われる"
+    # impact = "共有セッションのいずれかが記録した要求が失われる"
     # distinction = "単独保存と静的解析では並行した初回作成と更新を検出できない"
     # @end-test-value
     def test_parallel_create_and_update_reject_stale_snapshot(self):
