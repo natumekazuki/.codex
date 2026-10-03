@@ -40,6 +40,8 @@ GPT-6.1 Solを基本に使い、やる内容がほぼ決まっている作業は
 
 課題・対応予定・リリース運用の共通観点と統合・後追い修正の判断原則は[開発・review・統合](docs/guides/development.md)、読む条件は[`AGENTS.md`](AGENTS.md)が正本である。プロジェクト固有の具体化は各repositoryの運用文書、個々の課題の予定・状態はそこで選んだ管理先が担う。以下は本repositoryでそれらの指示を変更・配置する際の保守手順と検証ケースであり、本repository自身のMilestone採用や対応バージョンを決定するものではない。
 
+SessionFolderのreview結果・対応管理も[同guide](docs/guides/development.md#sessionfolderのreview記録と対応管理)を正本とする。[review template](templates/review.md)は任意の記載例であり、保存指定を含むプロンプトの利用は前提にしない。変更時はAGENTS.mdの読込契機・記録権限、guide、template、`session-graph` Skillの責務を揃える。指摘ゼロと中断・未確認、修正済み・未検証、再開時の再読、後追いの登録済み／未登録、read-onlyと記録禁止を必要な範囲で確認し、実施結果はSessionFolderのreview記録等へ残す。新しい管理基盤や恒久testは設けない。
+
 ### 設計判断と文書の更新
 
 共通の判断方法、文書の更新・保存、リリースノートのリンク規則は[設計判断・文書化](docs/guides/design-decisions.md)に置く。配布元の案内やリリースノートへ共通ルール本文を重複させず、正本を更新する。
