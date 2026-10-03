@@ -1,8 +1,8 @@
 flowchart TB
     %% 架空の説明例。Character・役割・状態・参照先は実作業の事実ではない。
     NOW["共有の現在地: 設定保存の修正<br/>架空例<br/>詳細: settings-save.mmd"]
-    NOA["胡桃のあ / Main<br/>指摘対応中<br/>修正後検証は未実施"]:::active
-    HINA["橘ひなの / Auxiliary<br/>レビュー完了<br/>対象: 指摘対応前の差分"]:::done
+    NOA["胡桃のあ<br/>指摘対応中<br/>修正後検証は未実施"]:::active
+    HINA["橘ひなの<br/>レビュー完了<br/>対象: 指摘対応前の差分"]:::done
     ACCEPT["統合判断: 保留<br/>指摘対応・修正後検証待ち"]:::pending
     NOW -->|実装担当の現在地| NOA
     NOW -->|レビュー担当の完了範囲| HINA
