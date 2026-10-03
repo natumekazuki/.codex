@@ -1,12 +1,13 @@
 flowchart TB
-    %% 架空の説明例。数値・状態・参照先を実作業の事実へ置き換える。
-    NOW["現在の話題: 環境整理<br/>承認範囲の削除・確認済み"]:::active
-    CLEANUP["空き容量: 60 GiB<br/>80 GiBとの差は受入未決定<br/>詳細: storage-cleanup.mmd"]:::pending
-    RELEASE["リリース: 公開済み<br/>整理の受入待ちで再開しない<br/>詳細: release.mmd"]:::done
-    NOW -->|判断経緯・未決定| CLEANUP
-    CLEANUP -->|公開物の保持範囲は依存| RELEASE
-    click CLEANUP "storage-cleanup.mmd" "環境整理の詳細"
-    click RELEASE "release.mmd" "公開と保持範囲"
+    %% 架空の説明例。Character・役割・状態・参照先は実作業の事実ではない。
+    NOW["共有の現在地: 設定保存の修正<br/>架空例<br/>詳細: settings-save.mmd"]
+    NOA["胡桃のあ / Main<br/>指摘対応中<br/>修正後検証は未実施"]:::active
+    HINA["橘ひなの / Auxiliary<br/>レビュー完了<br/>対象: 指摘対応前の差分"]:::done
+    ACCEPT["統合判断: 保留<br/>指摘対応・修正後検証待ち"]:::pending
+    NOW -->|実装担当の現在地| NOA
+    NOW -->|レビュー担当の完了範囲| HINA
+    NOW -->|共有話題の未完了| ACCEPT
+    click NOW "settings-save.mmd" "主体・対象範囲・根拠の詳細"
     classDef active fill:#e6f0ff,stroke:#2866ad,color:#111,stroke-width:3px
     classDef pending fill:#fff1cc,stroke:#806000,color:#111
     classDef done fill:#e5f4e8,stroke:#32703f,color:#111
