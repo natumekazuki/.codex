@@ -22,7 +22,7 @@
 
 | 作業・読むタイミング | 必須参照 |
 | --- | --- |
-| 課題・対応予定の確認・登録・変更・完了判断前、開発の完了条件を決める時、実装変更着手前、review開始前、リリース範囲の確定・統合・公開判断前 | 開発・review・統合: `~/.codex/docs/guides/development.md`と、対象repositoryの`README.md`にある管理先・リリース境界等の関連節、または同repositoryのAGENTS.mdが明示する運用文書。実装を伴わない課題管理にも適用し、互換性対象の契約を変更する前にも確認する |
+| 課題・対応予定の確認・登録・変更・完了判断前、開発の完了条件を決める時、実装変更着手前、review開始・結果確認・対応開始／再開・完了判断前、リリース範囲の確定・統合・公開判断前 | 開発・review・統合: `~/.codex/docs/guides/development.md`と、対象repositoryの`README.md`にある管理先・リリース境界等の関連節、または同repositoryのAGENTS.mdが明示する運用文書。SessionFolderのreview記録・対応管理、実装を伴わない課題管理にも適用し、互換性対象の契約を変更する前にも確認する |
 | 調査・設計・実装・reviewで共有判断の不足・矛盾を検出した時、共有方針の新設・変更や、それに伴う現行説明の更新・統合を判断する時 | 設計判断・文書化: `~/.codex/docs/guides/design-decisions.md`。文書作成の明示依頼を待たず、単なる設計書の不在を毎回監査する工程にはしない |
 | Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-onlyサブエージェント審査は必須 |
 | ユーザー向けUIの設計・実装開始前、変更後の確認時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
@@ -36,7 +36,7 @@
 - Browser Use（ブラウザー専用の操作手段によるタブ内の閲覧・操作・描画確認）は、依頼の範囲内であれば使用の明示指示や追加の使用許可を求めず利用できる。同じtoolやpluginが両方を提供していても、名称ではなく操作対象と手段で区別する。デスクトップ操作手段でブラウザーを操作する場合はComputer Useとして扱う。
 - ブラウザーを使う描画確認は原則headless／非表示で行い、ユーザーの画面へウインドウやタブを出さない。表示の明示依頼がある場合を除き、可視表示が必要なら理由を説明して事前に了承を得る。非表示であることを理由に、必要な実描画・操作・スクリーンショットの確認を省略しない。
 - Browser Useの使用許可は、個々の操作への承認を代替しない。read-only依頼の境界、外部write・購入・破壊的操作等の承認条件、runtime・サイト・管理者policyの権限制御は引き続き守る。
-- 調査・説明・review・計画の依頼はread-onlyとする。変更依頼は依頼範囲のlocal変更、非破壊的な検証、task／feature branchへの通常の追加commitを含む。 `session-graph`の対象では、指定SessionFolderの共有記録と更新に必要な自分の一時ファイルの操作だけを許容する。記録を含む変更禁止の明示指示とruntime権限は優先し、ソース変更・外部writeの許可へ広げない。
+- 調査・説明・review・計画の依頼はread-onlyとする。変更依頼は依頼範囲のlocal変更、非破壊的な検証、task／feature branchへの通常の追加commitを含む。read-only依頼でも、提供されたSessionFolder内の`session-graph`対象の共有記録と、開発・review・統合guideが定めるreview結果・対応状況の記録の作成・更新、およびそれに必要な自分の一時ファイルの操作は許容する。記録を含む変更禁止の明示指示とruntime権限は優先し、ソース変更・外部writeの許可へ広げない。
 - 変更依頼では、必要な修正と検証が完了したら、task／feature branch上の依頼範囲の変更をstageし、通常の追加commitまで行う。commitしない旨の明示指示がある場合は従う。ユーザーの無関係な未コミット・staged変更は含めない。
 - 外部write、購入、破壊的操作、default／main／protected branchへのcommit、履歴改変、push、依頼範囲の実質的な拡張は、操作・対象・scopeへの明示承認を要する。現在の会話で承認済みの操作を、文言や書式の違いだけで再確認しない。下記WithMate操作の継続的な許可は維持する。
 - ユーザーの未コミット・staged変更を保護し、無断の上書き、巻き戻し、stage、clean、無関係な変更の混入をしない。sandbox、管理者policy、対象repositoryの明示契約を弱めない。
