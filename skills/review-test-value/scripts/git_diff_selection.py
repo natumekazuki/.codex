@@ -432,6 +432,24 @@ def _retained_declaration_ranges(
     ]
 
 
+def _retained_declaration_is_closing_only(
+    record: dict[str, Any], hunks: tuple[DiffHunk, ...]
+) -> bool:
+    retained_lines = [
+        text
+        for line, text in enumerate(
+            record["source_text"].splitlines(), record["source"]["declaration_start_line"]
+        )
+        if not any(
+            hunk.old_count and hunk.old_start <= line <= hunk.old_end
+            for hunk in hunks
+        )
+    ]
+    return bool(retained_lines) and all(
+        not text.strip(" \t\r\n})];") for text in retained_lines
+    )
+
+
 def _build_transitions(
     item: ChangedFile,
     before_records: Sequence[dict[str, Any]],
@@ -462,6 +480,9 @@ def _build_transitions(
             <= hunk.old_end
         ]
         retained_ranges = _retained_declaration_ranges(before, item.hunks)
+        closing_only = bool(opening_hunks and retained_ranges) and (
+            _retained_declaration_is_closing_only(before, item.hunks)
+        )
         projected_start = _map_old_declaration_start_to_new(
             source["declaration_start_line"], item.hunks
         )
@@ -494,6 +515,10 @@ def _build_transitions(
                 for hunk in item.hunks
             )
         ]
+        if closing_only and not content_candidates and len(replacement_hunk_candidates) > 1:
+            # Shared closers alone cannot disambiguate a multi-test rewrite.
+            position_candidates = []
+            replacement_hunk_candidates = []
         if opening_hunks and retained_ranges:
             # A deleted opening can project onto the next test. Unchanged
             # lines must still belong to the same current declaration.
@@ -539,12 +564,15 @@ def _build_transitions(
 
         matched = candidate_sets[0][0] if candidate_sets else None
         if matched is None and not fully_replaced:
-            if opening_hunks and not any(
-                hunk.new_start
-                <= after["source"]["declaration_start_line"]
-                < hunk.new_start + hunk.new_count
-                for hunk in opening_hunks
-                for after in after_records
+            if closing_only or (
+                opening_hunks
+                and not any(
+                    hunk.new_start
+                    <= after["source"]["declaration_start_line"]
+                    < hunk.new_start + hunk.new_count
+                    for hunk in opening_hunks
+                    for after in after_records
+                )
             ):
                 transitions.append({"kind": "DELETED", "before": before, "after": None})
             else:

@@ -1442,6 +1442,102 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         self.assertEqual(result["diagnostics"], [])
 
     # @test-value v2
+    # kind = "contract"
+    # claim = "削除testの閉じ行だけが対応済みの存続test内へ投影されても削除元と正しい存続対応を保持する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "閉じ行を存続証拠にして別の旧recordの対応先を奪うか、候補消費後に対応不能として抽出を止める"
+    # observable = "Git抽出CLIのexit、diagnostics、DELETED.beforeとSURVIVEDの旧新source、testsとafter集合"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # impact = "削除と存続が混在する差分の必須価値審査を停止させるか、削除前testの審査証拠を失う"
+    # distinction = "実Git差分で閉じ行間の本文追加と既対応候補を組み合わせるため、parserや型検査と隣接閉じ行testでは代替できない"
+    # @end-test-value
+    def test_git_mode_deletes_closing_lines_projected_into_matched_survivor(self) -> None:
+        kept_before = 'test("kept", () => {\n  oldForeground();\n});\n'
+        removed = 'test("removed", () => {\n  if (oldBinding) {\n    redact();\n  }\n});\n'
+        kept_after = (
+            'test("kept", async () => {\n'
+            '  await foreground();\n'
+            '  if (nativeResult) {\n'
+            '    assert.equal(result(), true);\n'
+            '  }\n'
+            '  assert.equal(auditCount(), 1);\n'
+            '});\n'
+        )
+        path = "tests/owned-closing.test.ts"
+        self.write(path, metadata_block("//") + kept_before + removed)
+        base = self.initialize_git()
+        self.write(path, metadata_block("//") + kept_after)
+        diff = self.git("diff", "--unified=0", base)
+        self.assertIn('-test("removed",', diff)
+        self.assertNotIn("-  }\n", diff)
+        self.assertEqual(diff.count("\n-});\n"), 1)
+
+        working = self.extract_git(base, "typescript")
+        self.git("add", path)
+        staged = self.extract_git(base, "typescript", "--staged")
+        self.git("commit", "--quiet", "-m", "replace foreground and delete binding test")
+        committed = self.extract_git(base, "typescript", "--head", self.git("rev-parse", "HEAD"))
+        for mode, (result, status, stderr) in {"working": working, "staged": staged, "head": committed}.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                self.assertEqual(result["diagnostics"], [])
+                self.assertCountEqual([t["kind"] for t in result["transitions"]], ["DELETED", "SURVIVED"])
+                deleted = next(t for t in result["transitions"] if t["kind"] == "DELETED")
+                survived = next(t for t in result["transitions"] if t["kind"] == "SURVIVED")
+                self.assertEqual(deleted["before"]["source"]["symbol"], "removed")
+                self.assertEqual(deleted["before"]["source_text"], removed)
+                self.assertIsNone(deleted["before"]["metadata"])
+                self.assertIsNone(deleted["after"])
+                self.assertEqual(survived["before"]["source_text"], kept_before)
+                self.assertEqual(survived["after"]["source_text"], kept_after)
+                self.assertEqual(result["tests"], [survived["after"]])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "閉じ行のみ残る旧宣言の置換hunkに複数の新宣言があっても削除証拠を保持し、不正な削除元metadataは拒否する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "閉じ行のみで旧宣言を新testへ誤対応するか、対応不能で停止するか、削除分類により不正metadataまで黙認する"
+    # observable = "Git抽出CLIのexit、diagnostics、DELETED.before、ADDED.afterとtests"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # impact = "新規testと削除testの独立価値審査を止めるか、不正metadataを含む差分を成功扱いする"
+    # distinction = "閉じ行のみの一対多置換を実Git差分で作り、不正metadataを対照入力にする小さなfixtureで失敗境界も守る"
+    # @end-test-value
+    def test_git_mode_deletes_closing_only_record_among_multiple_replacements(self) -> None:
+        removed = 'test("removed", () => {\n  if (oldBinding) {\n    redact();\n  }\n});\n'
+        added = metadata_block("//") + 'test("added", () => {\n  initialize();\n});\n'
+        other = metadata_block("//") + 'test("other", () => {\n  if (newBinding) {\n    expose();\n  }\n});\n'
+        for valid in (True, False):
+            with self.subTest(valid=valid), tempfile.TemporaryDirectory() as tmp:
+                self.root = Path(tmp)
+                path = "tests/replaced-closing.test.ts"
+                metadata = metadata_block("//").replace("// ", "//")
+                if not valid:
+                    metadata = metadata.replace('scope = "payment-api"', 'scope = ""')
+                self.write(path, metadata + removed)
+                base = self.initialize_git()
+                self.write(path, added + other)
+                diff = self.git("diff", "--unified=0", base)
+                self.assertEqual(diff.count("\n@@"), 1)
+                self.assertIn('-test("removed",', diff)
+                self.assertIn('+test("added",', diff)
+                self.assertIn('+test("other",', diff)
+                self.assertNotIn("-  }\n", diff)
+                result, status, stderr = self.extract_git(base, "typescript")
+                self.assertEqual(status, 0 if valid else 1, (stderr, result.get("diagnostics")))
+                self.assertEqual([d["code"] for d in result["diagnostics"]], [] if valid else ["TEST_VALUE_SCHEMA_ERROR"])
+                self.assertCountEqual([t["kind"] for t in result["transitions"]], ["DELETED", "ADDED", "ADDED"])
+                deleted = next(t for t in result["transitions"] if t["kind"] == "DELETED")
+                self.assertEqual(deleted["before"]["source"]["symbol"], "removed")
+                self.assertEqual(deleted["before"]["source_text"], removed)
+                self.assertIsNone(deleted["after"])
+                self.assertEqual([r["source"]["symbol"] for r in result["tests"]], ["added", "other"])
+                self.assertEqual(result["tests"], [t["after"] for t in result["transitions"] if t["after"]])
+
+    # @test-value v2
     # kind = "regression"
     # claim = "削除testのmetadata先頭だけが後続testと共通でも旧recordをDELETEDとして保持する"
     # oracle = { type = "issue", ref = "natumekazuki/.codex#90" }
