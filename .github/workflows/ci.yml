@@ -96,10 +96,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Smoke test implementation restraint hook
+      - name: Test Windows hook commands and stdin contracts
         shell: pwsh
-        run: |
-          $context = ./hooks/implementation-restraint.ps1 | Out-String
-          if ([string]::IsNullOrWhiteSpace($context)) {
-            throw 'Implementation restraint hook returned no context.'
-          }
+        run: ./hooks/test-windows-launch.ps1
