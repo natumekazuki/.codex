@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/implementation-restraint.ps1\")'",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/implementation-restraint.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (& { if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('CODEX_HOME'))) { Join-Path ([Environment]::GetEnvironmentVariable('USERPROFILE')) '.codex' } else { [Environment]::GetEnvironmentVariable('CODEX_HOME') } }) 'hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Applying implementation restraint"
           }
@@ -20,7 +20,7 @@
           {
             "type": "command",
             "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/implementation-restraint.ps1\")'",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/implementation-restraint.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (& { if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('CODEX_HOME'))) { Join-Path ([Environment]::GetEnvironmentVariable('USERPROFILE')) '.codex' } else { [Environment]::GetEnvironmentVariable('CODEX_HOME') } }) 'hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Applying implementation restraint"
           }
@@ -34,7 +34,7 @@
           {
             "type": "command",
             "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/implementation-restraint.ps1\")'",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/implementation-restraint.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (& { if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('CODEX_HOME'))) { Join-Path ([Environment]::GetEnvironmentVariable('USERPROFILE')) '.codex' } else { [Environment]::GetEnvironmentVariable('CODEX_HOME') } }) 'hooks/implementation-restraint.ps1')\"",
             "timeout": 5,
             "statusMessage": "Restoring implementation restraint"
           }
@@ -48,7 +48,7 @@
           {
             "type": "command",
             "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command '$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $HOME \".codex\" } else { $env:CODEX_HOME }; & (Join-Path $codexHome \"hooks/subagent-fork-default.ps1\")'",
-            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"$codexHome = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOME)) { Join-Path $env:USERPROFILE '.codex' } else { $env:CODEX_HOME }; & (Join-Path $codexHome 'hooks/subagent-fork-default.ps1')\"",
+            "commandWindows": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (& { if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('CODEX_HOME'))) { Join-Path ([Environment]::GetEnvironmentVariable('USERPROFILE')) '.codex' } else { [Environment]::GetEnvironmentVariable('CODEX_HOME') } }) 'hooks/subagent-fork-default.ps1')\"",
             "timeout": 5,
             "statusMessage": "Checking subagent model and history"
           }
