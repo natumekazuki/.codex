@@ -1,0 +1,22 @@
+flowchart TB
+    %% 架空の説明例。r2は確認対象の版名であり、実行証跡ではない。
+    subgraph COMPARISON["比較資料の整理：担当A"]
+        R_compare["要求: 3案を2観点で比較<br/>各案の利点・制約を個別に示す"]
+        C_scope["対象: 比較資料だけ<br/>参照元の資料は変更しない<br/>採用案・実施計画は決めない<br/>未確認の利点・制約を補わない"]
+        D_previous["置換前: 1案の実施手順"]:::past
+        D_current["採用: 3案の利点・制約を対応<br/>採用判断はユーザーが行う"]
+        I_compare["比較表へ訂正・保存済み"]:::done
+        V_compare["r2の保存形式・再読込一致を確認"]:::done
+        Q_actual["未実施: 参照元の事実確認・各案の試行"]:::pending
+        E_compare["成果物名: comparison.md"]
+    end
+    I_compare -->|実現する要求| R_compare
+    I_compare -->|適用範囲と制約| C_scope
+    I_compare -->|採用した整理方法| D_current
+    D_current -->|案を選ぶ資料に実施手順は合わないため置換| D_previous
+    V_compare -->|確認対象| I_compare
+    I_compare -->|確認の限界| Q_actual
+    I_compare -->|保存した成果物| E_compare
+    classDef done fill:#e5f4e8,stroke:#32703f,color:#111
+    classDef past fill:#eeeeee,stroke:#666666,color:#111
+    classDef pending fill:#fff1cc,stroke:#806000,color:#111

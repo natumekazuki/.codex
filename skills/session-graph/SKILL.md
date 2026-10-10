@@ -13,7 +13,7 @@ description: SessionFolderが提供された開発・調査・設計・reviewで
 
 - 対象は、SessionFolderが提供された開発・調査・設計・review。雑談や単発の一般説明へ記録を強制しない。対象作業中の訂正・追加条件は短い発言でも対象。
 - runtimeが通知した本Skillの実pathから読む。保存先は現在のセッションへ明示的に提供されたSessionFolderの絶対pathから解決した`SessionFolder/session-graph/`。Workspace、thread ID、配布元checkout、`CODEX_HOME`から推測しない。
-- 同フォルダーの`index.mmd`を入口にし、独立して読取・追跡・更新する責務が混在する場合に、話題を`storage-cleanup.mmd`等の意味の分かる名前で分ける。読込範囲を絞れる効果と、参照・呼出し・更新対象が増える負担を比べ、一貫した話題を小刻みに分けない。小さい関連話題は同じ図のsubgraphでよい。Character別・セッション別・ターン別・日付別には分割せず、多数の空図の先行作成、ファイル数・ノード数・文字数の一律上限は設けない。
+- 同フォルダーの`index.mmd`を入口にし、独立して読取・追跡・更新する責務が混在する場合に、話題を`instruction-update.mmd`等の意味の分かる名前で分ける。読込範囲を絞れる効果と、参照・呼出し・更新対象が増える負担を比べ、一貫した話題を小刻みに分けない。小さい関連話題は同じ図のsubgraphでよい。Character別・セッション別・ターン別・日付別には分割せず、多数の空図の先行作成、ファイル数・ノード数・文字数の一律上限は設けない。
 - 共有記録は入口と話題図の集合であり、物理ファイル1つという意味ではない。Graphと同じ情報を持つJSON／Markdownの別台帳、人向けとAI向けの二重管理は作らない。reviewの詳細・指摘別の対応状況は下表の結果文書を正本とし、Graphは要約と参照を担う。図を描画したプレビュー画像は再生成可能な表示結果であり正本ではない。
 - 初回の未作成と、再開時の消失・破損・読込失敗を区別する。期待した記録がなければ提供経路と復元を確認し、空図や別Folderで代用しない。既存の単一図がある場合は[移行・配置の確認](references/validation.md#既存記録の移行)に従い、未移行を未作成とみなさない。
 - 共通AGENTS.mdの許可範囲で記録と自分の更新用一時ファイルだけを操作する。記録は実装・外部write・破壊的操作の承認ではない。変更禁止の明示指示とruntime権限を優先する。他セッションの図や利用先repositoryの規約を一括変更しない。
@@ -81,9 +81,9 @@ tool callごとではなく、要求・判断材料・状態の変化を区切�
 
 ## 図と関連先の表し方
 
-UTF-8のMermaid `flowchart`をコードフェンスなしで保存する。[共有入口](assets/index.mmd)と[主体・確認範囲の例](assets/settings-save.mmd)を参照し、条件・判断変更理由・確認の限界を整理する時は[CSV対応表の例](assets/csv-map.mmd)、操作範囲が変わる経緯には[環境整理の例](assets/storage-cleanup.mmd)も使える。例は架空の説明用であり、Character・役割・要求・状態を実作業へコピーしたり、ノード数・レイアウトの標準形にしたりしない。
+UTF-8のMermaid `flowchart`をコードフェンスなしで保存する。[共有入口](assets/index.mmd)と[主体・確認範囲の例](assets/instruction-update.mmd)を参照し、条件・判断変更理由・確認の限界を整理する時は[比較資料の例](assets/comparison.mmd)、操作範囲が変わる経緯には[説明更新の範囲変更の例](assets/scope-change.mmd)も使える。例は架空の説明用であり、Character・役割・要求・状態を実作業へコピーしたり、ノード数・レイアウトの標準形にしたりしない。
 
-- 要求`R_範囲`、判断`D_削除範囲`、作業`I_削除`、検証`V_容量`、未解決`Q_受入`等の安定IDを使う。ノードは、ひとまとまりの要求・判断・作業・確認・未解決を追える短い単位にする。まとまりのある条件は同じノードやsubgraphに置いてよく、一文ごとに機械的にノード化しない。機能・操作ごとに近くにまとめ、全クラス・全testの写しを作らない。
+- 要求`R_対象`、判断`D_方針`、作業`I_更新`、検証`V_確認`、未解決`Q_受入`等の安定IDを使う。ノードは、ひとまとまりの要求・判断・作業・確認・未解決を追える短い単位にする。まとまりのある条件は同じノードやsubgraphに置いてよく、一文ごとに機械的にノード化しない。機能・操作ごとに近くにまとめ、全クラス・全testの写しを作らない。
 - 辺には「実現」「検証」「置換理由」「判断の正本」「後続対応」「実装対象」「検証根拠」等の意味を付ける。依存は「依存する側 → 必要な側」とし、実行順と混同しない。話題をまたぐ依存にも相手の図名と対象を見えるノードで示す。
 - 共通の対象範囲・操作境界は、どこに適用するか読めるノードやsubgraphへ置く。各作業で同じ制約・未実施一覧を反復せず、関係は意味付き辺でも表す。ただし段階によって権限・対象・結果が違う場合は区別を残す。
 - 状態は短い文字と装飾を併用する。実装済み・未検証と検証成功を区別し、色だけに頼らない。重要な否定・例外・数値、判断変更と理由、主体、確認対象、未確認、正本への参照を短文化で落としたりコメントだけに隠したりしない。文字数やノード数を人／AIへ固定配分しない。
@@ -100,7 +100,7 @@ UTF-8のMermaid `flowchart`をコードフェンスなしで保存する。[共�
 # $skillRoot: runtimeが通知した本Skillの絶対pathのディレクトリ
 # $folder: 提供済みSessionFolderの絶対path
 python -X utf8 "$skillRoot/scripts/session_graph.py" snapshot --session-folder "$folder" --graph index.mmd
-python -X utf8 "$skillRoot/scripts/session_graph.py" snapshot --session-folder "$folder" --graph storage-cleanup.mmd
+python -X utf8 "$skillRoot/scripts/session_graph.py" snapshot --session-folder "$folder" --graph instruction-update.mmd
 ```
 
 返された`content`が対象の最新版、`snapshot_path`が読込内容を保持する一時ファイル。snapshot JSONは正本でなく比較用であり編集しない。`exists: false`を初回作成に使うのは未作成と確認できた場合だけとする。
@@ -109,7 +109,7 @@ python -X utf8 "$skillRoot/scripts/session_graph.py" snapshot --session-folder "
 2. 読み取った対象と同じ`--graph`、そのsnapshot、別のdraftを指定して保存する。
 
 ```powershell
-python -X utf8 "$skillRoot/scripts/session_graph.py" save --session-folder "$folder" --graph storage-cleanup.mmd `
+python -X utf8 "$skillRoot/scripts/session_graph.py" save --session-folder "$folder" --graph instruction-update.mmd `
   --snapshot "<返されたsnapshot_path>" --input "<自分のdraftの絶対path>"
 ```
 

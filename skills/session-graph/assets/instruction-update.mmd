@@ -1,10 +1,10 @@
 flowchart TB
     %% 架空の説明例。Character・役割・結果・根拠pathは実作業の事実ではない。
-    R_request["架空のユーザー要求: 設定保存の不具合を修正<br/>採用判断: 既存の保存処理を修正"]
+    R_request["架空のユーザー要求: 説明例の不足を直す<br/>採用判断: 既存の例に条件を明示"]
 
     I_patch["担当A: r1初回修正済み"]:::done
     V_review["担当B: r1静的review完了<br/>範囲: 差分のみ・ソース変更なし<br/>実行確認なし"]:::done
-    F_empty["r1の指摘: 空文字で旧値が残る"]
+    F_condition["r1の指摘: 例に除外条件がない"]
     E_report["結果の正本: review.md<br/>架空のレビュー結果"]
 
     subgraph REVISION_2["r2: 担当Aの局所修正"]
@@ -18,8 +18,8 @@ flowchart TB
     I_patch -->|実現する要求と方針| R_request
     V_review -->|確認対象| I_patch
     V_review -->|結果の所在| E_report
-    F_empty -->|検出元| V_review
-    I_follow -->|対応根拠| F_empty
+    F_condition -->|検出元| V_review
+    I_follow -->|対応根拠| F_condition
     V_local -->|確認対象| I_follow
     Q_r2 -->|未確認の対象| I_follow
     Q_accept -->|統合・公開の対象| I_follow

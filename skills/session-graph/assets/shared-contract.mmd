@@ -1,0 +1,14 @@
+flowchart TB
+    %% 架空の説明例。参照先は本Skillの既存契約であり、実作業の承認・完了証跡ではない。
+    R_keep["共通条件: 指示の明確化だけ<br/>保存手順・操作権限は維持"]
+    D_update["採用: 既存の手順と権限を変えず説明を更新"]
+    I_update["説明の更新: 完了"]:::done
+    E_contract["契約の正本: ../SKILL.md<br/>共有ファイルの保存 / 入口と保存先"]
+    Q_follow["後続判断: 利用先への反映<br/>未実施"]:::pending
+    D_update -->|適用する共通条件| R_keep
+    R_keep -->|契約の正本| E_contract
+    D_update -->|実施結果| I_update
+    I_update -->|今回の完了に含めない| Q_follow
+    click E_contract "../SKILL.md" "保存手順と操作権限の正本"
+    classDef done fill:#e5f4e8,stroke:#32703f,color:#111
+    classDef pending fill:#fff1cc,stroke:#806000,color:#111
