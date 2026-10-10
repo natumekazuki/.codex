@@ -5,7 +5,7 @@ description: SessionFolderが提供された開発・調査・設計・reviewで
 
 # Session Graph
 
-**指示を受ける → 入口と関連図の最新版を読む → 条件を記録・照合する → 作業する → 結果を同期する。**
+**指示を受ける → 入口と関連図の最新版を読む → 条件を記録・照合する → 作業する → 結果を同期する → 不要になった自分の一時ファイルを片付ける。**
 
 人が要求・判断の変化・現在地・未確認を追える図を主用途とし、その同じ記録からエージェントが制約・理由・確認範囲を復元できるようにする。記録すべき意味を残すことと、作業報告の文章をそのまま箱へ保存することを区別し、保存する情報量と、一度に読む・表示する範囲を分ける。同じWorkspaceとSessionFolderを共有するセッションが複数同時に存在し得ることを前提に、各セッションが共通ルールで読み書きする。共有記録でも判断・作業・結果の主体は同一視しない。
 
@@ -105,7 +105,7 @@ python -X utf8 "$skillRoot/scripts/session_graph.py" snapshot --session-folder "
 
 返された`content`が対象の最新版、`snapshot_path`が読込内容を保持する一時ファイル。snapshot JSONは正本でなく比較用であり編集しない。`exists: false`を初回作成に使うのは未作成と確認できた場合だけとする。
 
-1. 最新内容の既存要求・他者の状態と帰属・根拠を保ち、自分の変更だけを加えたdraftをSessionFolder直下の衝突しない一時名（UUID等）で作る。条件抽出・推論・描画確認はロック外で行う。
+1. 最新内容の既存要求・他者の状態と帰属・根拠を保ち、自分の変更だけを加えたdraftをSessionFolder直下の`.session-graph-draft-<UUID等>.mmd`で作る。条件抽出・推論・描画確認はロック外で行う。
 2. 読み取った対象と同じ`--graph`、そのsnapshot、別のdraftを指定して保存する。
 
 ```powershell
@@ -113,7 +113,16 @@ python -X utf8 "$skillRoot/scripts/session_graph.py" save --session-folder "$fol
   --snapshot "<返されたsnapshot_path>" --input "<自分のdraftの絶対path>"
 ```
 
-3. 保存結果を確認し、自分のsnapshotとdraftだけを削除する。続けて編集する時は新しいsnapshotを取得する。他セッションの一時ファイルを一括削除しない。
+3. 保存結果と必要な整合確認を終え、再適用に使わなくなった自分のsnapshotとdraftだけを`cleanup`で削除する。読取のみ・`changed: false`でも不要なsnapshotを片付け、読取のみなら`--input`を省略する。保存失敗・競合の再適用に必要な入力は保持し、続けて編集する時は新しいsnapshotを取得する。
+
+```powershell
+python -X utf8 "$skillRoot/scripts/session_graph.py" cleanup --session-folder "$folder" --graph instruction-update.mmd `
+  --snapshot "<自分のsnapshot_path>" --input "<自分のdraftの絶対path>"
+```
+
+`cleanup`は明示したSessionFolder直下のsnapshot JSONと上記命名のdraftだけを対象にし、既存snapshotの対象一致とdraftの形式を確認してから削除する。正本・lock・画像は対象外で、フォルダーの走査や他セッションの一時ファイルの一括削除はしない。名前だけで所有者を証明する機能ではないため、指定するのは自分が使った不要なファイルに限る。
+
+削除結果は`deleted`・`missing`・`errors`で返り、未削除があればexit `2`となる。一部削除後の再実行は、既にない対象を`missing`として扱う。削除失敗を保存失敗へ読み替えず、保存結果と未削除の対象・理由を分けて報告する。中断で残った入力も、自分のものと特定できて不要になった時だけ片付ける。操作権限の拒否を別の削除手段で迂回しない。
 
 exit `0`は成功、`3`は原文の競合、`2`は入出力・形式・対象不一致・ロック待ち等の失敗。同内容の保存は`changed: false`で置換しない。競合時は最新を読み、自分の変更だけ再適用する。相手の訂正と矛盾したら未解決として扱い、自動的に片方を捨てない。失敗を成功扱いせず、未記録の指示に依存する作業だけ保留する。
 

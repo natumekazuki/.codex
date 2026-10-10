@@ -25,6 +25,7 @@ from typing import Iterator
 GRAPH_DIR = "session-graph"
 LOCK_NAME = ".session-graph.lock"
 SNAPSHOT_PREFIX = ".session-graph-snapshot-"
+DRAFT_PREFIX = ".session-graph-draft-"
 RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
                   *(f"LPT{i}" for i in range(1, 10)),
                   *(f"COM{i}" for i in "¹²³"), *(f"LPT{i}" for i in "¹²³")}
@@ -59,7 +60,7 @@ def regular_path(path: Path) -> None:
         raise ValueError(f"Expected a regular file, not a link or directory: {path}")
 
 
-def graph_path(folder: Path, name: str) -> Path:
+def graph_path(folder: Path, name: str, *, create_directory: bool = True) -> Path:
     if (not isinstance(name, str) or not name.endswith(".mmd")
             or name in (".mmd", "..mmd") or name.endswith(" .mmd")
             or any(char in name for char in '<>:"/\\|?*')
@@ -70,7 +71,8 @@ def graph_path(folder: Path, name: str) -> Path:
     directory = folder / GRAPH_DIR
     if redirected_path(directory) or (directory.exists() and not directory.is_dir()):
         raise ValueError("Session graph directory must not be a link or file.")
-    directory.mkdir(exist_ok=True)
+    if create_directory:
+        directory.mkdir(exist_ok=True)
     if redirected_path(directory):
         raise ValueError("Session graph directory must not be a link.")
     path = directory / name
@@ -168,6 +170,15 @@ def scratch_path(folder: Path, value: str | Path) -> Path:
     return path
 
 
+def snapshot_content(base: Path, target: Path) -> str | None:
+    record = json.loads(base.read_text(encoding="utf-8"))
+    if (not isinstance(record, dict) or set(record) != {"graph_path", "content"}
+            or record["graph_path"] != str(target)
+            or not (record["content"] is None or isinstance(record["content"], str))):
+        raise ValueError("Snapshot does not belong to the selected session graph.")
+    return record["content"]
+
+
 def save(folder: Path, graph: str, snapshot_path: Path, input_path: Path,
          timeout: float = 5) -> dict:
     folder = session_folder(folder)
@@ -176,12 +187,8 @@ def save(folder: Path, graph: str, snapshot_path: Path, input_path: Path,
     candidate = scratch_path(folder, input_path)
     if base == candidate or not (base.name.startswith(SNAPSHOT_PREFIX) and base.suffix == ".json"):
         raise ValueError("Supply the untouched snapshot and a separate Mermaid draft.")
-    record = json.loads(base.read_text(encoding="utf-8"))
-    if (not isinstance(record, dict) or set(record) != {"graph_path", "content"}
-            or record["graph_path"] != str(path)
-            or not (record["content"] is None or isinstance(record["content"], str))):
-        raise ValueError("Snapshot does not belong to the selected session graph.")
-    expected = None if record["content"] is None else record["content"].encode("utf-8")
+    content = snapshot_content(base, path)
+    expected = None if content is None else content.encode("utf-8")
     data = candidate.read_bytes()
     check_envelope(data)
     # Preparation is outside the lock. The critical section is only compare/save.
@@ -210,9 +217,47 @@ def save(folder: Path, graph: str, snapshot_path: Path, input_path: Path,
     return {"graph_path": str(path), "changed": changed}
 
 
+def cleanup_path(folder: Path, value: Path, prefix: str, suffix: str) -> Path:
+    path = Path(value)
+    if not path.is_absolute():
+        raise ValueError("Scratch file paths must be absolute.")
+    regular_path(path)
+    path = path.resolve(strict=False)
+    if (path.parent != folder or not path.name.startswith(prefix)
+            or path.suffix != suffix or len(path.name) <= len(prefix) + len(suffix)):
+        raise ValueError("Cleanup requires a named generated scratch file directly inside SessionFolder.")
+    return path
+
+
+def cleanup(folder: Path, graph: str, snapshot_path: Path,
+            input_path: Path | None = None) -> dict:
+    folder = session_folder(folder)
+    target = graph_path(folder, graph, create_directory=False)
+    base = cleanup_path(folder, snapshot_path, SNAPSHOT_PREFIX, ".json")
+    candidate = (None if input_path is None else
+                 cleanup_path(folder, input_path, DRAFT_PREFIX, ".mmd"))
+    # Validate every supplied input before deleting any of them. Names restrict
+    # targets, but callers must still identify their own, no-longer-needed files.
+    if base.exists():
+        snapshot_content(base, target)
+    if candidate is not None and candidate.exists():
+        check_envelope(candidate.read_bytes())
+    result = {"deleted": [], "missing": [], "errors": []}
+    for path in ([candidate, base] if candidate is not None else [base]):
+        try:
+            regular_path(path)
+            path.unlink()
+            result["deleted"].append(str(path))
+        except FileNotFoundError:
+            result["missing"].append(str(path))
+        except (OSError, ValueError) as exc:
+            result["errors"].append({"path": str(path), "error": str(exc)})
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("snapshot", "save"))
+    parser.add_argument("command", choices=("snapshot", "save", "cleanup"))
     parser.add_argument("--session-folder", required=True, type=Path)
     parser.add_argument("--graph", required=True)
     parser.add_argument("--snapshot", type=Path)
@@ -221,15 +266,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "save" and (args.snapshot is None or args.input is None):
         parser.error("save requires --snapshot and --input")
+    if args.command == "cleanup" and args.snapshot is None:
+        parser.error("cleanup requires --snapshot; --input is optional")
     if args.command == "snapshot" and (args.snapshot is not None or args.input is not None):
         parser.error("snapshot does not accept --snapshot or --input")
     try:
-        result = (snapshot(args.session_folder, args.graph, args.lock_timeout)
-                  if args.command == "snapshot" else
-                  save(args.session_folder, args.graph, args.snapshot, args.input,
-                       args.lock_timeout))
+        if args.command == "cleanup":
+            result = cleanup(args.session_folder, args.graph, args.snapshot, args.input)
+        else:
+            result = (snapshot(args.session_folder, args.graph, args.lock_timeout)
+                      if args.command == "snapshot" else
+                      save(args.session_folder, args.graph, args.snapshot, args.input,
+                           args.lock_timeout))
         print(json.dumps(result, ensure_ascii=False))
-        return 0
+        return 2 if args.command == "cleanup" and result["errors"] else 0
     except ConflictError as exc:
         print(str(exc), file=sys.stderr)
         return 3
