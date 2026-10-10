@@ -1,11 +1,13 @@
 flowchart TB
     %% 架空の説明例。Character・役割・状態・参照先は実作業の事実ではない。
     NOW["共有の現在地: 設定保存の修正<br/>架空例<br/>詳細: settings-save.mmd"]
-    ACTOR_A["担当A<br/>指摘対応中<br/>修正後検証は未実施"]:::active
-    ACTOR_B["担当B<br/>レビュー完了<br/>対象: 指摘対応前の差分"]:::done
-    ACCEPT["統合判断: 保留<br/>指摘対応・修正後検証待ち"]:::pending
+    ACTOR_A["担当A: r2局所修正完了<br/>局所test確認済み"]:::done
+    ACTOR_B["担当B: r1静的review完了<br/>実行確認なし"]:::done
+    ACTOR_B_OTHER["担当B: 別の作業は進行中"]:::active
+    ACCEPT["未確認: r2 review・全体test・統合・公開"]:::pending
     NOW -->|実装担当の現在地| ACTOR_A
     NOW -->|レビュー担当の完了範囲| ACTOR_B
+    NOW -->|並行する作業| ACTOR_B_OTHER
     NOW -->|共有話題の未完了| ACCEPT
     click NOW "settings-save.mmd" "主体・対象範囲・根拠の詳細"
     classDef active fill:#e6f0ff,stroke:#2866ad,color:#111,stroke-width:3px

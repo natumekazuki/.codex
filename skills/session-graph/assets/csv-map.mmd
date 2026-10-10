@@ -1,0 +1,22 @@
+flowchart TB
+    %% 架空の説明例。r2は確認対象の版名であり、実行証跡ではない。
+    subgraph CSV["メール通知CSVの訂正：担当A"]
+        R_csv["要求: 発生条件→ログ本文の対応表<br/>28行・6列、不具合4種・清掃2種は個別行"]
+        C_scope["対象: メール通知CSVだけ<br/>元CSV・製品ソース・実環境は変更しない<br/>試験手順・合否判定を追加しない<br/>未観測SDK本文を作らない"]
+        D_previous["置換前: 確認方法付き24行"]:::past
+        D_current["採用: 発生条件とログ本文を対応<br/>試験計画はユーザーが作成"]
+        I_csv["対応表へ訂正・保存済み"]:::done
+        V_csv["r2の保存形式・再読込一致を確認"]:::done
+        Q_actual["未実施: 実再現・実配送・Azure収集"]:::pending
+        E_csv["成果物名: mail-log.csv"]
+    end
+    I_csv -->|実現する要求| R_csv
+    I_csv -->|適用範囲と制約| C_scope
+    I_csv -->|採用した整理方法| D_current
+    D_current -->|確認方法と資料の用途が違うため置換| D_previous
+    V_csv -->|確認対象| I_csv
+    I_csv -->|確認の限界| Q_actual
+    I_csv -->|保存した成果物| E_csv
+    classDef done fill:#e5f4e8,stroke:#32703f,color:#111
+    classDef past fill:#eeeeee,stroke:#666666,color:#111
+    classDef pending fill:#fff1cc,stroke:#806000,color:#111
