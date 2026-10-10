@@ -1,0 +1,29 @@
+flowchart TB
+    %% 架空の説明例。要求・承認・確認結果は実作業の事実ではない。
+    R_scope["要求: 承認された説明だけ更新<br/>ソース・設定・操作権限は変更しない"]
+    subgraph first["入口だけの更新"]
+        D_first["置換前: 入口の説明だけ更新<br/>関連する説明例は対象外"]:::past
+        I_first["入口の説明を更新済み"]:::done
+        V_first["当時の確認: 本文と例の説明が不一致"]:::past
+        D_first -->|承認範囲で実施| I_first
+        I_first -->|結果確認| V_first
+    end
+    subgraph additional["説明例の追加承認後"]
+        D_current["採用: 本文と説明例を一緒に更新<br/>対象追加は承認済み"]:::done
+        I_current["本文と説明例を更新済み"]:::done
+        V_current["確認済み: 本文と変更した例は一致"]:::done
+        Q_accept["未決定: 利用先への反映時期<br/>利用先の変更は未承認"]:::pending
+        D_current -->|実施| I_current
+        I_current -->|検証| V_current
+        V_current -->|確認とは別の後続判断| Q_accept
+    end
+    R_scope -->|範囲を限定| D_first
+    V_first -->|説明の不一致を解消するため追加承認・置換| D_current
+    R_contract["維持する共有契約<br/>shared-contract.mmd / R_keep"]
+    E_result["確認結果の正本: review.md<br/>架空の結果文書"]
+    V_current -->|検証根拠| E_result
+    D_current -->|維持する契約に依存| R_contract
+    click R_contract "shared-contract.mmd" "保存手順と操作権限の維持"
+    classDef past fill:#f5f5f5,stroke:#777,color:#333,stroke-dasharray:5 3
+    classDef done fill:#e5f4e8,stroke:#32703f,color:#111
+    classDef pending fill:#fff1cc,stroke:#806000,color:#111

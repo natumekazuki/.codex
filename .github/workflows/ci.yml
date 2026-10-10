@@ -44,6 +44,7 @@ jobs:
           skills/audit-codex-work-quality/scripts/test_audit_history.py
           skills/review-test-value/scripts/test_extract_test_values.py
           skills/session-graph/scripts/test_session_graph.py
+          skills/session-graph/scripts/test_session_graph_cleanup.py
       - name: Compile Python entry points
         run: >-
           python -m py_compile
