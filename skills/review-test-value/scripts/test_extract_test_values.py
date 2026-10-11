@@ -189,11 +189,13 @@ class ExtractTestValuesTests(unittest.TestCase):
             ["TEST_VALUE_MISSING"],
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "空行で隔てたblockはtestへ結合せずMISSINGとUNBOUNDを返す"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "直接隣接しないmetadataをtestへ誤結合する"
+    # fault = "直接隣接しないmetadataをtestへ誤結合する"
+    # observable = "抽出結果のexit status、metadata null、TEST_VALUE_MISSINGとTEST_VALUE_UNBOUND diagnostic"
+    # observation_boundary = "component-behavior"
     # scope = "test-value-binding"
     # lifecycle = "permanent"
     # @end-test-value
@@ -212,11 +214,13 @@ class ExtractTestValuesTests(unittest.TestCase):
             {"TEST_VALUE_MISSING", "TEST_VALUE_UNBOUND"},
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "一つのtestへ隣接する複数metadata blockをDUPLICATEとして拒否する"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "複数blockの一つを恣意的に採用して曖昧な価値情報を通す"
+    # fault = "複数blockの一つを恣意的に採用して曖昧な価値情報を通す"
+    # observable = "抽出結果のexit status、metadata null、TEST_VALUE_DUPLICATE diagnostic"
+    # observation_boundary = "component-behavior"
     # scope = "test-value-binding"
     # lifecycle = "permanent"
     # @end-test-value
@@ -273,11 +277,13 @@ def test_malformed():
             {"TEST_VALUE_PARSE_ERROR", "TEST_VALUE_SCHEMA_ERROR"},
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "oracleの通常tableとdotted keyをSCHEMA_ERRORとして拒否する"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "公開形式外のoracle構文をinline tableとして受理する"
+    # fault = "公開形式外のoracle構文をinline tableとして受理する"
+    # observable = "抽出結果のexit status、各recordのmetadata null、TEST_VALUE_SCHEMA_ERRORとoracle構文message"
+    # observation_boundary = "component-behavior"
     # scope = "test-value-schema"
     # lifecycle = "permanent"
     # @end-test-value
@@ -364,11 +370,13 @@ def test_oracle_table_with_decoy():
             result["diagnostics"][0]["message"],
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "Unicode escapeされたquoted oracle keyを復号してinline tableとして受理する"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "TOML上同値なquoted keyを未知fieldとして誤拒否する"
+    # fault = "TOML上同値なquoted keyを未知fieldとして誤拒否する"
+    # observable = "抽出結果のexit status、空のdiagnostics、metadata.oracle.ref"
+    # observation_boundary = "component-behavior"
     # scope = "test-value-schema"
     # lifecycle = "permanent"
     # @end-test-value
@@ -641,11 +649,13 @@ def test_oracle_table_with_decoy():
             },
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "nested testをUNSUPPORTED、syntax errorをSOURCE_SYNTAX_ERRORとしてrecordなしで返す"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "未対応nested宣言または壊れたsourceを黙って成功扱いする"
+    # fault = "未対応nested宣言または壊れたsourceを黙って成功扱いする"
+    # observable = "抽出結果のexit status、空のtests、SOURCE_SYNTAX_ERRORとTEST_DECLARATION_UNSUPPORTED diagnostic"
+    # observation_boundary = "component-behavior"
     # scope = "python-source-extraction"
     # lifecycle = "permanent"
     # @end-test-value
@@ -693,11 +703,13 @@ def test_oracle_table_with_decoy():
         )
         self.assertNotIn("\r", first["tests"][1]["source_text"])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "文字列内のmarker風textをmetadata comment blockとして扱わない"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "test本文中の文字列を追加metadataとして誤解析する"
+    # fault = "test本文中の文字列を追加metadataとして誤解析する"
+    # observable = "抽出結果のexit status、空のdiagnostics、testsの件数"
+    # observation_boundary = "component-behavior"
     # scope = "python-source-extraction"
     # lifecycle = "permanent"
     # @end-test-value
@@ -721,11 +733,13 @@ def test_oracle_table_with_decoy():
         self.assertEqual(result["diagnostics"], [])
         self.assertEqual(len(result["tests"]), 1)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "public CLIはexit 0でparse可能なJSONと期待recordをstdoutへ返す"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "library経路だけ成功しCLI consumerがJSONを取得できない"
+    # fault = "library経路だけ成功しCLI consumerがJSONを取得できない"
+    # observable = "CLI processのreturncode、stderr、stdoutからparseしたJSONのtest symbolとdiagnostics"
+    # observation_boundary = "public-boundary"
     # scope = "public-cli"
     # lifecycle = "permanent"
     # @end-test-value
@@ -777,11 +791,13 @@ def test_oracle_table_with_decoy():
         self.assertIsNone(result["transitions"])
         self.assertEqual(len(result["tests"]), 1)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "Git modeは変更testだけを選び未変更legacy testを移行対象にしない"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "未変更testのmetadata欠落で差分審査が停止する"
+    # fault = "未変更testのmetadata欠落で差分審査が停止する"
+    # observable = "Git抽出CLIのexit status、空のdiagnostics、testsのsymbol集合と変更後source_text"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1301,11 +1317,13 @@ def test_oracle_table_with_decoy():
                     ["SURVIVED"],
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "改行コード変換と同時に意味変更したtestは審査対象に残す"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "line-ending差分の除外が同じfileのassertion変更まで隠す"
+    # fault = "line-ending差分の除外が同じfileのassertion変更まで隠す"
+    # observable = "working、staged、headでのCLI exit status、空のdiagnostics、選択されたtest symbolと変更後source_text"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # distinction = "改行コードだけの変更ではなくassertionの意味変更を同時に含む"
@@ -1345,11 +1363,13 @@ def test_oracle_table_with_decoy():
                 )
                 self.assertIn("observed() == 2", result["tests"][0]["source_text"])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "metadataだけの変更も対応するtest recordを選択する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "価値コメントの意味変更が審査対象から漏れる"
+    # fault = "価値コメントの意味変更が審査対象から漏れる"
+    # observable = "Git抽出CLIのexit status、testsの件数、抽出metadata.claimの変更後文字列"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1368,11 +1388,13 @@ def test_oracle_table_with_decoy():
         self.assertEqual(len(result["tests"]), 1)
         self.assertIn("idempotency key", result["tests"][0]["metadata"]["claim"])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "working tree比較は未追跡test fileも審査対象に含める"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "新規未追跡testが審査を通らず追加される"
+    # fault = "新規未追跡testが審査を通らず追加される"
+    # observable = "Git抽出CLIのexit status、testsのsymbol集合、TEST_VALUE_MISSING diagnostic"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1392,11 +1414,13 @@ def test_oracle_table_with_decoy():
             ["TEST_VALUE_MISSING"],
         )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "staged modeはworking treeではなくindexのsourceを抽出する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "diff対象と異なるsnapshotの本文をAIへ渡す"
+    # fault = "diff対象と異なるsnapshotの本文をAIへ渡す"
+    # observable = "staged抽出CLIのexit statusとsource_text内のindex側assertionおよびworktree側assertionの不在"
+    # observation_boundary = "public-boundary"
     # scope = "git-snapshot-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1414,11 +1438,13 @@ def test_oracle_table_with_decoy():
         self.assertIn("observed() == 2", result["tests"][0]["source_text"])
         self.assertNotIn("observed() == 3", result["tests"][0]["source_text"])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "head modeは明示commitのsourceを抽出する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "commit審査へ別snapshotの本文が混入する"
+    # fault = "commit審査へ別snapshotの本文が混入する"
+    # observable = "head抽出CLIのexit statusとsource_text内の指定commit側assertionおよびworktree側assertionの不在"
+    # observation_boundary = "public-boundary"
     # scope = "git-snapshot-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1463,11 +1489,13 @@ def test_oracle_table_with_decoy():
         self.assertEqual(result["transitions"], [])
         self.assertEqual(result["diagnostics"], [])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "contract"
     # claim = "解決不能なGit revisionでは部分JSONを返さずinvocation errorにする"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "誤ったbaseで空の審査結果を成功扱いする"
+    # fault = "誤ったbaseで空の審査結果を成功扱いする"
+    # observable = "Git抽出CLIのexit status、stdoutから得たresultの空辞書、stderrのgit command failed message"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1480,11 +1508,13 @@ def test_oracle_table_with_decoy():
         self.assertEqual(result, {})
         self.assertIn("git command failed", stderr)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "working treeのroot外symlinkを読まずSOURCE_OUTSIDE_ROOTにする"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "repository外sourceのtest本文をAI入力へ漏らす"
+    # fault = "repository外sourceのtest本文をAI入力へ漏らす"
+    # observable = "Git抽出CLIのexit status、空のtests、SOURCE_OUTSIDE_ROOT diagnostic、result JSON内の外部test symbolの不在"
+    # observation_boundary = "public-boundary"
     # scope = "git-working-snapshot"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1611,11 +1641,13 @@ def test_oracle_table_with_decoy():
                 )
                 self.assertIsNone(deleted_transition["after"])
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "置換hunkのold側がsurviving testへ属する場合もそのtestを選択する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "削除行の置換先がtest外にあると本文変更を空結果として成功扱いする"
+    # fault = "削除行の置換先がtest外にあると本文変更を空結果として成功扱いする"
+    # observable = "working、staged、headでのCLI exit status、空のdiagnostics、testsのsymbol集合"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1695,11 +1727,13 @@ def test_oracle_table_with_decoy():
                     ["TEST_VALUE_MISSING"],
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "metadataと宣言の間への純挿入もbase側recordから対応testへ投影する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "挿入hunkにold側rangeがなく結合を失ったtestとdiagnosticが審査から消える"
+    # fault = "挿入hunkにold側rangeがなく結合を失ったtestとdiagnosticが審査から消える"
+    # observable = "working、staged、headでのCLI exit status、testsのsymbol集合、TEST_VALUE_MISSING diagnostic"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1738,11 +1772,13 @@ def test_oracle_table_with_decoy():
                     ["TEST_VALUE_MISSING"],
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "先頭decoratorだけを削除したsurviving testをbase側rangeから選択する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "削除anchorへ投影した旧開始行が現開始行と一致せず変更testが審査から消える"
+    # fault = "削除anchorへ投影した旧開始行が現開始行と一致せず変更testが審査から消える"
+    # observable = "working、staged、headでのCLI exit status、空のdiagnostics、testsのsymbol集合"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1780,11 +1816,13 @@ def test_oracle_table_with_decoy():
                     ["test_decorated"],
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "nested Python testの本文変更をUNSUPPORTED diagnosticへ結合する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "未対応宣言の開始行以外の変更を空結果として成功扱いする"
+    # fault = "未対応宣言の開始行以外の変更を空結果として成功扱いする"
+    # observable = "working、staged、headでのCLI exit status、空のtests、TEST_DECLARATION_UNSUPPORTED diagnosticとdiagnosticのfield集合"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -1822,11 +1860,13 @@ def test_oracle_table_with_decoy():
                     {"code", "path", "line", "message"},
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "nested Python testの本文削除を削除anchorからUNSUPPORTED diagnosticへ結合する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "未対応宣言内の削除専用hunkを空結果として成功扱いする"
+    # fault = "未対応宣言内の削除専用hunkを空結果として成功扱いする"
+    # observable = "working、staged、headでのCLI exit status、空のtests、TEST_DECLARATION_UNSUPPORTED diagnostic"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # distinction = "new側rangeが残る置換ではなく本文末尾の削除専用hunkを扱う"
@@ -1915,11 +1955,13 @@ def test_oracle_table_with_decoy():
                     ["TEST_DECLARATION_UNSUPPORTED"],
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "unrelatedなunsupported宣言があってもtest全削除を隣接testへ投影しない"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "別位置のunsupported diagnosticで未変更legacy testを移行対象にする"
+    # fault = "別位置のunsupported diagnosticで未変更legacy testを移行対象にする"
+    # observable = "working、staged、headでのCLI exit status、空のtestsとdiagnostics"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -2007,11 +2049,13 @@ def test_oracle_table_with_decoy():
         self.assertIn("TypeScript adapter", stderr)
         self.assertNotIn("Traceback", stderr)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "regression"
     # claim = "Git属性でbinary指定されたsourceもraw text差分からtestを選択する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # failure_mode = "repositoryのdiff属性により変更testが空結果になる"
+    # fault = "repositoryのdiff属性により変更testが空結果になる"
+    # observable = "working、staged、headでのCLI exit status、空のdiagnostics、testsのsymbol集合"
+    # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
     # @end-test-value
@@ -2042,11 +2086,13 @@ def test_oracle_table_with_decoy():
                     ["test_binary_attribute"],
                 )
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "public CLIはroot外pathをSOURCE_OUTSIDE_ROOTとして内容を抽出しない"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "repository外sourceを許可対象としてAI入力へ取り込む"
+    # fault = "repository外sourceを許可対象としてAI入力へ取り込む"
+    # observable = "CLI processのreturncode、stdout JSONのSOURCE_OUTSIDE_ROOT diagnostic、stdout内のroot絶対pathの不在"
+    # observation_boundary = "public-boundary"
     # scope = "source-root-boundary"
     # lifecycle = "permanent"
     # @end-test-value
@@ -2075,11 +2121,13 @@ def test_oracle_table_with_decoy():
         self.assertEqual(result["diagnostics"][0]["code"], "SOURCE_OUTSIDE_ROOT")
         self.assertNotIn(str(self.root), completed.stdout)
 
-    # @test-value v1
+    # @test-value v2
     # kind = "security"
     # claim = "path modeでもroot外へ解決するsymlinkを拒否して外部test本文を返さない"
     # oracle = { type = "adr", ref = "ADR-0020" }
-    # failure_mode = "字句上root内のsymlinkからrepository外情報を漏らす"
+    # fault = "字句上root内のsymlinkからrepository外情報を漏らす"
+    # observable = "抽出結果のexit status、空のtests、SOURCE_OUTSIDE_ROOT diagnostic"
+    # observation_boundary = "component-behavior"
     # scope = "source-root-boundary"
     # lifecycle = "permanent"
     # @end-test-value
