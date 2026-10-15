@@ -684,7 +684,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "regression"
-    # claim = "TypeScript syntax error時はSOURCE_SYNTAX_ERRORだけを返し部分recordを出さない"
+    # claim = "TypeScript syntax error時はSOURCE_SYNTAX_ERRORを含む診断を返し部分recordを出さない"
     # oracle = { type = "adr", ref = "ADR-0020" }
     # fault = "syntax errorを含むTypeScript sourceからtest recordを出力するか、syntax diagnosticを失う"
     # observable = "抽出exit、空のtestsとdiagnosticsに含まれるSOURCE_SYNTAX_ERROR"
@@ -875,7 +875,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "regression"
-    # claim = "C# syntax error時はSOURCE_SYNTAX_ERRORだけを返し部分recordを出さない"
+    # claim = "C# syntax error時はSOURCE_SYNTAX_ERRORを含む診断を返し部分recordを出さない"
     # oracle = { type = "adr", ref = "ADR-0020" }
     # fault = "syntax errorを含むC# sourceからtest recordを出力するか、syntax diagnosticを失う"
     # observable = "抽出exit、空のtestsとdiagnosticsに含まれるSOURCE_SYNTAX_ERROR"
@@ -1059,7 +1059,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "regression"
-    # claim = "一つの#if・#elif symbol groupを一件のUNSUPPORTED diagnosticへ集約する"
+    # claim = "testを含む一つの#if・#elif symbol groupを一件のUNSUPPORTED diagnosticへ集約する"
     # oracle = { type = "adr", ref = "ADR-0020" }
     # fault = "一つの#if・#elif symbol groupを見落とすか複数の未対応診断へ分割する"
     # observable = "抽出exit、空のtestsと一件のTEST_DECLARATION_UNSUPPORTED"
@@ -1073,7 +1073,11 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             "#if DEBUG\n"
             "public class DebugTests { }\n"
             "#elif RELEASE\n"
-            "public class ReleaseTests { }\n"
+            "public class ReleaseTests\n"
+            "{\n"
+            "    [Fact]\n"
+            "    public void ReleaseOnly() { }\n"
+            "}\n"
             "#endif\n",
         )
 
@@ -1085,6 +1089,227 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             [item["code"] for item in result["diagnostics"]],
             ["TEST_DECLARATION_UNSUPPORTED"],
         )
+
+    # @test-value v2
+    # kind = "regression"
+    # claim = "testなしの全分岐を含むC# sourceとgroup外・test本文内の通常条件付き処理を正常に抽出する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/source-adapters-v1.md#c" }
+    # fault = "通常処理のsymbol依存groupで停止するか、同一fileのtestを欠落させる"
+    # observable = "exit 0、空diagnostics、testsのsymbolと条件付き本文を含むsource_text"
+    # observation_boundary = "component-behavior"
+    # scope = "csharp-source-adapter"
+    # lifecycle = "permanent"
+    # distinction = "構文buildでは検出できない全分岐判定とrecord保持を小さなsource fixtureで確認する"
+    # @end-test-value
+    def test_csharp_accepts_test_free_conditionals_with_unconditional_tests(self) -> None:
+        body = (
+            "#if WINDOWS\n"
+            '        System.Console.WriteLine($"[Fact] {1}");\n'
+            "#elif LINUX\n"
+            "        // [Theory] is a comment, not a declaration.\n"
+            "#if INNER\n"
+            '        System.Console.WriteLine("nested");\n'
+            "#else\n"
+            '        System.Console.WriteLine("other");\n'
+            "#endif\n"
+            "#else\n"
+            '        System.Console.WriteLine("fallback");\n'
+            "#endif\n"
+        )
+        for has_test in (False, True):
+            with self.subTest(has_test=has_test):
+                test_method = (
+                    metadata_block("//", "    ")
+                    + "    [Fact]\n"
+                    + "    public void Value()\n    {\n"
+                    + body
+                    + "    }\n"
+                    if has_test else ""
+                )
+                self.write(
+                    "Mixed.cs",
+                    "public class Mixed\n{\n"
+                    "    private int value =\n#if WINDOWS\n1\n#else\n2\n#endif\n;\n"
+                    "    public void Attach()\n    {\n"
+                    + body
+                    + "    }\n"
+                    + test_method
+                    + "}\n",
+                )
+                result, exit_status = self.extract("Mixed.cs")
+                self.assertEqual(exit_status, 0, result["diagnostics"])
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(
+                    [item["source"]["symbol"] for item in result["tests"]],
+                    ["Mixed.Value"] if has_test else [],
+                )
+                if has_test:
+                    self.assertEqual(
+                        result["tests"][0]["source_text"],
+                        "    [Fact]\n    public void Value()\n    {\n" + body + "    }\n",
+                    )
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "非active・elif・else・nestedのsymbol依存分岐にあるtest属性候補を未対応として診断する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/source-adapters-v1.md#c" }
+    # fault = "既定でinactiveのtestを見落とし、空の正常結果で審査を完了可能にする"
+    # observable = "exit 1、空tests、対象fileの理由付きTEST_DECLARATION_UNSUPPORTED"
+    # observation_boundary = "component-behavior"
+    # scope = "csharp-source-adapter"
+    # lifecycle = "permanent"
+    # distinction = "active branchだけの既存testでは非active分岐の候補欠落を検出できない"
+    # @end-test-value
+    def test_csharp_rejects_test_candidates_in_every_conditional_branch(self) -> None:
+        declaration = (
+            "public class Hidden\n{\n"
+            "    [global::Xunit.FactAttribute]\n"
+            "    public void Value() { }\n}\n"
+        )
+        cases = {
+            "if": "#if WINDOWS\n" + declaration + "#endif\n",
+            "elif": "#if WINDOWS\n#elif LINUX\n" + declaration + "#endif\n",
+            "else": "#if !WINDOWS\n#else\n" + declaration + "#endif\n",
+            "nested": "#if WINDOWS\n#if INNER\n" + declaration + "#endif\n#endif\n",
+            "escaped": "#if WINDOWS\n" + declaration.replace("FactAttribute", "@F\\u0061ct") + "#endif\n",
+            "uncertain": "#if WINDOWS\n/* unterminated\n#endif\n",
+            "interpolation": (
+                '#if WINDOWS\nclass Hidden { string value = $"{new System.Func<int>(() => { '
+                '[Fact] void Local() {} return 1; })()}"; }\n#endif\n'
+            ),
+        }
+        for name, source in cases.items():
+            with self.subTest(branch=name):
+                self.write("Hidden.cs", source)
+                result, exit_status = self.extract("Hidden.cs")
+                self.assertEqual(exit_status, 1)
+                self.assertEqual(result["tests"], [])
+                self.assertTrue(result["diagnostics"])
+                for diagnostic in result["diagnostics"]:
+                    self.assertEqual(diagnostic["code"], "TEST_DECLARATION_UNSUPPORTED")
+                    self.assertEqual(diagnostic["path"], "Hidden.cs")
+                    self.assertTrue(diagnostic["message"])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "条件付きgroupを跨ぐ属性と宣言または型headerを安全なtestなしgroupと誤認しない"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/source-adapters-v1.md#c" }
+    # fault = "group外や別groupのtest属性を分岐内宣言へ結合する可能性と型名の不確定性を落とす"
+    # observable = "exit 1と宣言・型header側groupの開始行にあるTEST_DECLARATION_UNSUPPORTED"
+    # observation_boundary = "component-behavior"
+    # scope = "csharp-source-adapter"
+    # lifecycle = "permanent"
+    # distinction = "group内に属性名がない場合の境界判定を担い、単一groupのtestでは代替できない"
+    # @end-test-value
+    def test_csharp_keeps_diagnostics_for_cross_group_declaration_headers(self) -> None:
+        cases = (
+            (
+                "class Boundary\n{\n[Fact]\n#if METHOD\nvoid Value() {}\n#else\nint value;\n#endif\n}\n",
+                4,
+            ),
+            (
+                "class Boundary\n{\n#if ATTRIBUTE\n[Fact]\n#endif\n"
+                "#if METHOD\nvoid Value() {}\n#else\nint value;\n#endif\n}\n",
+                6,
+            ),
+            (
+                "class\n#if WINDOWS\nWindowsTests\n#else\nOtherTests\n#endif\n"
+                "{\n[Fact]\nvoid Value() {}\n}\n",
+                2,
+            ),
+            (
+                "namespace A {\n#if WINDOWS\n}\nnamespace B {\n#endif\n"
+                "class Boundary {\n[Fact]\nvoid Value() {}\n}\n}\n",
+                2,
+            ),
+            (
+                "#if WINDOWS\nnamespace B;\n#endif\n"
+                "class Boundary {\n[Fact]\nvoid Value() {}\n}\n",
+                1,
+            ),
+        )
+        for source, expected_line in cases:
+            with self.subTest(source=source):
+                self.write("Boundary.cs", source)
+                result, exit_status = self.extract("Boundary.cs")
+                self.assertEqual(exit_status, 1)
+                self.assertIn(
+                    ("TEST_DECLARATION_UNSUPPORTED", expected_line),
+                    [(item["code"], item["line"]) for item in result["diagnostics"]],
+                )
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "通常のC#条件付き処理と混在する追加testを3modeで保持し、workingの存続testにbefore/afterを返す"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md#snapshot-semantics" }
+    # fault = "通常sourceの条件付き処理で審査を停止するか、test recordやbefore/afterを誤ったsnapshotから返す"
+    # observable = "working・staged・headのADDEDとworkingのSURVIVEDにおけるexit、diagnostics、tests、metadata、source_text"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # impact = "通常処理とtestの混在変更を正式な価値審査へ渡せなくなる"
+    # distinction = "path modeでは通らない変更file自動発見とGit snapshotをCLI経由で確認する"
+    # @end-test-value
+    def test_git_mode_preserves_tests_alongside_test_free_csharp_conditionals(self) -> None:
+        platform = (
+            "class PlatformHook\n{\nvoid Attach()\n{\n#if WINDOWS\n"
+            'System.Console.WriteLine("before");\n#endif\n}\n}\n'
+        )
+        self.write("PlatformHook.cs", platform)
+        base = self.initialize_git()
+        self.write("PlatformHook.cs", platform.replace("before", "after"))
+        result, status, stderr = self.extract_git(base, "csharp")
+        self.assertEqual(status, 0, stderr)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(result["transitions"], [])
+        self.assertEqual(result["diagnostics"], [])
+
+        method = "    [Fact]\n    public void Value() { Assert.Equal(2, Next(1)); }\n"
+        test_source = "class ExampleTests\n{\n" + metadata_block("//", "    ") + method + "}\n"
+        self.write("ExampleTests.cs", test_source)
+        working = self.extract_git(base, "csharp")
+        self.git("add", "--all")
+        self.write("ExampleTests.cs", test_source.replace("Next(1)", "Next(99)"))
+        staged = self.extract_git(base, "csharp", "--staged")
+        self.git("commit", "--quiet", "-m", "add test and platform change")
+        head = self.git("rev-parse", "HEAD")
+        committed = self.extract_git(base, "csharp", "--head", head)
+        records = []
+        for mode, (result, status, stderr) in {
+            "working": working, "staged": staged, "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(status, 0, stderr)
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(result["warnings"], [])
+                self.assertEqual(len(result["tests"]), 1)
+                record = result["tests"][0]
+                records.append(record)
+                self.assertEqual(record["source"]["symbol"], "ExampleTests.Value")
+                self.assertEqual(record["source_text"], method)
+                self.assertEqual(record["metadata_format_version"], 2)
+                self.assertEqual(record["metadata"]["oracle"], {"type": "contract", "ref": "PAYMENT-004"})
+                self.assertEqual(
+                    result["transitions"],
+                    [{"kind": "ADDED", "before": None, "after": record}],
+                )
+        self.assertEqual(records[0], records[1])
+        self.assertEqual(records[1], records[2])
+
+        self.write("ExampleTests.cs", test_source.replace("Next(1)", "Next(2)").replace("Equal(2", "Equal(3"))
+        result, status, stderr = self.extract_git(head, "csharp")
+        self.assertEqual(status, 0, stderr)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(len(result["tests"]), 1)
+        self.assertEqual(
+            result["transitions"],
+            [{"kind": "SURVIVED", "before": records[0], "after": result["tests"][0]}],
+        )
+        self.assertEqual(
+            result["tests"][0]["source_text"],
+            method.replace("Next(1)", "Next(2)").replace("Equal(2", "Equal(3"),
+        )
+        self.assertEqual(result["tests"][0]["metadata"], records[0]["metadata"])
 
     # @test-value v2
     # kind = "regression"
@@ -1776,10 +2001,10 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "regression"
-    # claim = "symbol依存C# conditional group内の本文変更をUNSUPPORTED diagnosticへ結合する"
+    # claim = "symbol依存C# conditional group内の本文変更と宣言の削除をUNSUPPORTED diagnosticへ結合する"
     # oracle = { type = "adr", ref = "ADR-0021" }
-    # fault = "symbol依存conditional groupの開始directive以外の本文変更を選ばず、空の正常結果を返す"
-    # observable = "working・staged・headのGit抽出CLIのexit、空のtestsとTEST_DECLARATION_UNSUPPORTED"
+    # fault = "symbol依存conditional groupの本文変更または削除側の未対応宣言を選ばず、空の正常結果を返す"
+    # observable = "本文変更はworking・staged・head、削除はworkingでのCLI exit、空testsとTEST_DECLARATION_UNSUPPORTED"
     # observation_boundary = "public-boundary"
     # scope = "git-diff-selection"
     # lifecycle = "permanent"
@@ -1821,6 +2046,15 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
                     [item["code"] for item in result["diagnostics"]],
                     ["TEST_DECLARATION_UNSUPPORTED"],
                 )
+
+        path.unlink()
+        result, exit_status, stderr = self.extract_git(base, "csharp")
+        self.assertEqual(exit_status, 1, stderr)
+        self.assertEqual(result["tests"], [])
+        self.assertEqual(
+            [item["code"] for item in result["diagnostics"]],
+            ["TEST_DECLARATION_UNSUPPORTED"],
+        )
 
     # @test-value v2
     # kind = "contract"

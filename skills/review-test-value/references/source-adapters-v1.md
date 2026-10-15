@@ -46,7 +46,9 @@ Result fields:
   - MSTest: `TestMethod`、`DataTestMethod`
 - `Attribute` suffixとnamespace-qualified nameを許可する
 - Parameterization: data attributeを含む一つのsource declarationとして抽出する
-- Unsupported diagnostic: identifier symbolを参照する`#if` / `#elif`を含む条件付きコンパイルgroup。`#if true`などsymbolを参照しない静的条件は通常どおり解析し、symbol依存group内のactive branchをtest recordにせず、group外のtest抽出は継続する
+- Conditional compilation: identifier symbolを参照する`#if` / `#elif`のgroupも、inactive・elif・else・nestedを含む全分岐でtest宣言への影響がないと確認できれば診断せず、通常処理と同一fileのtestを抽出する。`#if true`などsymbolを参照しない静的条件は通常どおり解析する
+- Unsupported diagnostic: symbol依存groupに認識対象のtest属性名候補がある、属性と宣言・型やnamespaceのheaderがgroupを跨いでtestへ影響し得る、またはinactive断片の字句・区切り・scopeを安全に判断できない場合は`TEST_DECLARATION_UNSUPPORTED`を返す。未解決groupと交差する宣言をrecordにせず、独立したgroup外testの抽出は継続する
+- 全分岐の判定はactive tokenと各inactive断片の独立したRoslyn解析を使い、異なる分岐を連結せず、project symbolを固定して成功扱いしない。属性名候補はidentifier（escape・`Attribute` suffixを含む）で保守的に判定するため、同名の通常identifierも診断対象になり得る。文字列本文・コメント中の属性名は候補にしない。完全なproject構成評価やruntime discoveryは行わない
 - Excluded: attribute aliasの意味解決、source generator、継承やruntime discoveryだけで生成されるtest、展開後data row
 
 Result fields:
