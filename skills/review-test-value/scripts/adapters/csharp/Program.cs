@@ -24,9 +24,8 @@ static string AttributeIdentifier(NameSyntax name) => name switch
     _ => name.ToString(),
 };
 
-static bool IsTestAttribute(AttributeSyntax attribute)
+static bool IsTestAttributeName(string name)
 {
-    var name = AttributeIdentifier(attribute.Name);
     if (name.EndsWith("Attribute", StringComparison.Ordinal))
     {
         name = name[..^"Attribute".Length];
@@ -42,6 +41,9 @@ static bool IsTestAttribute(AttributeSyntax attribute)
         "DataTestMethod",
     }.Contains(name);
 }
+
+static bool IsTestAttribute(AttributeSyntax attribute) =>
+    IsTestAttributeName(AttributeIdentifier(attribute.Name));
 
 static bool IsTestMethod(MethodDeclarationSyntax method) =>
     method.AttributeLists.SelectMany(list => list.Attributes).Any(IsTestAttribute);
@@ -59,6 +61,52 @@ static bool RequiresProjectSpecificSymbols(DirectiveTriviaSyntax directive) =>
         .DescendantNodesAndSelf()
         .OfType<IdentifierNameSyntax>()
         .Any() == true;
+
+static SyntaxToken HeaderEnd(SyntaxNode node) => node switch
+{
+    BaseTypeDeclarationSyntax type when type.OpenBraceToken.RawKind != 0 && !type.OpenBraceToken.IsMissing =>
+        type.OpenBraceToken,
+    NamespaceDeclarationSyntax space => space.OpenBraceToken,
+    FileScopedNamespaceDeclarationSyntax space => space.SemicolonToken,
+    BaseMethodDeclarationSyntax method =>
+        method.Body?.OpenBraceToken ?? method.ExpressionBody?.ArrowToken ?? method.SemicolonToken,
+    LocalFunctionStatementSyntax local =>
+        local.Body?.OpenBraceToken ?? local.ExpressionBody?.ArrowToken ?? local.SemicolonToken,
+    BasePropertyDeclarationSyntax property when property.AccessorList is not null =>
+        property.AccessorList.OpenBraceToken,
+    PropertyDeclarationSyntax property when property.ExpressionBody is not null =>
+        property.ExpressionBody.ArrowToken,
+    IndexerDeclarationSyntax indexer when indexer.ExpressionBody is not null =>
+        indexer.ExpressionBody.ArrowToken,
+    _ => node.GetLastToken(),
+};
+
+static bool HasUnbalancedDelimiters(IEnumerable<SyntaxToken> tokens)
+{
+    var closing = new Stack<SyntaxKind>();
+    foreach (var token in tokens)
+    {
+        var expected = token.Kind() switch
+        {
+            SyntaxKind.OpenBraceToken => SyntaxKind.CloseBraceToken,
+            SyntaxKind.OpenBracketToken => SyntaxKind.CloseBracketToken,
+            SyntaxKind.OpenParenToken => SyntaxKind.CloseParenToken,
+            _ => SyntaxKind.None,
+        };
+        if (expected != SyntaxKind.None)
+        {
+            closing.Push(expected);
+        }
+        else if (token.Kind() is SyntaxKind.CloseBraceToken or SyntaxKind.CloseBracketToken or SyntaxKind.CloseParenToken)
+        {
+            if (!closing.TryPop(out var kind) || kind != token.Kind())
+            {
+                return true;
+            }
+        }
+    }
+    return closing.Count != 0;
+}
 
 static string QualifiedSymbol(MethodDeclarationSyntax method)
 {
@@ -88,7 +136,8 @@ var diagnostics = tree.GetDiagnostics()
     .Cast<object>()
     .ToList();
 
-var conditionalGroups = root.DescendantTrivia(descendIntoTrivia: true)
+var trivia = root.DescendantTrivia(descendIntoTrivia: true).ToList();
+var conditionalGroups = trivia
     .Select(trivia => trivia.GetStructure())
     .OfType<IfDirectiveTriviaSyntax>()
     .Select(directive => new
@@ -104,22 +153,102 @@ var conditionalGroups = root.DescendantTrivia(descendIntoTrivia: true)
         end = group.related.Last().Span.End,
     })
     .ToList();
-foreach (var group in conditionalGroups)
+
+// Lex inactive fragments separately: joining alternative branches can turn code
+// into another branch's comment or string and hide a test attribute.
+var tokens = root.DescendantTokens().ToList();
+var uncertainSpans = new List<TextSpan>();
+foreach (var disabled in trivia.Where(item => item.IsKind(SyntaxKind.DisabledTextTrivia)))
 {
+    var inactiveTokens = SyntaxFactory.ParseTokens(
+        disabled.ToString(), initialTokenPosition: disabled.SpanStart).ToList();
+    tokens.AddRange(inactiveTokens);
+    if (HasUnbalancedDelimiters(inactiveTokens)
+        || (inactiveTokens.Any(token => token.IsKind(SyntaxKind.NamespaceKeyword))
+            && CSharpSyntaxTree.ParseText(disabled.ToString()).GetRoot()
+                .DescendantNodes().OfType<FileScopedNamespaceDeclarationSyntax>().Any())
+        || inactiveTokens.Any(token => token.ContainsDiagnostics
+        || token.LeadingTrivia.Concat(token.TrailingTrivia)
+            .Any(item => item.IsKind(SyntaxKind.DisabledTextTrivia))))
+    {
+        uncertainSpans.Add(disabled.Span);
+    }
+}
+var candidates = tokens
+    .Where(token => token.IsKind(SyntaxKind.IdentifierToken) && IsTestAttributeName(token.ValueText))
+    .Select(token => token.SpanStart)
+    .ToList();
+// The lexer returns an interpolated string as one token. Inspect its expression
+// syntax as well, since interpolation expressions can contain local functions.
+foreach (var token in tokens.Where(token => token.IsKind(SyntaxKind.InterpolatedStringToken)))
+{
+    var expression = SyntaxFactory.ParseExpression(token.Text);
+    if (expression.ContainsDiagnostics)
+    {
+        uncertainSpans.Add(token.Span);
+    }
+    candidates.AddRange(expression.DescendantTokens()
+        .Where(item => item.IsKind(SyntaxKind.IdentifierToken) && IsTestAttributeName(item.ValueText))
+        .Select(item => token.SpanStart + item.SpanStart));
+}
+var headers = root.DescendantNodes()
+    .Where(node => node is MemberDeclarationSyntax or LocalFunctionStatementSyntax)
+    .Where(node => !node.Ancestors().OfType<AttributeSyntax>().Any())
+    .Select(node => new { node, end = HeaderEnd(node) })
+    .Where(header => header.end.RawKind != 0 && header.end.Span.End >= header.node.SpanStart)
+    .ToList();
+bool IsInSymbolGroup(int position) =>
+    conditionalGroups.Any(group => position >= group.start && position < group.end);
+// Only declaration boundaries outside every symbol-dependent group can end a
+// possible attribute prefix. A delimiter in just one alternative is not proof.
+var stableBoundaries = headers
+    .SelectMany(header => new[] { header.end, header.node.GetLastToken() })
+    .Where(token => !token.IsMissing && !IsInSymbolGroup(token.SpanStart))
+    .Select(token => token.Span.End)
+    .Distinct()
+    .Order()
+    .ToList();
+var candidateEnds = candidates.Select(start => new
+{
+    start,
+    end = stableBoundaries.FirstOrDefault(position => position > start, source.Length),
+}).ToList();
+var unsupportedGroups = conditionalGroups.Where(group =>
+{
+    var span = TextSpan.FromBounds(group.start, group.end);
+    return candidateEnds.Any(candidate => candidate.start < group.end && candidate.end > group.start)
+        || uncertainSpans.Any(span.OverlapsWith)
+        || headers.Any(header =>
+            span.OverlapsWith(TextSpan.FromBounds(header.node.SpanStart, header.end.Span.End))
+            && !span.Contains(header.node.Span)
+            && candidates.Any(position => header.node.FullSpan.Contains(position)));
+}).ToList();
+var conditionalTestDeclarations = root.DescendantNodes().Where(node => node switch
+{
+    MethodDeclarationSyntax method => IsTestMethod(method),
+    LocalFunctionStatementSyntax local => local.AttributeLists
+        .SelectMany(list => list.Attributes).Any(IsTestAttribute),
+    _ => false,
+}).ToList();
+foreach (var group in unsupportedGroups)
+{
+    var span = TextSpan.FromBounds(group.start, group.end);
+    var excluded = conditionalTestDeclarations.Where(node => node.Span.OverlapsWith(span)).ToList();
     diagnostics.Add(new
     {
         code = "TEST_DECLARATION_UNSUPPORTED",
         line = LineNumber(tree, group.start),
-        end_line = LineNumber(tree, group.end),
-        message = "conditional compilation references preprocessor symbols",
+        // Git selection must cover every excluded declaration, including its metadata.
+        start_line = LineNumber(tree, excluded.Select(node => node.FullSpan.Start)
+            .Append(group.start).Min()),
+        end_line = LineNumber(tree, excluded.Select(node => node.Span.End)
+            .Append(group.end).Max()),
+        message = "symbol-dependent conditional compilation may affect a test declaration",
     });
 }
 
-static bool IsInsideConditionalGroup(SyntaxNode node, int start, int end) =>
-    node.SpanStart >= start && node.Span.End <= end;
-
 bool IsInsideUnsupportedConditional(SyntaxNode node) =>
-    conditionalGroups.Any(group => IsInsideConditionalGroup(node, group.start, group.end));
+    unsupportedGroups.Any(group => node.Span.OverlapsWith(TextSpan.FromBounds(group.start, group.end)));
 
 var declarations = new List<object>();
 var methods = root.DescendantNodes()

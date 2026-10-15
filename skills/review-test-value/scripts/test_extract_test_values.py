@@ -2091,14 +2091,17 @@ def test_oracle_table_with_decoy():
     # claim = "public CLIはroot外pathをSOURCE_OUTSIDE_ROOTとして内容を抽出しない"
     # oracle = { type = "adr", ref = "ADR-0020" }
     # fault = "repository外sourceを許可対象としてAI入力へ取り込む"
-    # observable = "CLI processのreturncode、stdout JSONのSOURCE_OUTSIDE_ROOT diagnostic、stdout内のroot絶対pathの不在"
+    # observable = "CLIのreturncode、空のtests、SOURCE_OUTSIDE_ROOT、stdout内のroot絶対path・外部test symbol・本文の不在"
     # observation_boundary = "public-boundary"
     # scope = "source-root-boundary"
     # lifecycle = "permanent"
     # @end-test-value
     def test_outside_root_is_rejected_by_public_cli(self) -> None:
         outside = self.root.parent / f"{self.root.name}-outside.py"
-        outside.write_text("def test_outside():\n    assert True\n", encoding="utf-8")
+        outside.write_text(
+            "def test_outside():\n    assert 'external-private-payload'\n",
+            encoding="utf-8",
+        )
         try:
             completed = subprocess.run(
                 [
@@ -2119,7 +2122,10 @@ def test_oracle_table_with_decoy():
         self.assertEqual(completed.returncode, 1)
         result = json.loads(completed.stdout)
         self.assertEqual(result["diagnostics"][0]["code"], "SOURCE_OUTSIDE_ROOT")
+        self.assertEqual(result["tests"], [])
         self.assertNotIn(str(self.root), completed.stdout)
+        self.assertNotIn("test_outside", completed.stdout)
+        self.assertNotIn("external-private-payload", completed.stdout)
 
     # @test-value v2
     # kind = "security"
