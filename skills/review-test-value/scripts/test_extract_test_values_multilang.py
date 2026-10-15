@@ -2058,6 +2058,82 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "contract"
+    # claim = "未対応groupで除外するC# testのgroup外本文・metadata変更を3modeで診断し、独立したtestだけの変更は通す"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md#selection" }
+    # fault = "除外した宣言のgroup外変更を空の成功結果にするか、無関係な宣言まで診断範囲に含める"
+    # observable = "working・staged・headの失敗exit、空tests/transitionsとgroup行のUNSUPPORTED、対照workingの独立testとSURVIVED"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-selection"
+    # lifecycle = "permanent"
+    # impact = "意味変更したtestが正式な価値審査から無診断で欠落する"
+    # distinction = "group内本文だけの既存testでは除外宣言全体とmetadataへの診断選択を確認できず、公開CLIの3snapshotで検証する"
+    # @end-test-value
+    def test_git_mode_diagnoses_changes_across_excluded_csharp_test(self) -> None:
+        source = (
+            "public class AlwaysTests\n{\n"
+            + metadata_block("//", "    ")
+            + "    [Fact]\n"
+            + "    public void Always()\n    {\n"
+            + "        Assert.Equal(1, Before());\n"
+            + "#if WINDOWS\n        [Fact] void Local() { }\n#endif\n"
+            + "        Assert.Equal(1, After());\n"
+            + "    }\n"
+            + metadata_block("//", "    ")
+            + "    [Fact]\n"
+            + "    public void Independent() { Assert.Equal(1, Other()); }\n"
+            + "}\n"
+        )
+        group_line = source.splitlines().index("#if WINDOWS") + 1
+        changes = {
+            "before_group": ("Equal(1, Before())", "Equal(2, Before())"),
+            "after_group": ("Equal(1, After())", "Equal(2, After())"),
+            "metadata": ('scope = "payment-api"', 'scope = "changed-payment-api"'),
+        }
+        for change, (before, after) in changes.items():
+            with self.subTest(change=change):
+                self.write("AlwaysTests.cs", source)
+                base = self.initialize_git()
+                self.write("AlwaysTests.cs", source.replace(before, after, 1))
+                working = self.extract_git(base, "csharp")
+                self.git("add", "AlwaysTests.cs")
+                staged = self.extract_git(base, "csharp", "--staged")
+                self.git("commit", "--quiet", "-m", "change excluded test")
+                head = self.git("rev-parse", "HEAD")
+                committed = self.extract_git(base, "csharp", "--head", head)
+                for mode, (result, status, stderr) in {
+                    "working": working, "staged": staged, "head": committed,
+                }.items():
+                    with self.subTest(mode=mode):
+                        self.assertEqual(status, 1, stderr)
+                        self.assertEqual(result["tests"], [])
+                        self.assertEqual(result["transitions"], [])
+                        unsupported = [
+                            item for item in result["diagnostics"]
+                            if item["code"] == "TEST_DECLARATION_UNSUPPORTED"
+                        ]
+                        self.assertEqual(len(unsupported), 1)
+                        self.assertEqual(unsupported[0]["path"], "AlwaysTests.cs")
+                        self.assertEqual(unsupported[0]["line"], group_line)
+                        self.assertEqual(
+                            set(unsupported[0]), {"code", "path", "line", "message"}
+                        )
+
+        control_base = head
+        self.write(
+            "AlwaysTests.cs",
+            source.replace(before, after, 1).replace("Equal(1, Other())", "Equal(2, Other())"),
+        )
+        result, status, stderr = self.extract_git(control_base, "csharp")
+        self.assertEqual(status, 0, stderr)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["AlwaysTests.Independent"],
+        )
+        self.assertEqual([item["kind"] for item in result["transitions"]], ["SURVIVED"])
+
+    # @test-value v2
+    # kind = "contract"
     # claim = "一回のpath modeへ複数言語を渡すとexit 2かつJSONなしで拒否する"
     # oracle = { type = "adr", ref = "ADR-0020" }
     # fault = "複数言語のpath入力を受理し、異なるadapterの結果を同じJSONへ出力する"

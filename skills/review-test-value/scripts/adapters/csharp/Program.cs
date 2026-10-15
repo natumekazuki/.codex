@@ -223,13 +223,26 @@ var unsupportedGroups = conditionalGroups.Where(group =>
             && !span.Contains(header.node.Span)
             && candidates.Any(position => header.node.FullSpan.Contains(position)));
 }).ToList();
+var conditionalTestDeclarations = root.DescendantNodes().Where(node => node switch
+{
+    MethodDeclarationSyntax method => IsTestMethod(method),
+    LocalFunctionStatementSyntax local => local.AttributeLists
+        .SelectMany(list => list.Attributes).Any(IsTestAttribute),
+    _ => false,
+}).ToList();
 foreach (var group in unsupportedGroups)
 {
+    var span = TextSpan.FromBounds(group.start, group.end);
+    var excluded = conditionalTestDeclarations.Where(node => node.Span.OverlapsWith(span)).ToList();
     diagnostics.Add(new
     {
         code = "TEST_DECLARATION_UNSUPPORTED",
         line = LineNumber(tree, group.start),
-        end_line = LineNumber(tree, group.end),
+        // Git selection must cover every excluded declaration, including its metadata.
+        start_line = LineNumber(tree, excluded.Select(node => node.FullSpan.Start)
+            .Append(group.start).Min()),
+        end_line = LineNumber(tree, excluded.Select(node => node.Span.End)
+            .Append(group.end).Max()),
         message = "symbol-dependent conditional compilation may affect a test declaration",
     });
 }
