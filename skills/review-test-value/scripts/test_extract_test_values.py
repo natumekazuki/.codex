@@ -1440,10 +1440,10 @@ def test_oracle_table_with_decoy():
 
     # @test-value v2
     # kind = "contract"
-    # claim = "head modeは明示commitのsourceを抽出する"
-    # oracle = { type = "adr", ref = "ADR-0021" }
-    # fault = "commit審査へ別snapshotの本文が混入する"
-    # observable = "head抽出CLIのexit statusとsource_text内の指定commit側assertionおよびworktree側assertionの不在"
+    # claim = "head modeは現在HEADやworktreeではなく明示commitのsourceを抽出する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md#snapshot-semantics" }
+    # fault = "指定commitを無視し、現在HEADまたはworktreeの本文をcommit審査へ混入する"
+    # observable = "head抽出CLIのexit statusとsource_text内の指定commit側assertionおよび現在HEAD・worktree側assertionの不在"
     # observation_boundary = "public-boundary"
     # scope = "git-snapshot-selection"
     # lifecycle = "permanent"
@@ -1456,6 +1456,9 @@ def test_oracle_table_with_decoy():
         self.git("add", "tests/test_snapshot.py")
         self.git("commit", "--quiet", "-m", "change")
         head = self.git("rev-parse", "HEAD")
+        path.write_text(source.replace("== 1", "== 4"), encoding="utf-8")
+        self.git("add", "tests/test_snapshot.py")
+        self.git("commit", "--quiet", "-m", "later change")
         path.write_text(source.replace("== 1", "== 3"), encoding="utf-8")
 
         result, exit_status, stderr = self.extract_git(
@@ -1464,6 +1467,7 @@ def test_oracle_table_with_decoy():
 
         self.assertEqual(exit_status, 0, stderr)
         self.assertIn("observed() == 2", result["tests"][0]["source_text"])
+        self.assertNotIn("observed() == 4", result["tests"][0]["source_text"])
         self.assertNotIn("observed() == 3", result["tests"][0]["source_text"])
 
     # @test-value v2

@@ -684,19 +684,31 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "regression"
-    # claim = "TypeScript syntax error時はSOURCE_SYNTAX_ERRORを含む診断を返し部分recordを出さない"
-    # oracle = { type = "adr", ref = "ADR-0020" }
-    # fault = "syntax errorを含むTypeScript sourceからtest recordを出力するか、syntax diagnosticを失う"
-    # observable = "抽出exit、空のtestsとdiagnosticsに含まれるSOURCE_SYNTAX_ERROR"
+    # claim = "正常testを抽出できるTypeScript fileへ独立したsyntax errorを加えるとSOURCE_SYNTAX_ERRORを含む診断を返し全recordを抑制する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/source-adapters-v1.md#common-failure-boundary" }
+    # fault = "syntax errorのある宣言だけを除外して同一fileの正常test recordを漏出するか、syntax diagnosticを失う"
+    # observable = "正常対照の抽出exitとtest symbol、syntax error追加後のexit・空のtests・SOURCE_SYNTAX_ERRORの存在"
     # observation_boundary = "component-behavior"
     # scope = "typescript-source-adapter"
     # lifecycle = "permanent"
     # @end-test-value
     def test_typescript_syntax_error_does_not_emit_partial_records(self) -> None:
-        self.write(
-            "tests/broken.test.ts",
-            metadata_block("//") + "test(\"broken\", () => {\n",
+        source = (
+            metadata_block("//")
+            + 'test("valid", () => { expect(true).toBe(true); });\n'
         )
+        self.write("tests/broken.test.ts", source)
+
+        result, exit_status = self.extract("tests/broken.test.ts")
+
+        self.assertEqual(exit_status, 0)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["valid"],
+        )
+
+        self.write("tests/broken.test.ts", source + "const broken = ;\n")
 
         result, exit_status = self.extract("tests/broken.test.ts")
 
@@ -875,21 +887,34 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "regression"
-    # claim = "C# syntax error時はSOURCE_SYNTAX_ERRORを含む診断を返し部分recordを出さない"
-    # oracle = { type = "adr", ref = "ADR-0020" }
-    # fault = "syntax errorを含むC# sourceからtest recordを出力するか、syntax diagnosticを失う"
-    # observable = "抽出exit、空のtestsとdiagnosticsに含まれるSOURCE_SYNTAX_ERROR"
+    # claim = "正常testを抽出できるC# fileへ独立したsyntax errorを加えるとSOURCE_SYNTAX_ERRORを含む診断を返し全recordを抑制する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/source-adapters-v1.md#common-failure-boundary" }
+    # fault = "syntax errorのある宣言だけを除外して同一fileの正常test recordを漏出するか、syntax diagnosticを失う"
+    # observable = "正常対照の抽出exitとtest symbol、syntax error追加後のexit・空のtests・SOURCE_SYNTAX_ERRORの存在"
     # observation_boundary = "component-behavior"
     # scope = "csharp-source-adapter"
     # lifecycle = "permanent"
     # @end-test-value
     def test_csharp_syntax_error_does_not_emit_partial_records(self) -> None:
-        self.write(
-            "tests/BrokenTests.cs",
-            metadata_block("//")
-            + "[Fact]\n"
-            + "public void Broken(\n",
+        source = (
+            "public class ValidTests {\n"
+            + metadata_block("//", "    ")
+            + "    [Fact]\n"
+            + "    public void Valid() { Assert.True(true); }\n"
+            + "}\n"
         )
+        self.write("tests/BrokenTests.cs", source)
+
+        result, exit_status = self.extract("tests/BrokenTests.cs")
+
+        self.assertEqual(exit_status, 0)
+        self.assertEqual(result["diagnostics"], [])
+        self.assertEqual(
+            [record["source"]["symbol"] for record in result["tests"]],
+            ["ValidTests.Valid"],
+        )
+
+        self.write("tests/BrokenTests.cs", source + "public class Broken {\n")
 
         result, exit_status = self.extract("tests/BrokenTests.cs")
 
