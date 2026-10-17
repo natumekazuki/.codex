@@ -30,7 +30,7 @@ quickでもlintを省略しない。Skill rootを基準に次を実行する。
 uv run <skill-root>/scripts/lint.py --json <file>
 ```
 
-文書のジャンルが明確なら `--genre essay|tech|business` を指定する。lintを実行できない環境では [manual-checklist.md](manual-checklist.md) を使い、未実行理由を明示する。
+文書のジャンルが明確なら `--genre essay|tech|business` を指定する。lintを実行できない環境では [manual-checklist.md](manual-checklist.md) を使う。
 
 lintのfindingを文脈に照らして「直す」「残す」に仕分ける。見出しと各段落の先頭文を自分で読み、論旨、見出し、反復、濃淡、結びを確認する。findingがなければ一周で終えてよい。
 

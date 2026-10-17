@@ -41,6 +41,6 @@ MCP serverはWithMateのSession-bound runtimeへ接続する。Session ID、repo
 
 ## 障害時の扱い
 
-MCPが未設定、起動不能、またはtransport-levelで利用不能な場合だけ、managed Skillの手順に従ってCLI fallbackを使用できる。CLIも同じactive provider Session bindingを必要とする。bindingとprimary checkoutを確認できない場合はwriteせず、Glossary操作を未実行として報告する。
+MCPが未設定、起動不能、またはtransport-levelで利用不能な場合だけ、managed Skillの手順に従ってCLI fallbackを使用できる。CLIも同じactive provider Session bindingを必要とする。bindingとprimary checkoutを確認できない場合はwriteしない。
 
 `codex mcp get withmate-glossary`の`env`が`-`の場合は、`config.example.toml`の`env_vars`をlocal設定へ反映して新しいSessionを開始する。`glossary.list_targets`が`GLOSSARY_SESSION_BINDING_REQUIRED`を返した場合も同じ設定を確認する。structuredなauthority、validation、revision、conflict errorはavailability failureへ読み替えず、CLIで迂回しない。
