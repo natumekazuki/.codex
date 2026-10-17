@@ -74,7 +74,7 @@ session数やturn数ではなく、ユーザーが得ようとした一つの成
 
 - checkが対象failure modeを直接観測しているか。
 - static文字列一致や内部手順の固定で正しさを代用していないか。
-- 未実行check、環境差、partial dataが明示されているか。
+- 環境差やpartial dataを踏まえて検証結果を評価しているか。
 
 ### 3.6 Reviewer validity / noise
 
