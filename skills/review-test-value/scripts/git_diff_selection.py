@@ -398,13 +398,61 @@ def _transition_diagnostic(
     diagnostic: DiagnosticFactory,
     record: dict[str, Any],
     message: str,
+    item: ChangedFile,
+    after_records: Sequence[dict[str, Any]],
+    candidate_groups: dict[str, Sequence[dict[str, Any]]],
 ) -> dict[str, Any]:
     source = record["source"]
+
+    def location(value: dict[str, Any]) -> str:
+        span = value["source"]
+        return (
+            f"{span['path']}:{span['declaration_start_line']}-"
+            f"{span['declaration_end_line']} ({span['symbol']!r})"
+        )
+
+    def locations(values: Sequence[dict[str, Any]]) -> str:
+        return "[" + ", ".join(location(value) for value in values) + "]"
+
+    details = [f"base record={location(record)}"]
+    details.extend(
+        f"{name} candidates={locations(values)}"
+        for name, values in candidate_groups.items()
+    )
+    # Split at both replaced old lines and new-side insertions, so each
+    # reported interval describes an actual one-to-one retained projection.
+    projections: list[tuple[int, int, int, int]] = []
+    for line in range(source["declaration_start_line"], source["declaration_end_line"] + 1):
+        if any(h.old_count and h.old_start <= line <= h.old_end for h in item.hunks):
+            continue
+        projected = _map_old_line_to_new(line, item.hunks)
+        if projections and projections[-1][1] + 1 == line and projections[-1][3] + 1 == projected:
+            low, _, new_low, _ = projections[-1]
+            projections[-1] = (low, line, new_low, projected)
+        else:
+            projections.append((line, line, projected, projected))
+    retained = []
+    for low, high, new_low, new_high in projections:
+        overlapping = [
+            after for after in after_records
+            if after["source"]["declaration_start_line"] <= new_high
+            and after["source"]["declaration_end_line"] >= new_low
+        ]
+        retained.append(
+            f"old {low}-{high} -> new {new_low}-{new_high} "
+            f"overlaps selected declarations={locations(overlapping)}"
+        )
+    details.append("retained projections=[" + "; ".join(retained) + "]")
+    details.append(
+        "required: a unique current declaration supported consistently by record "
+        "contents and Git projection; shared lines do not establish author intent; "
+        "review incomplete"
+    )
     return diagnostic(
         "RECORD_TRANSITION_UNRESOLVED",
         source["path"],
         source["declaration_start_line"],
-        message,
+        message + "; " + "; ".join(details),
     )
 
 
@@ -515,6 +563,11 @@ def _build_transitions(
                 for hunk in item.hunks
             )
         ]
+        diagnostic_candidates = {
+            "content": content_candidates,
+            "start projection": position_candidates,
+            "opening hunk": replacement_hunk_candidates,
+        }
         if closing_only and not content_candidates and len(replacement_hunk_candidates) > 1:
             # Shared closers alone cannot disambiguate a multi-test rewrite.
             position_candidates = []
@@ -549,6 +602,9 @@ def _build_transitions(
             for candidates in candidate_sets
             for candidate in candidates
         }
+        diagnostic_candidates["eligible"] = [
+            after for after in unmatched_after if id(after) in candidate_ids
+        ]
         ambiguous = any(len(candidates) != 1 for candidates in candidate_sets)
         if len(candidate_ids) > 1:
             ambiguous = True
@@ -558,6 +614,9 @@ def _build_transitions(
                     diagnostic,
                     before,
                     "record contents and Git hunk projection do not identify one current record",
+                    item,
+                    after_records,
+                    diagnostic_candidates,
                 )
             )
             continue
@@ -581,6 +640,9 @@ def _build_transitions(
                         diagnostic,
                         before,
                         "a partially changed base record has no reliable current record mapping",
+                        item,
+                        after_records,
+                        diagnostic_candidates,
                     )
                 )
             continue
