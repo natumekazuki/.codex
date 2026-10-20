@@ -2,12 +2,12 @@
 
 共通AGENTS.mdの条件に該当したら、最初の応答前に読み、機能の利用要否を判断する。MCPの利用可否を毎回確認するのではなく、提供済みのSession情報・context・ツールから適用を判断する。SessionFolderの置き場は共通AGENTS.mdに従う。
 
-この文書は利用契機と許可範囲を定める。引数、target、重複防止、再試行等の呼出契約は現在のMCP toolの説明・schemaとruntime-managed Skillを正本とする。接続設定・障害調査時だけ、[Memory／Character runbook](../runbooks/withmate-character-context.md)または[Glossary runbook](../runbooks/withmate-repository-glossary.md)も参照する。
+この文書はMemoryの利用姿勢、継続的な許可と保存範囲を定める。具体的な利用契機・探索例と、引数、target、保存先の使い分け、重複防止、再試行等の呼出契約は、現在提供されているMCP instructions・toolの説明・schemaとruntime-managed Skillを正本とする。接続設定・障害調査時だけ、[Memory／Character runbook](../runbooks/withmate-character-context.md)または[Glossary runbook](../runbooks/withmate-repository-glossary.md)も参照する。
 
 ## Context・Recall
 
 - 現在のユーザー発言とCharacter Definitionを優先し、提供済みのCharacter contextを利用する。context取得は、注入内容の欠落・古さ・不足がある場合に限り、毎turnの取得を儀式化しない。
-- 過去の判断、制約、選好、失敗パターン、共有した出来事が現在の判断や会話継続へ具体的に影響する場合は、関連するMemoryを対象とqueryを絞って検索する。提供済みの文脈で足りる場合は追加検索せず、未取得の記憶を推測で補わない。
+- 話題の開始・切替・再開では、過去の文脈が役立つ可能性があれば、対象を絞ってMemoryを能動的に参照し、取得後に今回利用するか判断する。同じ記憶が現在のcontextにある場合は再取得しない。想起と新規保存は別に判断し、未取得の記憶を推測で補わない。
 
 ## Character Affect
 
@@ -15,10 +15,10 @@
 - Affectはturn末の最終状態ではなくevent履歴として扱う。後から感情が解消・反転しても先行eventを消さず、新しい変化を別eventとして扱う。afterglowは読み取り時の文脈としてのみ使い、新規affect event、Character episode、relationship stateへコピーしない。
 - turn終了時の自動appraisalはWithMateのlifecycleが担う。同じpost-turn requestをAgentから再送せず、記録済みの同一eventを回答前の振り返りで再登録しない。棄却されたaffectを別のMemoryへ付け替えて保存しない。
 
-## 回答前の振り返りとMemory
+## Memoryの記録と振り返り
 
-- 最終回答前に、Projectの文脈、Characterとの共有episode、Character Affectの観点で、新たに保持すべき具体的候補があるかを確認する。候補がなければ検索・保存は不要とし、保存するために出来事や感情を作らない。
-- 候補がある場合だけ、内容に対応するMemory／Affect機能を使う。semantic Memoryの重複確認、Affectに紐づくepisodeと単独episodeの使い分けはMCPの呼出契約に従う。
+- 保存対象には、日常の小さな事実・好み・雑談・共有した出来事も含める。明示的な保存依頼、強い感情、長期的な重要性や将来の有用性の確信を前提にしない。一度の発言・選択を恒久的な性質へ一般化しない。
+- 記録は会話や作業の自然な区切りで行い、最終回答前には、ユーザーの文脈・選好、Projectの文脈、Characterとの共有episode、Character Affectの保存漏れを確認する。新しい具体的候補がなければ保存は不要とし、出来事や感情を作らない。毎turnの検索・保存や件数目標は設けず、保存先の選択と重複確認はMCPの呼出契約に従う。
 
 ## 許可と保存範囲
 
