@@ -17,6 +17,6 @@
 | WithMate Memory／Characterの利用姿勢・許可・保存範囲 | [WithMate利用方針](../guides/withmate.md)。AGENTS.mdは提供情報に基づく読込条件、MCP instructions・tool説明・schemaは具体的な利用契機・探索例・呼出契約、runbookは接続設定・障害調査を担う |
 | Repository Glossaryの操作契約 | runtime-managed `withmate-glossary` Skill。利用契機・継続的な許可とdeleteの個別承認は[WithMate利用方針](../guides/withmate.md) |
 
-`hooks/implementation-restraint.ps1`は共通ルールの短い再通知であり、別のworkflowを設けない。既存のモデル選択を再提示するが、分割先本文は注入しない。
+`hooks/implementation-restraint.ps1`はSessionStartのstartup・resume・compactとSubagentStartで共通ルールを短く再通知し、別のworkflowを設けない。既存のモデル選択を再提示するが、分割先本文は注入しない。
 
 文書更新・履歴保存・リリースノートのリンクに関する共通ルールの正本は[設計判断・文書化](../guides/design-decisions.md)である。このrepository自身の判断履歴は`docs/adr/`、公開記録は`docs/releases/`に置かれている。

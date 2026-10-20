@@ -223,7 +223,7 @@ Metadataの`allow_implicit_invocation: true`は暗黙呼出しの許可であり
 
 端末への適用時は既存`config.toml`へ設定例の必要sectionだけを反映する。MCP binding、認証、private path、無関係な設定を共有例へ持ち込まず、live全体を上書きしない。WithMate 6.3.29のMemory／Glossary MCPはWithMateがSessionへHTTP接続を自動供給するため、通常は手動登録せず、URL・短命tokenを永続化しない。手動STDIOは接続runbookの開発・診断用途に限る。`agents/`とregistry例、選択profileを同じCodex homeへ配置する。
 
-hookは有効な`CODEX_HOME`（未指定ならユーザーhomeの`.codex`）から解決する。`/hooks`でtrustと到達を確認し、inline hooks等との重複を避ける。新規session、一般child、再開・compactionで短い抑制を届ける。read-only reviewの境界は起動時の依頼で明示する。
+hookは有効な`CODEX_HOME`（未指定ならユーザーhomeの`.codex`）から解決する。`/hooks`でtrustと到達を確認し、inline hooks等との重複を避ける。共通ルールの再通知は`SessionStart`のstartup・resume・compactと`SubagentStart`に限定し、`PreToolUse`の委譲制御は別に維持する。read-only reviewの境界は起動時の依頼で明示する。
 WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合は、最初の応答前に[WithMate利用方針](docs/guides/withmate.md)を読む。日常の記録と能動的な参照の利用姿勢、継続的な許可・保存範囲は同文書、具体的な利用契機・探索例・呼出契約は現在提供されているMCP instructions・tool説明・schemaに従う。[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
 
 CIは決定論的な抽出器、parser、Git差分選択、adapterの回帰checkを確認する。LLM reviewは親が通常のread-onlyサブエージェントへ委譲し、モデル実行やsecretを公開CIへ追加しない。
