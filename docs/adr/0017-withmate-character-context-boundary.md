@@ -1,8 +1,18 @@
 # ADR-0017: WithMate Character contextはlifecycle注入とMCPを単一正本へ接続する
 
-- Status: accepted
+- Status: accepted（利用契機・接続案内は一部置換）
 - Date: 2026-08-10
-- Updated: 2026-09-05
+- Updated: 2026-10-20
+
+## 現在の適用範囲
+
+WithMate 6.3.29を前提とする運用では、以下の当時の判断を現行運用の適用対象外とし、本文は判断履歴として保持する。
+
+- 追加想起を「具体的に影響する場合だけ」に限定し、保存候補がないturnではsearchも行わない判断は、[WithMate利用方針](../guides/withmate.md)へ置換した。日常の小さな記録を含め、想起は新規保存候補の有無と分けて判断する。
+- 通常接続で各hostのSTDIO登録・`env_vars`設定を必要とする案内は、[Memory／Character runbook](../runbooks/withmate-character-context.md)と[Glossary runbook](../runbooks/withmate-repository-glossary.md)へ置換した。通常はWithMateがHTTP接続を供給し、手動STDIOは開発・診断用途とする。
+- 利用指示の配置は[指示体系の責務分担](../architecture/instruction-governance.md)を正本とする。AGENTS.mdは読込条件、guideは利用姿勢・許可・保存範囲、MCPは具体的契機・探索例・呼出契約、runbookは接続・障害調査を担う。
+
+WithMateを単一正本とする判断、authority・保存scope・重複防止・Affect owner・限定されたCLI fallbackの境界は維持する。以下のversion・server名・Contract Anchorsは当時の判断根拠であり、現行の接続先や設定手順には使わない。
 
 ## Context
 
