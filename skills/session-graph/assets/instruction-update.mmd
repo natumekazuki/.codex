@@ -10,8 +10,6 @@ flowchart TB
     subgraph REVISION_2["r2: 担当Aの局所修正"]
         I_follow["r2: 局所修正済み<br/>担当作業は終了"]:::done
         V_local["r2: 局所test確認済み"]:::done
-        Q_r2["r2: review・全体testは未確認"]:::pending
-        Q_accept["r2: 統合・公開は未確認"]:::pending
     end
 
     I_other["担当B: 別の作業は進行中"]:::active
@@ -21,8 +19,5 @@ flowchart TB
     F_condition -->|検出元| V_review
     I_follow -->|対応根拠| F_condition
     V_local -->|確認対象| I_follow
-    Q_r2 -->|未確認の対象| I_follow
-    Q_accept -->|統合・公開の対象| I_follow
     classDef active fill:#e6f0ff,stroke:#2866ad,color:#111,stroke-width:3px
-    classDef pending fill:#fff1cc,stroke:#806000,color:#111
     classDef done fill:#e5f4e8,stroke:#32703f,color:#111

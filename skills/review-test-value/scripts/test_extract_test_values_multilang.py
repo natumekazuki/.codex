@@ -1613,6 +1613,114 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
                 self.assertEqual(result["tests"], [t["after"] for t in result["transitions"]])
 
     # @test-value v2
+    # kind = "contract"
+    # claim = "保持行が複数testへ分かれた遷移は3snapshotで停止し、候補と旧新行の投影を診断する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "曖昧なoriginalをSURVIVEDやDELETEDへ推測分類するか、衝突する宣言と保持行を診断から失う"
+    # observable = "working・staged・headのexit、診断message、ADDEDの本文とtests集合"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # impact = "削除前を含む全件審査が未完了の差分を通すか、利用者が停止原因を追跡できなくなる"
+    # distinction = "本文行と閉じ行の異なる投影先とdirty working treeからのindex・commit分離を実Git差分で確認する"
+    # @end-test-value
+    def test_git_mode_explains_split_retained_line_projections(self) -> None:
+        path = "tests/selection.test.ts"
+        before = (
+            'test("original", () => {\n'
+            "  prepareOld();\n  render(widget);\n"
+            "  expect(oldResult()).toBe(true);\n  cleanupOld();\n});\n"
+        )
+        added = (
+            'test("added", () => {\n'
+            "  setup();\n  another();\n  x();\n  y();\n  z();\n  render(widget);\n});\n"
+        )
+        renamed = (
+            'test("renamed", () => {\n'
+            "  prepareNew();\n  expect(newResult()).toBe(true);\n  cleanupNew();\n});\n"
+        )
+        self.write(path, before)
+        base = self.initialize_git()
+        self.git("config", "core.autocrlf", "false")
+        self.git("config", "diff.algorithm", "myers")
+        self.write(path, metadata_block("//") + added + metadata_block("//") + renamed)
+        working = self.extract_git(base, "typescript")
+        self.git("add", path)
+        self.write(path, 'test("dirty", () => {\n')
+        staged = self.extract_git(base, "typescript", "--staged")
+        self.git("commit", "--quiet", "-m", "split retained lines")
+        committed = self.extract_git(base, "typescript", "--head", self.git("rev-parse", "HEAD"))
+
+        for mode, (result, status, stderr) in {
+            "working": working, "staged": staged, "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(status, 1, stderr)
+                self.assertEqual([d["code"] for d in result["diagnostics"]], ["RECORD_TRANSITION_UNRESOLVED"])
+                self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED", "ADDED"])
+                self.assertEqual([r["source_text"] for r in result["tests"]], [added, renamed])
+                self.assertEqual(result["tests"], [t["after"] for t in result["transitions"]])
+                message = result["diagnostics"][0]["message"]
+                self.assertIn("tests/selection.test.ts:1-6 ('original')", message)
+                self.assertIn("opening hunk candidates=[tests/selection.test.ts:11-18 ('added')", message)
+                self.assertIn("old 3-3 -> new 17-17 overlaps selected declarations=[tests/selection.test.ts:11-18 ('added')]", message)
+                self.assertIn("old 6-6 -> new 33-33 overlaps selected declarations=[tests/selection.test.ts:29-33 ('renamed')]", message)
+                self.assertIn("eligible candidates=[]", message)
+                self.assertIn("unique current declaration", message)
+                self.assertIn("review incomplete", message)
+        self.assertEqual(working[0], staged[0])
+        self.assertEqual(working[0], committed[0])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "内容一致と位置が異なる宣言を指す場合は全言語で停止し、双方の候補を診断する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "内容一致または位置の片方だけでSURVIVEDを選ぶか、診断が競合する候補を区別できない"
+    # observable = "Python・TypeScript・C#のexit、遷移と候補宣言の位置を持つ診断message"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # impact = "誤った旧新対応で変更testの価値審査を欠落させるか、停止理由を追跡できなくなる"
+    # distinction = "同内容の複製だけでなく、位置候補と移動した内容一致候補の衝突を各adapterの実Git差分で検証する"
+    # @end-test-value
+    def test_git_mode_explains_content_position_conflicts_in_all_languages(self) -> None:
+        cases = (
+            ("python", "tests/test_conflict.py", "", "", "#", "",
+             "def test_original():\n    assert observed() == 1\n", "test_original", "test_changed"),
+            ("typescript", "tests/conflict.test.ts", "", "", "//", "",
+             'test("original", () => {\n  expect(observed()).toBe(1);\n});\n', "original", "changed"),
+            ("csharp", "tests/Conflict.cs", "class ExampleTests\n{\n", "}\n", "//", "    ",
+             "    [Fact]\n    public void Original()\n    {\n        Assert.Equal(1, Observed());\n    }\n", "Original", "Changed"),
+        )
+        for language, path, header, footer, prefix, indent, body, old_name, new_name in cases:
+            with self.subTest(language=language), tempfile.TemporaryDirectory() as tmp:
+                self.root = Path(tmp)
+                metadata = metadata_block(prefix, indent)
+                separator = "".join(f"{indent}{prefix} separator {i}\n" for i in range(40))
+                self.write(path, header + metadata + body + separator + footer)
+                base = self.initialize_git()
+                changed = body.replace(old_name, new_name)
+                self.write(path, header + metadata + changed + separator + metadata + body + footer)
+
+                result, status, stderr = self.extract_git(base, language)
+
+                self.assertEqual(status, 1, stderr)
+                self.assertEqual([d["code"] for d in result["diagnostics"]], ["RECORD_TRANSITION_UNRESOLVED"])
+                self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED", "ADDED"])
+                self.assertEqual([r["source_text"] for r in result["tests"]], [changed, body])
+                message = result["diagnostics"][0]["message"]
+                current, current_status = EXTRACTOR.extract_repository(self.root, [path])
+                self.assertEqual(current_status, 0)
+                locations = []
+                for record in current["tests"]:
+                    source = record["source"]
+                    locations.append(f"{path}:{source['declaration_start_line']}-{source['declaration_end_line']} ({source['symbol']!r})")
+                self.assertIn(f"content candidates=[{locations[1]}]", message)
+                self.assertIn(f"start projection candidates=[{locations[0]}]", message)
+                self.assertIn("unique current declaration", message)
+                self.assertIn("review incomplete", message)
+
+    # @test-value v2
     # kind = "regression"
     # claim = "既存TypeScript testの末尾変更と直後の追加testを同一置換hunkで誤対応付けしない"
     # oracle = { type = "issue", ref = "natumekazuki/.codex#78" }
