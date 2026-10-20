@@ -59,6 +59,9 @@ function Invoke-HookCommand {
 
 $repositoryRoot = Split-Path $PSScriptRoot -Parent
 $hooks = (Get-Content -LiteralPath (Join-Path $repositoryRoot 'hooks.json') -Raw | ConvertFrom-Json -AsHashtable).hooks
+if ($hooks.ContainsKey('UserPromptSubmit')) {
+    throw 'Common rule reminders must not run on every prompt.'
+}
 $testRoot = Join-Path ([System.IO.Path]::GetFullPath($TemporaryRoot)) ('windows-hook-test-' + [guid]::NewGuid())
 $profilePath = Join-Path $testRoot 'user profile'
 $defaultCodexPath = Join-Path $profilePath '.codex'
@@ -86,7 +89,7 @@ try {
             throw "Direct script invocation did not return context through $shell."
         }
         foreach ($codexPath in @($null, '', ' ', $configuredCodexPath)) {
-            foreach ($eventName in @('UserPromptSubmit', 'SubagentStart', 'SessionStart', 'PreToolUse')) {
+            foreach ($eventName in @('SubagentStart', 'SessionStart', 'PreToolUse')) {
                 $hook = $hooks[$eventName][0].hooks[0]
                 $inputJson = if ($eventName -eq 'PreToolUse') { $allowedInput | ConvertTo-Json -Depth 10 -Compress } else { '{}' }
                 $output = Invoke-HookCommand $hook $shell $inputJson $profilePath $codexPath

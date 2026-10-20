@@ -45,33 +45,6 @@ max_depth = 1
 default_subagent_model = "gpt-6.1-sol"
 default_subagent_reasoning_effort = "medium"
 
-# WithMate installs the `withmate-memory` shim.
-# Keep this server optional so Codex can start when WithMate is unavailable;
-# the runbook owns the bounded CLI fallback rules.
-[mcp_servers.withmate-character-context]
-command = "withmate-memory"
-args = ["mcp-server"]
-env_vars = [
-  "WITHMATE_AGENT_RUNTIME_BINDING_REFERENCE",
-  "WITHMATE_AGENT_RUNTIME_BINDING_REQUIRED",
-  "WITHMATE_AGENT_RUNTIME_TURN_CAPABILITY",
-  "WITHMATE_MEMORY_RUNTIME_APPLICATION_INSTANCE_ID",
-  "WITHMATE_MEMORY_RUNTIME_GENERATION_ID",
-]
-enabled = true
-required = false
-
-# WithMate installs the `withmate-glossary` shim and managed Skill.
-# The server is Session-bound and can operate only on the primary checkout.
-[mcp_servers.withmate-glossary]
-command = "withmate-glossary"
-args = ["mcp-server"]
-env_vars = [
-  "WITHMATE_AGENT_RUNTIME_BINDING_REFERENCE",
-  "WITHMATE_AGENT_RUNTIME_BINDING_REQUIRED",
-  "WITHMATE_AGENT_RUNTIME_TURN_CAPABILITY",
-  "WITHMATE_MEMORY_RUNTIME_APPLICATION_INSTANCE_ID",
-  "WITHMATE_MEMORY_RUNTIME_GENERATION_ID",
-]
-enabled = true
-required = false
+# WithMate 6.3.29 supplies Memory and Glossary HTTP MCP connections per Session.
+# Do not persist their URLs or short-lived tokens in this config.
+# Manual STDIO is for development/diagnostics only; see the WithMate runbooks.
