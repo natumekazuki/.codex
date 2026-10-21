@@ -55,3 +55,38 @@ working treeのsource pathがsymlinkなどによってrepository root外へ解�
 - 対象言語に変更recordがない場合は空の`tests`と`diagnostics`を返し、exit `0`とする。
 
 明示pathを渡す従来modeは、既存file全体の審査やmigrationにだけ使う。新規・変更testの標準審査でGit modeをpath指定へ置き換えない。
+
+## 統合履歴による審査
+
+直比較が`RECORD_TRANSITION_UNRESOLVED`だけで停止した場合は、同じtask baseから対象snapshotまでのfirst-parent統合履歴を使い、全隣接差分を抽出・審査する別経路を利用できる。共通本文から作者の意図を推測せず、実在する削除・再追加等のcheckpointで証拠を分ける。直比較の失敗はそのまま記録し、この経路の成立を直比較のexit `0`と呼ばない。CLI・result schema・metadata v2は変更しない。
+
+### 範囲と抽出
+
+1. 元のtask baseと対象modeを維持する。`head` modeでは指定commit、`staged`／workingでは開始時の`HEAD`を履歴の終点とし、baseと終点を`git rev-parse --verify <revision>^{commit}`でcommitへ解決する。
+2. `git rev-list --first-parent <終点SHA>`に元baseが含まれることを確認する。次のcommandで全区間を古い順に列挙する。各行の先頭がcommit、次が第一親であり、最初の第一親が元base、以後の第一親が直前のcommit、最後のcommitが終点であることを確認する。baseと終点が同一ならcommit区間は空になる。
+
+   ```powershell
+   git -C <repository-root> rev-list --first-parent --reverse --parents <元baseSHA>..<終点SHA>
+   ```
+
+   baseがfirst-parent鎖上にない、必要な履歴・objectを取得できない、区間が連続しない場合は、この経路を成立させない。merge-baseや別baseへ置き換えたり、成功するcommitだけを選んだりしない。mergeは第一親からmerge結果への全変更を対象とし、side branch内部だけに存在した途中状態は対象に含めない。
+
+3. 全区間について、対象言語ごとに既存のGit modeを実行する。pathやline rangeを指定せず、各区間の`tests`・`transitions`全体を区間とともに保持する。
+
+   ```powershell
+   python -X utf8 <skill-dir>/scripts/extract_test_values.py `
+     --root <repository-root> `
+     --changed-from <第一親SHA> --head <commitSHA> --language <language>
+   ```
+
+4. `staged`／workingの場合は、履歴終点SHAを`--changed-from`に指定し、元modeの終端差分も抽出する。`staged`は`--staged`を付け、workingは`--head`も`--staged`も付けない。workingのnon-ignored untrackedも通常どおり含む。確認中に対象snapshotが変わった場合は、変化した範囲の抽出・審査を更新する。
+5. 全区間・終端差分がexit `0`の場合だけ、その全出力を審査へ渡す。一区間でも遷移未解決・不正metadata・source解析失敗等が残れば抽出未完了とする。過去commitの追加・surviving testにも通常のmetadata条件を適用し、後の修正・削除で免除しない。削除beforeに対する既存の歴史的metadata例外はその範囲だけで維持する。
+
+### 審査と完了
+
+- reviewerへ元base・最終対象snapshotと、担当区間の両端・抽出recordを渡す。source、locator、契約は該当snapshotで確認し、途中版のpath・行を最終版のものとみなさない。
+- 全区間の`tests`と`transitions`を審査する。途中追加後に削除したtestも含め、symbol名等で区間をまたぐrecordを間引かない。`DELETED.before`を落とさず、削除後の`ADDED`を一つの`SURVIVED`へ合成しない。
+- 元baseの削除前testと最終testを含む証拠を参照し、最終対象の契約に対する保持・変更・削除・再追加の妥当性を判断する。区間内の抽出成功だけで元baseの要求が最終testに維持されたと推定しない。
+- 全区間の抽出成功、全recordの独立審査、指摘の分類・必要な引継ぎを満たしたときに、元base・最終対象・履歴経路を明記して審査完了とする。抽出成功、審査完了、全件修正、統合可否は区別する。
+
+一つのcommitや終端差分の中で意味のある保持行が複数宣言へ分かれる場合は、この経路でも停止する。履歴を作り直して成功させる経路ではなく、実在する統合履歴で全件審査できる場合だけを扱う。
