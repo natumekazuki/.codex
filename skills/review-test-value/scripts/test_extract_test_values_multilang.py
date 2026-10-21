@@ -1614,6 +1614,168 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "contract"
+    # claim = "意味ある共通本文が複数宣言へ投影される直比較は停止し、削除commitを挟む全隣接差分は旧新の証拠を保持する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "直接比較の曖昧な対応を成功化するか、履歴経路で削除前本文または再追加されたtestを落とす"
+    # observable = "working・staged・headのexit、diagnostics、DELETED.beforeとADDED.afterの本文・metadata"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-history-review"
+    # lifecycle = "permanent"
+    # impact = "広域reviewが失敗契約を迂回したり、削除と再追加の一部を未審査のまま完了する"
+    # distinction = "単一の保持本文行と閉じ行の衝突ではなくsetupとcleanupの複数本文行を分散させ、実在削除commit経由との違いを同じfixtureで確認する"
+    # @end-test-value
+    def test_git_mode_preserves_delete_readd_history_without_resolving_split_body(self) -> None:
+        path = "tests/collection.test.ts"
+        prefix = 'import assert from "node:assert/strict";\nimport test from "node:test";\n\n'
+        before = (
+            'test("removed case", () => {\n'
+            "  const values = new Map<string, number>();\n"
+            "  const notifications: number[] = [];\n"
+            "  const notify = (value: number) => notifications.push(value);\n"
+            "  try {\n"
+            "    for (const amount of [1, 2, 3]) {\n"
+            '      values.set("current", amount);\n'
+            "      notify(amount);\n"
+            '      assert.equal(values.get("current"), amount);\n'
+            "      assert.equal(notifications.at(-1), amount);\n"
+            "      assert.equal(values.size, 1);\n"
+            "    }\n"
+            "  } finally {\n"
+            "    values.clear();\n"
+            "    notifications.length = 0;\n"
+            "    assert.equal(values.size, 0);\n"
+            "    assert.equal(notifications.length, 0);\n"
+            "    assert.deepEqual([...values.keys()], []);\n"
+            "    assert.deepEqual([...values.values()], []);\n"
+            "  }\n"
+            "});\n"
+        )
+        first = before.replace('"removed case"', '"new input case"').replace(
+            "      assert.equal(values.size, 1);", "      assert.ok(amount > 0);"
+        ).replace(
+            "    notifications.length = 0;\n"
+            "    assert.equal(values.size, 0);\n"
+            "    assert.equal(notifications.length, 0);\n"
+            "    assert.deepEqual([...values.keys()], []);\n"
+            "    assert.deepEqual([...values.values()], []);\n", ""
+        )
+        second = (
+            'test("new item case", () => {\n'
+            '  const values = new Map<string, number>([["temporary", 7]]);\n'
+            "  const notifications = [7];\n"
+            "  try {\n"
+            '    assert.equal(values.get("temporary"), 7);\n'
+            "    assert.equal(notifications[0], 7);\n"
+            "  } finally {\n"
+            "    values.clear();\n"
+            "    notifications.length = 0;\n"
+            "    assert.equal(values.size, 0);\n"
+            "    assert.equal(notifications.length, 0);\n"
+            "    assert.deepEqual([...values.keys()], []);\n"
+            "    assert.deepEqual([...values.values()], []);\n"
+            "  }\n"
+            "});\n"
+        )
+        metadata = metadata_block("//")
+        self.write(path, prefix + metadata + before)
+        base = self.initialize_git()
+        self.git("config", "core.autocrlf", "false")
+        self.git("config", "diff.algorithm", "myers")
+        self.write(path, prefix)
+        self.git("add", path)
+        self.git("commit", "--quiet", "-m", "remove collection test")
+        deleted = self.git("rev-parse", "HEAD")
+        deletion, status, stderr = self.extract_git(base, "typescript", "--head", deleted)
+        self.assertEqual(status, 0, (stderr, deletion.get("diagnostics")))
+        self.assertEqual(deletion["diagnostics"], [])
+        self.assertEqual(deletion["tests"], [])
+        self.assertEqual([t["kind"] for t in deletion["transitions"]], ["DELETED"])
+        removed = deletion["transitions"][0]
+        self.assertIsNone(removed["after"])
+        self.assertEqual(removed["before"]["source_text"], before)
+        self.assertIsNotNone(removed["before"]["metadata"])
+        self.assertEqual(removed["before"]["metadata_format_version"], 2)
+
+        self.write(path, prefix + metadata + first + "\n" + metadata + second)
+        working = (
+            self.extract_git(base, "typescript"),
+            self.extract_git(deleted, "typescript"),
+        )
+        self.git("add", path)
+        self.write(path, 'test("dirty", () => {\n')
+        staged = (
+            self.extract_git(base, "typescript", "--staged"),
+            self.extract_git(deleted, "typescript", "--staged"),
+        )
+        self.git("commit", "--quiet", "-m", "add redesigned collection tests")
+        head = self.git("rev-parse", "HEAD")
+        committed = (
+            self.extract_git(base, "typescript", "--head", head),
+            self.extract_git(deleted, "typescript", "--head", head),
+        )
+        for mode, (direct, adjacent) in {
+            "working": working, "staged": staged, "head": committed,
+        }.items():
+            with self.subTest(mode=mode):
+                result, status, stderr = direct
+                self.assertEqual(status, 1, stderr)
+                self.assertEqual(
+                    [d["code"] for d in result["diagnostics"]],
+                    ["RECORD_TRANSITION_UNRESOLVED"],
+                )
+                self.assertIn("eligible candidates=[]", result["diagnostics"][0]["message"])
+                result, status, stderr = adjacent
+                self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED", "ADDED"])
+                self.assertEqual([r["source_text"] for r in result["tests"]], [first, second])
+                self.assertEqual(result["tests"], [t["after"] for t in result["transitions"]])
+                self.assertTrue(all(t["before"] is None for t in result["transitions"]))
+                self.assertTrue(all(r["metadata"] == removed["before"]["metadata"] for r in result["tests"]))
+                self.assertTrue(all(r["metadata_format_version"] == 2 for r in result["tests"]))
+        self.assertEqual(working, staged)
+        self.assertEqual(working, committed)
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "後続commitでmetadataを直しても、履歴経路の不正metadata追加区間は失敗のまま残る"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "最終snapshotの正常metadataで過去区間のschema診断を免除する"
+    # observable = "各隣接区間と直接比較のCLI exit、schema diagnostic、metadata null"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-history-review"
+    # lifecycle = "permanent"
+    # impact = "未審査の不正metadataを含む履歴全体を抽出成功と誤認する"
+    # distinction = "単発schema検証ではなく、不正追加後に修正済みの実commit列で全区間成功条件とendpoint成功を区別する"
+    # @end-test-value
+    def test_git_mode_keeps_invalid_intermediate_metadata_diagnostic(self) -> None:
+        path = "tests/history.test.ts"
+        base = self.initialize_git()
+        valid = metadata_block("//") + 'test("added", () => { expect(true).toBe(true); });\n'
+        self.write(path, valid.replace('kind = "invariant"', 'kind = "unknown"'))
+        self.git("add", path)
+        self.git("commit", "--quiet", "-m", "add invalid metadata")
+        invalid = self.git("rev-parse", "HEAD")
+        self.write(path, valid)
+        self.git("add", path)
+        self.git("commit", "--quiet", "-m", "fix metadata")
+        head = self.git("rev-parse", "HEAD")
+
+        result, status, stderr = self.extract_git(base, "typescript", "--head", invalid)
+        self.assertEqual(status, 1, stderr)
+        self.assertEqual([d["code"] for d in result["diagnostics"]], ["TEST_VALUE_SCHEMA_ERROR"])
+        self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED"])
+        self.assertIsNone(result["tests"][0]["metadata"])
+        for start in (invalid, base):
+            with self.subTest(base=start):
+                result, status, stderr = self.extract_git(start, "typescript", "--head", head)
+                self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(len(result["tests"]), 1)
+                self.assertIsNotNone(result["tests"][0]["metadata"])
+
+    # @test-value v2
+    # kind = "contract"
     # claim = "保持行が複数testへ分かれた遷移は3snapshotで停止し、候補と旧新行の投影を診断する"
     # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
     # fault = "曖昧なoriginalをSURVIVEDやDELETEDへ推測分類するか、衝突する宣言と保持行を診断から失う"
