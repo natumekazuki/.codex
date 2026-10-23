@@ -1596,35 +1596,38 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
                 self.git("add", new_path)
                 self.assertTrue(self.git("diff", "--cached", "--find-renames", "--name-status", base).startswith("R"))
                 result, status, stderr = self.extract_git(base, "typescript")
+                self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                self.assertEqual(result["diagnostics"], [])
                 if split:
-                    self.assertEqual(status, 1, stderr)
-                    self.assertEqual([d["code"] for d in result["diagnostics"]], ["RECORD_TRANSITION_UNRESOLVED"])
-                    self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED"] * 3)
+                    self.assertEqual([t["kind"] for t in result["transitions"]], ["DELETED"] + ["ADDED"] * 3)
+                    removed = result["transitions"][0]
+                    self.assertEqual(removed["before"]["source_text"], body)
+                    self.assertEqual(removed["before"]["source"]["path"], old_path)
+                    self.assertIsNone(removed["before"]["metadata"])
+                    self.assertIsNone(removed["after"])
                     self.assertEqual(len(result["tests"]), 3)
                 else:
-                    self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
-                    self.assertEqual(result["diagnostics"], [])
                     self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED", "SURVIVED"])
                     survived = result["transitions"][1]
                     self.assertEqual(survived["before"]["source_text"], body)
                     self.assertEqual(survived["after"]["source_text"], changed_body)
                     self.assertEqual(survived["before"]["source"]["path"], old_path)
                     self.assertEqual(survived["after"]["source"]["path"], new_path)
-                self.assertEqual(result["tests"], [t["after"] for t in result["transitions"]])
+                self.assertEqual(result["tests"], [t["after"] for t in result["transitions"] if t["after"] is not None])
 
     # @test-value v2
     # kind = "contract"
-    # claim = "意味ある共通本文が複数宣言へ投影される直比較は停止し、削除commitを挟む全隣接差分は旧新の証拠を保持する"
+    # claim = "共通本文が複数宣言へ投影される直比較と削除commitを挟む全隣接差分は、同じ旧新の証拠を保持する"
     # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
-    # fault = "直接比較の曖昧な対応を成功化するか、履歴経路で削除前本文または再追加されたtestを落とす"
+    # fault = "一対多置換をSURVIVEDへ誤対応するか、直比較または履歴経路で削除前本文や再追加testを落とす"
     # observable = "working・staged・headのexit、diagnostics、DELETED.beforeとADDED.afterの本文・metadata"
     # observation_boundary = "public-boundary"
     # scope = "git-diff-history-review"
     # lifecycle = "permanent"
-    # impact = "広域reviewが失敗契約を迂回したり、削除と再追加の一部を未審査のまま完了する"
-    # distinction = "単一の保持本文行と閉じ行の衝突ではなくsetupとcleanupの複数本文行を分散させ、実在削除commit経由との違いを同じfixtureで確認する"
+    # impact = "削除と再追加の一部を未審査のまま完了する"
+    # distinction = "単一の本文行と閉じ行だけでなく複数本文行を分散させ、実在削除commit経由と直比較の証拠を照合する"
     # @end-test-value
-    def test_git_mode_preserves_delete_readd_history_without_resolving_split_body(self) -> None:
+    def test_git_mode_preserves_delete_readd_history_and_split_body_records(self) -> None:
         path = "tests/collection.test.ts"
         prefix = 'import assert from "node:assert/strict";\nimport test from "node:test";\n\n'
         before = (
@@ -1718,12 +1721,12 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         }.items():
             with self.subTest(mode=mode):
                 result, status, stderr = direct
-                self.assertEqual(status, 1, stderr)
-                self.assertEqual(
-                    [d["code"] for d in result["diagnostics"]],
-                    ["RECORD_TRANSITION_UNRESOLVED"],
-                )
-                self.assertIn("eligible candidates=[]", result["diagnostics"][0]["message"])
+                self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED", "DELETED", "ADDED"])
+                self.assertEqual(result["transitions"][1], removed)
+                self.assertEqual([t for t in result["transitions"] if t["after"] is not None], adjacent[0]["transitions"])
+                self.assertEqual(result["tests"], adjacent[0]["tests"])
                 result, status, stderr = adjacent
                 self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
                 self.assertEqual(result["diagnostics"], [])
@@ -1776,17 +1779,17 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "contract"
-    # claim = "保持行が複数testへ分かれた遷移は3snapshotで停止し、候補と旧新行の投影を診断する"
+    # claim = "保持本文と閉じ行が複数testへ分かれる置換を、3snapshotで旧1件と新2件の全文・位置・metadataを持つ審査単位へ分離する"
     # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
-    # fault = "曖昧なoriginalをSURVIVEDやDELETEDへ推測分類するか、衝突する宣言と保持行を診断から失う"
-    # observable = "working・staged・headのexit、診断message、ADDEDの本文とtests集合"
+    # fault = "存続関係を推測したSURVIVEDを作るか、旧recordを欠落させるか、3snapshotで異なる結果を返す"
+    # observable = "working・staged・headのexit、diagnostics、DELETED.beforeとADDED.afterの全record、tests集合"
     # observation_boundary = "public-boundary"
     # scope = "git-diff-transition"
     # lifecycle = "permanent"
-    # impact = "削除前を含む全件審査が未完了の差分を通すか、利用者が停止原因を追跡できなくなる"
-    # distinction = "本文行と閉じ行の異なる投影先とdirty working treeからのindex・commit分離を実Git差分で確認する"
+    # impact = "旧testの保持・置換・削除理由を審査する証拠が失われる"
+    # distinction = "本文行と閉じ行の異なる投影先、旧metadata未付与、dirty working treeからのindex・commit分離を実Git差分で確認する"
     # @end-test-value
-    def test_git_mode_explains_split_retained_line_projections(self) -> None:
+    def test_git_mode_preserves_split_retained_line_records(self) -> None:
         path = "tests/selection.test.ts"
         before = (
             'test("original", () => {\n'
@@ -1802,10 +1805,15 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             "  prepareNew();\n  expect(newResult()).toBe(true);\n  cleanupNew();\n});\n"
         )
         self.write(path, before)
+        before_result, before_status = self.extract(path)
+        self.assertEqual(before_status, 1)
+        self.assertEqual([d["code"] for d in before_result["diagnostics"]], ["TEST_VALUE_MISSING"])
         base = self.initialize_git()
         self.git("config", "core.autocrlf", "false")
         self.git("config", "diff.algorithm", "myers")
         self.write(path, metadata_block("//") + added + metadata_block("//") + renamed)
+        after_result, after_status = self.extract(path)
+        self.assertEqual(after_status, 0)
         working = self.extract_git(base, "typescript")
         self.git("add", path)
         self.write(path, 'test("dirty", () => {\n')
@@ -1817,21 +1825,89 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
             "working": working, "staged": staged, "head": committed,
         }.items():
             with self.subTest(mode=mode):
-                self.assertEqual(status, 1, stderr)
-                self.assertEqual([d["code"] for d in result["diagnostics"]], ["RECORD_TRANSITION_UNRESOLVED"])
-                self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED", "ADDED"])
+                self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual([t["kind"] for t in result["transitions"]], ["DELETED", "ADDED", "ADDED"])
+                removed = result["transitions"][0]
+                self.assertEqual(removed["before"], before_result["tests"][0])
+                self.assertEqual(removed["before"]["source_text"], before)
+                self.assertIsNone(removed["before"]["metadata"])
+                self.assertIsNone(removed["after"])
+                self.assertEqual(removed["before"]["source"]["declaration_start_line"], 1)
+                self.assertEqual(removed["before"]["source"]["declaration_end_line"], 6)
+                self.assertEqual(result["tests"], after_result["tests"])
                 self.assertEqual([r["source_text"] for r in result["tests"]], [added, renamed])
-                self.assertEqual(result["tests"], [t["after"] for t in result["transitions"]])
-                message = result["diagnostics"][0]["message"]
-                self.assertIn("tests/selection.test.ts:1-6 ('original')", message)
-                self.assertIn("opening hunk candidates=[tests/selection.test.ts:11-18 ('added')", message)
-                self.assertIn("old 3-3 -> new 17-17 overlaps selected declarations=[tests/selection.test.ts:11-18 ('added')]", message)
-                self.assertIn("old 6-6 -> new 33-33 overlaps selected declarations=[tests/selection.test.ts:29-33 ('renamed')]", message)
-                self.assertIn("eligible candidates=[]", message)
-                self.assertIn("unique current declaration", message)
-                self.assertIn("review incomplete", message)
+                self.assertEqual(result["tests"], [t["after"] for t in result["transitions"] if t["after"] is not None])
+                self.assertTrue(all(t["before"] is None for t in result["transitions"][1:]))
+                self.assertEqual(
+                    [(r["source"]["declaration_start_line"], r["source"]["declaration_end_line"]) for r in result["tests"]],
+                    [(11, 18), (29, 33)],
+                )
         self.assertEqual(working[0], staged[0])
         self.assertEqual(working[0], committed[0])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "一対多置換でも旧新の不正metadataと新側の未付与を診断し、保持行の宣言外投影を置換成功へ変えない"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "DELETEDへの分離が旧metadataのschema診断や新側の診断を捨てるか、宣言外の保持行を無視する"
+    # observable = "CLIのexitとdiagnostic code、DELETED.before、ADDED.afterの本文とmetadata"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # impact = "不正な審査入力や証拠不十分な置換を全件抽出成功と誤認する"
+    # distinction = "単純な削除や追加ではなく一対多置換の分岐を実Git差分で通し、許可範囲と診断の保持を同時に確認する"
+    # @end-test-value
+    def test_git_mode_keeps_split_replacement_failure_boundaries(self) -> None:
+        path = "tests/selection.test.ts"
+        before = (
+            'test("original", () => {\n'
+            "  prepareOld();\n  render(widget);\n"
+            "  expect(oldResult()).toBe(true);\n  cleanupOld();\n});\n"
+        )
+        added = (
+            'test("added", () => {\n'
+            "  setup();\n  another();\n  x();\n  y();\n  z();\n  render(widget);\n});\n"
+        )
+        renamed = (
+            'test("renamed", () => {\n'
+            "  prepareNew();\n  expect(newResult()).toBe(true);\n  cleanupNew();\n});\n"
+        )
+        metadata = metadata_block("//")
+        invalid = metadata.replace('kind = "invariant"', 'kind = "unknown"')
+        cases = (
+            ("invalid before", invalid, metadata, added, "TEST_VALUE_SCHEMA_ERROR"),
+            ("invalid after", metadata, invalid, added, "TEST_VALUE_SCHEMA_ERROR"),
+            ("missing after", "", "", added, "TEST_VALUE_MISSING"),
+            ("outside declaration", metadata, metadata,
+             added.replace("  render(widget);\n", "") + "  render(widget);\n",
+             "RECORD_TRANSITION_UNRESOLVED"),
+        )
+        for name, old_metadata, new_metadata, first, diagnostic in cases:
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as tmp:
+                self.root = Path(tmp)
+                self.write(path, old_metadata + before)
+                base = self.initialize_git()
+                self.git("config", "core.autocrlf", "false")
+                self.git("config", "diff.algorithm", "myers")
+                self.write(path, new_metadata + first + metadata + renamed)
+
+                result, status, stderr = self.extract_git(base, "typescript")
+
+                self.assertEqual(status, 1, stderr)
+                self.assertEqual([d["code"] for d in result["diagnostics"]], [diagnostic])
+                removed = [t["before"] for t in result["transitions"] if t["kind"] == "DELETED"]
+                added_records = [t["after"] for t in result["transitions"] if t["kind"] == "ADDED"]
+                self.assertEqual(result["tests"], added_records)
+                self.assertEqual(len(added_records), 2)
+                if name == "outside declaration":
+                    self.assertEqual(removed, [])
+                    self.assertIn("overlaps selected declarations=[]", result["diagnostics"][0]["message"])
+                else:
+                    self.assertEqual([r["source_text"] for r in added_records], [added, renamed])
+                    self.assertEqual([r["source_text"] for r in removed], [before])
+                    self.assertEqual(removed[0]["metadata"] is None, old_metadata != metadata)
+                    self.assertEqual(added_records[0]["metadata"] is None, name != "invalid before")
 
     # @test-value v2
     # kind = "contract"
