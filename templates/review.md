@@ -21,7 +21,7 @@
 - Location: <file and line, symbol, or other precise anchor>
 - Impact: <observable consumer or system impact>
 - Evidence: <source, executable contract, or observed behavior>
-- Disposition: <統合前の対応／後追い先／重複／不採用／未確認と根拠。優先度とは分ける>
+- Disposition: <今回の仕上げ／後追い先／重複／不採用／未確認と根拠。採否・対応時期、統合への影響、優先度を分ける>
 - Remediation: <minimal direction>
 - Status: <現在の対応状況。未対応／修正済み・未検証／確認済み等>
 - Resolution: <対応内容と対象commit・差分等、実施した確認と結果>
