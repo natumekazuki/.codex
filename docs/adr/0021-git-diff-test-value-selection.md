@@ -1,9 +1,16 @@
 # ADR-0021: テスト価値審査の対象をGit差分から選択する
 
-- Status: accepted
+- Status: accepted（一対多置換の停止判断は一部置換）
 - Date: 2026-08-29
+- Updated: 2026-10-23
 - Supersedes: none
 - Extends: ADR-0020
+
+## 現在の適用範囲
+
+Decisionの「同一file pairで候補が曖昧なら`RECORD_TRANSITION_UNRESOLVED`で停止する」という判断のうち、[Git選択契約の一対多置換条件](../../skills/review-test-value/references/git-selection-v1.md#selection)に該当する範囲は、現行運用の適用対象外とする。後継判断は同契約を正本とし、旧recordを`DELETED.before`、新recordを他の旧recordとの一意な対応もなければ`ADDED.after`として保持し、旧・新の全件を審査へ渡す。
+
+内容と位置の競合など、同条件を満たさない未解決の停止判断と、その他の判断は維持する。以下の本文は判断履歴として保持する。
 
 ## Context
 
