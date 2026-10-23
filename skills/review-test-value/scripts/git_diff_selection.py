@@ -498,6 +498,29 @@ def _retained_declaration_is_closing_only(
     )
 
 
+def _retained_declaration_is_split(
+    record: dict[str, Any],
+    hunks: tuple[DiffHunk, ...],
+    after_records: Sequence[dict[str, Any]],
+) -> bool:
+    """Require every retained line to belong to a still-unmatched declaration."""
+    owners: set[int] = set()
+    source = record["source"]
+    for line in range(source["declaration_start_line"], source["declaration_end_line"] + 1):
+        if any(h.old_count and h.old_start <= line <= h.old_end for h in hunks):
+            continue
+        projected = _map_old_line_to_new(line, hunks)
+        owner = next((
+            index for index, after in enumerate(after_records)
+            if after["source"]["declaration_start_line"] <= projected
+            <= after["source"]["declaration_end_line"]
+        ), None)
+        if owner is None:
+            return False
+        owners.add(owner)
+    return len(owners) > 1
+
+
 def _build_transitions(
     item: ChangedFile,
     before_records: Sequence[dict[str, Any]],
@@ -624,6 +647,9 @@ def _build_transitions(
         matched = candidate_sets[0][0] if candidate_sets else None
         if matched is None and not fully_replaced:
             if closing_only or (
+                opening_hunks
+                and _retained_declaration_is_split(before, item.hunks, unmatched_after)
+            ) or (
                 opening_hunks
                 and not any(
                     hunk.new_start

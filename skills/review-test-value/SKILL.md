@@ -25,7 +25,7 @@ working treeが既定で、indexだけを対象にする場合は`--staged`、co
 4. exit `0`のJSONを読み、`tests`と`transitions`の全recordを確認する。exit `1`は抽出未完了であり、sourceまたはmetadataに実際の不備があれば修正する。直比較が`RECORD_TRANSITION_UNRESOLVED`だけで停止した場合は、[統合履歴による審査](references/git-selection-v1.md#統合履歴による審査)の条件を満たす別経路を利用できる。抽出を通すために製品testの意味・配置を変えない。exit `2`はCLI、adapter、I/Oなどの失敗であり、いずれの失敗でも部分結果をレビューへ渡さない。
 5. 親エージェントは、相互に独立して扱えるrecordまたは小さなbatchごとに、利用できるサブエージェント枠の範囲で選択した担当へreviewを委譲する。並列に委譲できない場合は親の判断で順次扱う。
 6. 各review依頼には、repository root、task baseと対象snapshotまたは現在のdiff、対象fileとlocator、抽出recordのmetadataとtest source、対象scope、read-onlyであること、下記のreview観点と適用される統合基準を含める。production codeやfixtureを親が事前に収集せず、reviewer自身が対象testから必要な範囲をrepository内で探索する。
-7. 親エージェントは自然言語のreview結果を読み、共通`AGENTS.md`の「条件付き参照」から解決した`docs/guides/development.md`の「統合優先・修正分離」に従って各指摘の扱いと完了可否を判断する。必須確認や統合判定に必要なcontext不足、ブロッカー修正、新たな変更の確認に限り、対象recordへ追加contextや追加reviewを依頼できる。担当は同じ委譲基準で選ぶ。非ブロッカーの解消や同じ入力でのvarianceを期待する自動retryは行わない。
+7. 親エージェントは自然言語のreview結果を読み、共通`AGENTS.md`の「条件付き参照」から解決した`docs/guides/development.md`の「統合優先・修正分離」に従って各指摘の採否・対応時期と完了可否を判断する。今回必要なmetadataとtest本文の整合修正等は、依頼範囲内の修正と必要な確認で完結するなら仕上げとして扱う。必須確認や採否・統合判定に必要なcontext不足、仕上げやブロッカーの修正、新たな変更に必要な範囲で、対象recordへ追加contextや追加reviewを依頼できる。担当は同じ委譲基準で選ぶ。全件解消を目的とした改善探索や、同じ入力でのvarianceを期待する自動retryは行わない。
 
 reviewerの起動失敗、内容のない応答、対象recordを確認していない応答はreview済みとして扱わない。親が原因と不足内容を確認し、必要なら対象recordだけへ追加contextまたは別reviewを依頼する。
 
@@ -75,7 +75,7 @@ reviewerはtest sourceからproduction code、fixture、helper、mock、oracle�
 - production contractに対して保持価値があるか。今回の変更完了確認だけならtemporaryとして削除し、現在のcontractやpolicyを守るtestなら保持理由と継続コストを確認する。削除、移設、再設計が適切な場合はその判断も示す。
 - supplied contextだけでは判断できない具体的事項があるか。
 
-通常の自然言語reviewで、結論、理由、具体的な問題、統合への影響、判断に足りないcontextが分かるよう依頼する。停止を提案する場合は適用する統合基準と根拠を示し、testの改善価値だけで全指摘をブロッカーにしない。返答のJSON schema、必須field、固定verdict、識別子の復唱を応答契約にしない。
+通常の自然言語reviewで、結論、理由、具体的な問題、統合への影響、判断に足りないcontextが分かるよう依頼する。対応の必要性は要求・契約・具体的な支障に結び付け、単なる改善余地や好みは必要な修正と区別する。停止を提案する場合は適用する統合基準と根拠を示し、testの改善価値だけで全指摘をブロッカーにしない。返答のJSON schema、必須field、固定verdict、識別子の復唱を応答契約にしない。
 
 ## 完了判断
 
@@ -83,8 +83,8 @@ reviewerはtest sourceからproduction code、fixture、helper、mock、oracle�
 
 - 直比較、または上記の統合履歴経路の全区間でextractorが成功し、Git差分から得た全対象recordを確認できている。
 - 担当サブエージェントのreview結果を全recordまたは明示したbatchについて読んでいる。
-- 各指摘の扱いが決まり、非ブロッカーはプロジェクトで定義した管理先へ引き継いでいる。現diffへの全件反映は要求しない。
-- context不足は、必須確認・統合判定を妨げるものと、後追い調査に分離できるものを区別している。
+- 各指摘の採否・対応時期と対応状況が明確であり、後追いに該当する残件はプロジェクトで定義した管理先へ権限内で引き継いでいる。不採用の改善案を後追いへ登録せず、現diffへの全件反映も要求しない。
+- context不足は、必要な採否・必須確認・統合判定を妨げるものと、後追いの基準を満たす調査を区別している。
 
 統合へ進むにはブロッカーの解消と必須条件の成立が必要であり、未実施の審査や失敗したcheckを後追い扱いで免除しない。抽出・全recordのreview・必要なtest実行・契約を弱めないことは維持する。
 
