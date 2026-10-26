@@ -58,6 +58,8 @@ working treeのsource pathがsymlinkなどによってrepository root外へ解�
 
 明示pathを渡す従来modeは、既存file全体の審査やmigrationにだけ使う。新規・変更testの標準審査でGit modeをpath指定へ置き換えない。
 
+明示path modeは比較snapshotを持たず、`transitions: null`で遷移が適用外であることを表す。Git modeで変更がない場合の空配列とは区別する。
+
 ## 統合履歴による審査
 
 直比較が`RECORD_TRANSITION_UNRESOLVED`だけで停止した場合は、同じtask baseから対象snapshotまでのfirst-parent統合履歴を使い、全隣接差分を抽出・審査する別経路を利用できる。共通本文から作者の意図を推測せず、実在する削除・再追加等のcheckpointで証拠を分ける。直比較の失敗はそのまま記録し、この経路の成立を直比較のexit `0`と呼ばない。CLI・result schema・metadata v2は変更しない。

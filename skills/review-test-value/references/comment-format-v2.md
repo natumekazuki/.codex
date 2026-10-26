@@ -2,6 +2,8 @@
 
 対応するtest declarationの直前に、言語の行コメントで`@test-value v2`から`@end-test-value`までのTOMLを置く。結合と宣言範囲は[source adapter契約](source-adapters-v1.md)に従う。
 
+blockと宣言の間に空行を入れず、同じindentで直接隣接させる。複数blockの隣接や未結合blockを拒否し、metadataがない場合に本文から補完しない。文字列内のmetadata風の記述をコメントblockとして扱わず、未知のmarker versionも診断対象にする。
+
 ```python
 # @test-value v2
 # kind = "invariant"

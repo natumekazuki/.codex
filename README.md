@@ -36,15 +36,15 @@ GPT-6.1 Solを基本に使い、やる内容がほぼ決まっている作業は
 | `docs/system-prompt/`、`.codex/model-instructions-withmate.md` | Codex system promptの取得版、日本語訳、WithMate用編集元 |
 | `docs/adr/` | 判断履歴。適用状態を明記し、置換・撤回後も本文を保持する |
 
-## Codex／Claude間の変更反映
+## Codex／Claude／OpenCode間の変更反映
 
-この節は`.codex`と`.claude`の保守にのみ適用し、共通ルールの適用先repositoryには適用しない。
+この節は`.codex`、`.claude`、OpenCode設定の保守にのみ適用し、共通ルールの適用先repositoryには適用しない。Codexを基本の正本とし、ClaudeとOpenCode（`~/.config/opencode`）は独立して完結する構成を保つ。
 
-- `.codex` と `.claude` は独立したrepositoryとして管理し、各repository内で規約・Skill・設定が完結する。相互importやリンク共有には依存しない。
-- 自分で保守するルール・Skill・設定例・hook方針のうち、両製品に共通する変更は、原則として同じ変更作業で双方へ反映する。
-- 反映では目的・制約・完了条件を揃える。モデル、tool、設定形式等の製品固有部分は、それぞれに適した定義を維持する。
-- 製品固有の変更でも、もう一方への影響を確認する。反映不要なら、その理由を作業報告に示す。
-- 双方の差分と必要な動作を確認し、反映・検証結果を報告する。
+- `.codex`、`.claude`、OpenCode設定は独立して完結させ、相互importやリンク共有に依存しない。
+- 共通ルール、自分で保守するSkill、設定例、通知方針の変更は、目的・制約・完了条件を揃えて同じ作業で3者へ反映する。モデル、tool、設定形式等の製品固有部分は各製品に適した定義を維持する。
+- ClaudeまたはOpenCode起点の共通改善はCodexへ逆反映する。製品固有の変更も他の2者への影響を確認し、反映しない場合は理由を作業報告に示す。
+- 認証情報、実config、Session URL・token、Memory、履歴、cache、外部managed Skillは同期対象外とする。
+- 3者の差分と必要な動作を確認し、反映・検証結果を報告する。
 
 ## 共通ルールの保守と検証
 
