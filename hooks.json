@@ -2,7 +2,7 @@
   "hooks": {
     "SubagentStart": [
       {
-        "matcher": "^(default|worker|explorer|general_sol|general_luna|general_astra)$",
+        "matcher": "^(default|worker|explorer|general_sol|general_luna|general_terra|general_astra)$",
         "hooks": [
           {
             "type": "command",
