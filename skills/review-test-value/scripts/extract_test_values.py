@@ -571,7 +571,7 @@ def run_process(command: Sequence[str], source: str, adapter_name: str) -> str:
 
 
 def analyze_typescript_source(
-    source: str, suffix: str, relative_path: str
+    source: str, suffix: str, relative_path: str, *, historical_titles: bool = False
 ) -> SourceAnalysis:
     adapter_dir = Path(__file__).parent / "adapters" / "typescript"
     if not (adapter_dir / "node_modules" / "typescript" / "package.json").is_file():
@@ -579,8 +579,11 @@ def analyze_typescript_source(
             "TypeScript adapter dependency is missing; run "
             "npm ci --prefix <skill-dir>/scripts/adapters/typescript"
         )
+    command = ["node", str(adapter_dir / "extract.mjs"), suffix]
+    if historical_titles:
+        command.append("--historical-titles")
     payload = run_process(
-        ["node", str(adapter_dir / "extract.mjs"), suffix],
+        command,
         source,
         "TypeScript",
     )
@@ -793,14 +796,17 @@ def extract_source(
 
 
 def extract_source_text(
-    raw: str, relative_path: str, profile: AdapterProfile, suffix: str | None = None
+    raw: str, relative_path: str, profile: AdapterProfile, suffix: str | None = None,
+    *, historical_titles: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     source, lines = normalized_lines(raw)
     suffix = suffix or Path(relative_path).suffix.lower()
     if profile == PYTHON_PROFILE:
         analysis = analyze_python_source(source, lines, relative_path)
     elif profile == TYPESCRIPT_PROFILE:
-        analysis = analyze_typescript_source(source, suffix, relative_path)
+        analysis = analyze_typescript_source(
+            source, suffix, relative_path, historical_titles=historical_titles
+        )
     elif profile == CSHARP_PROFILE:
         analysis = analyze_csharp_source(source, relative_path)
     else:

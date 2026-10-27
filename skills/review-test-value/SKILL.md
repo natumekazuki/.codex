@@ -31,6 +31,8 @@ reviewerの起動失敗、内容のない応答、対象recordを確認してい
 
 削除・移設では`transitions`の`DELETED.before`、`ADDED.after`、`SURVIVED.after`を漏れなく確認する。削除だけで過去のreview義務が解消したとみなさず、現在の契約に対して保持、移設、削除の根拠を親が判断する。固定baseの削除前testがmetadata未付与でも、`DELETED.before`の`metadata: null`を歴史的証拠として審査へ渡す。追加・surviving側の未付与／不正metadataは診断対象のままにし、pathやsymbol名だけで移設を`SURVIVED`へ対応付けない。
 
+固定baseのTypeScript動的titleは、式を評価しないsource declarationとして抽出される。`[title expression: ...]`というsymbolをruntime titleやcase一覧と解釈せず、保持された削除前本文とmetadataを審査する。現行側の動的titleなど、対応外sourceの失敗条件は変わらない。
+
 ## 変更完了確認と恒久保持
 
 今回の変更で削除・非表示にした処理や表示内容が存在しないことだけを確認するために追加したtestは、恒久testとして扱わない。必要なら実装中に一時検証として実行し、確認と修正が完了したらそのtestを削除する。`lifecycle = "ephemeral"`を付けた場合も、`remove_when`の条件を満たしたら削除し、metadataを残すこと自体を恒久保持の根拠にしない。

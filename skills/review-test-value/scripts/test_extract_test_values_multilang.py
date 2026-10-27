@@ -2281,6 +2281,145 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "regression"
+    # claim = "動的タイトルを含む削除fileをcase展開せず全宣言の削除前証拠として保持する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "固定baseのtemplate titleで抽出を停止するか、宣言全文やmetadataを欠落させる"
+    # observable = "working・staged・headのexit、DELETED.beforeの件数・symbol・全文・metadataと空diagnostics"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # impact = "正当なtest削除の全record審査が停止するか、過去の検証内容を失う"
+    # distinction = "実Git削除とTypeScript parserを通じてsnapshot別の証拠保持を検証し、static titleの削除checkでは検出できない"
+    # @end-test-value
+    def test_git_mode_preserves_deleted_dynamic_title_without_case_expansion(self) -> None:
+        declaration = (
+            '  it(`${effect} effect後のrestart recovery`, async () => {\n'
+            '    expect(await reconcile(effect)).toEqual(savedCandidate);\n'
+            '  });\n'
+        )
+        static = 'test("static sibling", () => { check(); });\n'
+        source = (
+            'for (const effect of ["partial", "committed", "unknown"] as const) {\n'
+            + declaration + '}\n' + metadata_block("//") + static
+        )
+        path = "tests/deleted-dynamic.test.ts"
+        self.write_utf8_bom(path, source.replace("\n", "\r\n"))
+        base = self.initialize_git()
+        (self.root / path).unlink()
+
+        working = self.extract_git(base, "typescript")
+        self.git("add", path)
+        staged = self.extract_git(base, "typescript", "--staged")
+        self.git("commit", "--quiet", "-m", "delete dynamic title file")
+        committed = self.extract_git(base, "typescript", "--head", self.git("rev-parse", "HEAD"))
+        for mode, (result, status, stderr) in {"working": working, "staged": staged, "head": committed}.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                self.assertEqual(result["diagnostics"], [])
+                self.assertEqual(result["tests"], [])
+                self.assertEqual([t["kind"] for t in result["transitions"]], ["DELETED", "DELETED"])
+                dynamic, sibling = [t["before"] for t in result["transitions"]]
+                self.assertEqual(dynamic["source"]["symbol"], '[title expression: `${effect} effect後のrestart recovery`]')
+                self.assertEqual(dynamic["source"]["declaration_start_line"], 2)
+                self.assertEqual(dynamic["source"]["declaration_end_line"], 4)
+                self.assertEqual(dynamic["source_text"], declaration)
+                self.assertIsNone(dynamic["metadata"])
+                self.assertIsNone(dynamic["metadata_format_version"])
+                self.assertEqual(sibling["source_text"], static)
+                self.assertEqual(sibling["metadata_format_version"], 2)
+                self.assertIsNotNone(sibling["metadata"])
+                self.assertTrue(all(t["after"] is None for t in result["transitions"]))
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "動的タイトルの個別削除とstatic titleへの変更で旧新宣言の全文と削除元metadataの存在を保持する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "削除した動的宣言を隣の存続宣言へ誤対応させるか、タイトル変更時の旧本文を失う"
+    # observable = "Git抽出CLIのDELETED/SURVIVED、before/after全文・削除元metadataの有無とtestsの一致"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # distinction = "file削除では通らない宣言位置対応と現行側の結合を実Git差分で確認する"
+    # @end-test-value
+    def test_git_mode_preserves_dynamic_titles_in_partial_deletion_and_static_replacement(self) -> None:
+        removed = 'it.only(title, () => {\n  oldCheck();\n});\n'
+        before = 'it.each(values)(`${value}`, () => {\n  check(1);\n});\n'
+        after = 'it.each(values)("fixed title", () => {\n  check(2);\n});\n'
+        boundary = 'const unchangedBoundary = true;\n'
+        path = "tests/partial-dynamic.test.ts"
+        self.write(path, metadata_block("//") + removed + boundary + metadata_block("//") + before)
+        base = self.initialize_git()
+        self.write(path, boundary + metadata_block("//") + after)
+        result, status, stderr = self.extract_git(base, "typescript")
+        self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+        self.assertEqual(result["diagnostics"], [])
+        self.assertCountEqual([t["kind"] for t in result["transitions"]], ["DELETED", "SURVIVED"])
+        deleted = next(t for t in result["transitions"] if t["kind"] == "DELETED")
+        survived = next(t for t in result["transitions"] if t["kind"] == "SURVIVED")
+        self.assertEqual(deleted["before"]["source_text"], removed)
+        self.assertEqual(deleted["before"]["source"]["symbol"], "[title expression: title]")
+        self.assertIsNotNone(deleted["before"]["metadata"])
+        self.assertEqual(survived["before"]["source_text"], before)
+        self.assertEqual(survived["before"]["source"]["symbol"], '[title expression: `${value}`]')
+        self.assertEqual(survived["after"]["source_text"], after)
+        self.assertEqual(result["tests"], [survived["after"]])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "動的タイトルのbase抽出でも削除元の不正metadataとsyntaxの失敗を維持する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "歴史的titleの許可が不正metadataやsyntaxまで救済して削除を正常扱いする"
+    # observable = "削除差分抽出CLIの失敗exitとmetadata/syntax diagnostic"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # distinction = "動的titleの例外と削除元の既存失敗条件を同時に通すため静的削除のtestと異なる"
+    # @end-test-value
+    def test_git_mode_rejects_invalid_deleted_dynamic_title_source(self) -> None:
+        valid = metadata_block("//") + 'it(`${value}`, () => { check(); });\n'
+        for name, source, code in (
+            ("metadata", valid.replace('kind = "invariant"', 'kind = "invalid"'), "TEST_VALUE_SCHEMA_ERROR"),
+            ("syntax", valid + 'const broken = ;\n', "SOURCE_SYNTAX_ERROR"),
+        ):
+            with self.subTest(name=name):
+                path = f"tests/{name}-dynamic.test.ts"
+                self.write(path, source)
+                base = self.initialize_git()
+                (self.root / path).unlink()
+                result, status, stderr = self.extract_git(base, "typescript")
+                self.assertEqual(status, 1, stderr)
+                self.assertIn(code, [d["code"] for d in result["diagnostics"]])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "現行側の動的title宣言はGit追加・存続変更と明示pathで引き続き拒否する"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/source-adapters-v1.md" }
+    # fault = "base専用の動的title抽出を現行側にも適用し未対応sourceを成功扱いする"
+    # observable = "追加・存続変更・明示path抽出の失敗exitとTEST_DECLARATION_UNSUPPORTED"
+    # observation_boundary = "public-boundary"
+    # scope = "typescript-source-adapter"
+    # lifecycle = "permanent"
+    # distinction = "明示pathだけの動的title checkではGit base専用optionの誤伝播を検出できない"
+    # @end-test-value
+    def test_git_mode_rejects_current_dynamic_title(self) -> None:
+        base = self.initialize_git()
+        path = "tests/current-dynamic.test.ts"
+        source = metadata_block("//") + 'it(`${value}`, () => { check(1); });\n'
+        self.write(path, source)
+        added, status, stderr = self.extract_git(base, "typescript")
+        self.assertEqual(status, 1, stderr)
+        self.assertIn("TEST_DECLARATION_UNSUPPORTED", [d["code"] for d in added["diagnostics"]])
+        explicit, status = self.extract(path)
+        self.assertEqual(status, 1)
+        self.assertIn("TEST_DECLARATION_UNSUPPORTED", [d["code"] for d in explicit["diagnostics"]])
+        base = self.initialize_git()
+        self.write(path, source.replace("check(1)", "check(2)"))
+        survived, status, stderr = self.extract_git(base, "typescript")
+        self.assertEqual(status, 1, stderr)
+        self.assertIn("TEST_DECLARATION_UNSUPPORTED", [d["code"] for d in survived["diagnostics"]])
+
+    # @test-value v2
+    # kind = "regression"
     # claim = "TypeScript未対応modifier宣言の本文変更をUNSUPPORTED diagnosticへ結合する"
     # oracle = { type = "adr", ref = "ADR-0021" }
     # fault = "未対応TypeScript callの開始行以外の本文変更を選ばず、空の正常結果を返す"

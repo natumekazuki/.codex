@@ -2249,7 +2249,7 @@ def test_oracle_table_with_decoy():
             with self.subTest(stream=stream):
                 command = [sys.executable, "-c", f"import sys; sys.{stream}.buffer.write(bytes([0xb5]))"]
                 stdout, stderr = io.StringIO(), io.StringIO()
-                def invalid_adapter(*args):
+                def invalid_adapter(*args, **kwargs):
                     return EXTRACTOR.run_process(command, "", "TypeScript")
                 with mock.patch.object(EXTRACTOR, "analyze_typescript_source", side_effect=invalid_adapter), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     status = EXTRACTOR.main(["--root", str(self.root), "value.ts"])

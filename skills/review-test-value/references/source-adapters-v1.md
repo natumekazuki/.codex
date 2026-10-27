@@ -33,6 +33,8 @@ Result fields:
 - Unsupported diagnostic: 未対応modifier、未対応のnested / tagged call chain、動的titleのtest / describe、同一行に複数あるtest declaration、行頭から宣言までに空白以外がある形
 - Excluded: alias経由のcall、computed property、factory生成、runtime parameter case
 
+Git modeの固定baseを読む時だけ、上記の対応call構文の動的test titleも、タイトル式を評価せず一つのsource declarationとして抽出する。`source.symbol`の当該titleは`[title expression: <式のsource text>]`と表示し、runtime titleや展開済みcaseを表さない。staticなdescribe title、宣言範囲・indentの条件、runtime annotationの識別は変えない。現行snapshotと明示pathでは動的titleを引き続き拒否する。
+
 Jest、Vitest、Playwrightのpackage identityやimport解決は行わない。上記のcall構文をtest declarationとして扱う。
 
 Result fields:

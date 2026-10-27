@@ -46,9 +46,15 @@ function propertyParts(expression) {
   return null;
 }
 
-function declarationArguments(args) {
+function declarationArguments(args, historicalTitles = false) {
   // v1 is syntax-only: a static first argument distinguishes declaration overloads.
-  return staticTitle(args[0]) === null ? null : { titleArgument: args[0] };
+  const titleArgument = args[0];
+  if (staticTitle(titleArgument) !== null) {
+    return { titleArgument };
+  }
+  return historicalTitles && titleArgument !== undefined && !ts.isSpreadElement(titleArgument)
+    ? { titleArgument }
+    : null;
 }
 
 function isTransparentExpression(node) {
@@ -128,7 +134,7 @@ function terminalBuilderInfo(expression) {
   return null;
 }
 
-function testCallInfo(node) {
+function testCallInfo(node, historicalTitles = false) {
   if (isInnerCalleeCall(node)) {
     return null;
   }
@@ -170,7 +176,7 @@ function testCallInfo(node) {
         message: `unsupported test declaration modifier: ${modifiers.join(".")}`,
       };
     }
-    const declaration = declarationArguments(node.arguments);
+    const declaration = declarationArguments(node.arguments, historicalTitles);
     return declaration === null
       ? {
           kind: "unsupported",
@@ -180,7 +186,7 @@ function testCallInfo(node) {
   }
 
   if (members.length === 0) {
-    const declaration = declarationArguments(node.arguments);
+    const declaration = declarationArguments(node.arguments, historicalTitles);
     return declaration === null
       ? {
           kind: "unsupported",
@@ -208,6 +214,10 @@ function testCallInfo(node) {
   }
   if (parts[0] === "test" && ["skip", "fixme", "fail"].includes(memberPath)) {
     return { kind: "ignore" };
+  }
+  const historicalDeclaration = declarationArguments(node.arguments, historicalTitles);
+  if (historicalDeclaration !== null) {
+    return { kind: "declaration", parameterized: false, ...historicalDeclaration };
   }
   return {
     kind: "unsupported",
@@ -331,7 +341,7 @@ function collectComments(source, sourceFile, scriptKind) {
   return comments;
 }
 
-function collectDeclarations(sourceFile) {
+function collectDeclarations(sourceFile, historicalTitles) {
   const declarations = [];
   const diagnostics = [];
   const unsupportedDeclarationLines = new Set();
@@ -356,7 +366,7 @@ function collectDeclarations(sourceFile) {
         ts.forEachChild(node, visit);
         return;
       }
-      const info = testCallInfo(node);
+      const info = testCallInfo(node, historicalTitles);
       if (info !== null) {
         if (info.kind === "unsupported") {
           diagnostics.push(unsupportedDiagnostic(node, info.message));
@@ -369,7 +379,11 @@ function collectDeclarations(sourceFile) {
         }
         const statement = expressionStatement(node);
         const start = statement.getStart(sourceFile, false);
-        const title = info.titleArgument ? staticTitle(info.titleArgument) : null;
+        const title = staticTitle(info.titleArgument) ?? (
+          historicalTitles && info.titleArgument !== undefined
+            ? `[title expression: ${info.titleArgument.getText(sourceFile)}]`
+            : null
+        );
         if (title === null) {
           diagnostics.push(
             unsupportedDiagnostic(
@@ -435,7 +449,7 @@ const syntaxDiagnostics = (sourceFile.parseDiagnostics ?? []).map((item) => ({
   line: lineNumber(sourceFile, item.start ?? 0),
   message: ts.flattenDiagnosticMessageText(item.messageText, " "),
 }));
-const analysis = collectDeclarations(sourceFile);
+const analysis = collectDeclarations(sourceFile, process.argv[3] === "--historical-titles");
 process.stdout.write(
   JSON.stringify({
     declarations: analysis.declarations,
