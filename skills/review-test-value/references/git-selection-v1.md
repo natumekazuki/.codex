@@ -51,6 +51,7 @@ working treeのsource pathがsymlinkなどによってrepository root外へ解�
 - metadataはschema検証を通った文字列、文字列配列、辞書だけを含み、解析失敗時は`null`となる。辞書のキー順は比較へ影響せず、配列の順序は保持する。削除済みv1の解析成功は`metadata`の非nullで判定する。
 - `ADDED`と`SURVIVED`の`after`集合は、順序を含めて`tests`と一致する。`DELETED`は`tests`へ含めない。
 - `DELETED.before`は、metadataが正常なv1でも未付与でも歴史的な削除証拠として保持する。正常なv1のblock自身の`TEST_VALUE_V2_REQUIRED`と、削除前test自身の`TEST_VALUE_MISSING`だけを固定baseへ適用する現在の移行要求から除き、元version・metadata（未付与なら`null`）・本文を審査へ渡す。削除元の不正metadata、結合不明、未知versionなど他の診断は引き続き停止する。追加・surviving・明示pathの未付与／不正metadataと、新規・surviving・明示pathのv1には従来どおり診断を返す。
+- TypeScriptの固定baseにある動的test titleは、対応call構文からタイトル式と宣言全文を一つのrecordへ保持する。`source.symbol`は式を`[title expression: <式のsource text>]`として表示し、式を評価したりloop・parameterized caseを展開したりしない。file全体の削除と個別宣言の削除の両方で`DELETED.before`を審査へ渡し、現行のstatic titleへ一意に対応する場合は`SURVIVED.before`へ保持する。現行snapshot・明示pathの動的title、削除元を含むsyntaxや不正metadata、その他の未対応構文の失敗条件は維持する。
 - Gitが移設＋変更を`D`＋`A`へ分けた場合も、削除側と追加側を独立したtransitionとして保持する。pathやsymbol名だけでは`SURVIVED`を作らず、内容・位置で対応を一意に保証できない移設は`DELETED`＋`ADDED`として審査へ渡す。同一file pairには上記の対応・削除・置換条件を適用する。
 - source全体の解析を信頼できなくするsyntax、decode、adapter failureは隠さない。
 - 静的に識別した未対応test declarationは内部rangeで差分と対応付け、開始行以外の本文変更も`TEST_DECLARATION_UNSUPPORTED`として返す。内部rangeは公開diagnosticへ追加しない。

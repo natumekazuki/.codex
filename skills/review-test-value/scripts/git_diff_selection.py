@@ -14,10 +14,13 @@ class AdapterProfileLike(Protocol):
     coverage: str
 
 
-ExtractSourceText = Callable[
-    [str, str, AdapterProfileLike, str | None],
-    tuple[list[dict[str, Any]], list[dict[str, Any]]],
-]
+class ExtractSourceText(Protocol):
+    def __call__(
+        self, raw: str, relative_path: str, profile: AdapterProfileLike,
+        suffix: str | None = None, *, historical_titles: bool = False,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]: ...
+
+
 DiagnosticFactory = Callable[[str, str, int, str], dict[str, Any]]
 DiagnosticProjector = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -778,6 +781,7 @@ def select_git(
                 item.old_path or item.path,
                 profile,
                 Path(item.old_path or item.path).suffix.lower(),
+                historical_titles=True,
             )
         if item.status == "D":
             file_transitions, transition_diagnostics = _build_transitions(
