@@ -62,6 +62,9 @@ $hooks = (Get-Content -LiteralPath (Join-Path $repositoryRoot 'hooks.json') -Raw
 if ($hooks.ContainsKey('UserPromptSubmit')) {
     throw 'Common rule reminders must not run on every prompt.'
 }
+if ('general_terra' -notmatch $hooks.SubagentStart[0].matcher) {
+    throw 'The SubagentStart reminder must match general_terra.'
+}
 $testRoot = Join-Path ([System.IO.Path]::GetFullPath($TemporaryRoot)) ('windows-hook-test-' + [guid]::NewGuid())
 $profilePath = Join-Path $testRoot 'user profile'
 $defaultCodexPath = Join-Path $profilePath '.codex'
@@ -81,7 +84,7 @@ try {
         hook_event_name = 'PreToolUse'
         tool_name = 'spawn_agent'
         model = 'gpt-6.1-sol'
-        tool_input = @{ agent_type = 'general_sol'; fork_turns = 'all'; message = 'safe input'; task_name = 'hook_test' }
+        tool_input = @{ agent_type = 'general_terra'; model = 'gpt-6.1-terra'; reasoning_effort = 'medium'; fork_turns = 'all'; message = 'safe input'; task_name = 'hook_test' }
     }
     foreach ($shell in @('cmd', 'pwsh')) {
         $expectedContext = Invoke-HookCommand $directHook $shell '{}' $profilePath $configuredCodexPath
@@ -116,10 +119,16 @@ try {
         foreach ($case in @(
             @{ Parent = 'gpt-6.1-sol'; Tool = 'Agent'; Arguments = @{ model = 'gpt-6.1-sol'; fork_turns = 'all' }; Decision = 'allow' },
             @{ Parent = 'gpt-6.1-sol'; Tool = 'spawn_agent'; Arguments = @{ model = 'gpt-6-luna' }; Decision = 'allow' },
+            @{ Parent = 'gpt-6.1-sol'; Tool = 'Agent'; Arguments = @{ model = 'gpt-6.1-terra'; fork_turns = 'all' }; Decision = 'allow' },
+            @{ Parent = 'gpt-6.1-sol'; Tool = 'spawn_agent'; Arguments = @{ agent_type = 'general_terra' }; Decision = 'allow' },
             @{ Parent = 'gpt-6.1-sol'; Tool = 'spawn_agent'; Arguments = @{ model = 'gpt-6-astra' }; Decision = 'allow' },
+            @{ Parent = 'gpt-6.1-sol'; Tool = 'spawn_agent'; Arguments = @{ model = 'gpt-6-sol' }; Decision = 'deny' },
             @{ Parent = 'gpt-6.1-sol'; Tool = 'spawn_agent'; Arguments = @{ model = 'gpt-5.6-sol' }; Decision = 'deny' },
+            @{ Parent = 'gpt-6.1-sol'; Tool = 'spawn_agent'; Arguments = @{ model = 'unknown-model' }; Decision = 'deny' },
             @{ Parent = 'gpt-6-astra'; Tool = 'spawn_agent'; Arguments = @{ agent_type = 'general_astra' }; Decision = 'deny' },
             @{ Parent = 'gpt-6-astra'; Tool = 'spawn_agent'; Arguments = @{ model = 'gpt-6-astra' }; Decision = 'deny' },
+            @{ Parent = 'gpt-6-astra'; Tool = 'spawn_agent'; Arguments = @{ agent_type = 'general_terra'; model = 'gpt-6.1-terra' }; Decision = 'allow' },
+            @{ Parent = 'gpt-6.1-terra'; Tool = 'spawn_agent'; Arguments = @{ agent_type = 'general_astra' }; Decision = 'allow' },
             @{ Parent = 'gpt-6-astra'; Tool = 'spawn_agent'; Arguments = @{ model = 'gpt-6.1-sol' }; Decision = 'allow' }
         )) {
             $inputJson = @{ hook_event_name = 'PreToolUse'; tool_name = $case.Tool; model = $case.Parent; tool_input = $case.Arguments } | ConvertTo-Json -Depth 10 -Compress

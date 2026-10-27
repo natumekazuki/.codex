@@ -9,13 +9,13 @@ $arguments = $event.tool_input
 if ($arguments -isnot [System.Collections.IDictionary]) {
     throw 'Expected spawn_agent arguments to be a JSON object.'
 }
-$allowedModels = @('gpt-6.1-sol', 'gpt-6-luna', 'gpt-6-astra')
+$allowedModels = @('gpt-6.1-sol', 'gpt-6-luna', 'gpt-6.1-terra', 'gpt-6-astra')
 if ($arguments.Contains('model') -and $arguments.model -notin $allowedModels) {
     @{
         hookSpecificOutput = @{
             hookEventName = 'PreToolUse'
             permissionDecision = 'deny'
-            permissionDecisionReason = 'Only gpt-6.1-sol, gpt-6-luna, and gpt-6-astra are allowed. Do not fall back to an older model.'
+            permissionDecisionReason = 'Only gpt-6.1-sol, gpt-6-luna, gpt-6.1-terra, and gpt-6-astra are allowed. Do not fall back to an older model.'
         }
     } | ConvertTo-Json -Depth 100 -Compress
     exit 0
@@ -27,7 +27,7 @@ if ($isAstraParent -and $isAstraTarget) {
         hookSpecificOutput = @{
             hookEventName = 'PreToolUse'
             permissionDecision = 'deny'
-            permissionDecisionReason = 'An Astra parent must not spawn an Astra child. Use Luna or Sol.'
+            permissionDecisionReason = 'An Astra parent must not spawn an Astra child. Use Sol, Luna, or Terra.'
         }
     } | ConvertTo-Json -Depth 100 -Compress
     exit 0

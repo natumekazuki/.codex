@@ -2,7 +2,7 @@
 
 本書は`natumekazuki/.codex`の配布資産、保守、配置の案内である。各repositoryでCodexが従う共通ルールの入口は`AGENTS.md`、作業別の本文は`docs/guides/`等の明示された参照先に置く。本書の配布元固有の管理先・リリース境界・検証手順を、他repositoryの作業ルールとして適用しない。
 
-GPT-6.1 Solを基本に使い、やる内容がほぼ決まっている作業はLuna、高度な判断が要求される作業はAstraへ振り分ける。一般の仕事の進め方はモデルへ任せる。追加の共通ルールは過剰実装の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
+GPT-6.1 Solを基本に使い、手順・期待結果がほぼ決まっている作業はLuna、明確な入力・完了条件を持つ視覚・文章・局所修正はTerra、高度な判断が要求される作業はAstraを選ぶ。一般の仕事の進め方はモデルへ任せる。追加の共通ルールは過剰実装の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
 
 このcheckoutの`review-test-value`は、Git差分から変更testを抽出し、通常のread-onlyサブエージェントへreviewを委譲するSkillである。抽出器の成功、全recordのreview、各指摘の採否・対応時期を確認する。review完了と全件修正は分け、後追いの基準を満たす残件だけを引き継ぐ。
 
@@ -117,19 +117,22 @@ SessionFolderのreview結果・対応管理も[同guide](docs/guides/development
 
 ## modelとrole
 
-本repositoryの設定例・role定義は`gpt-6.1-sol`、`gpt-6-luna`、`gpt-6-astra`で構成する。この節は配布設定と採用理由の説明であり、作業時の委譲基準は[Subagent Review Boundary](docs/architecture/subagent-workspace.md)が正本である。
+本repositoryの設定例・role定義は`gpt-6.1-sol`、`gpt-6-luna`、`gpt-6.1-terra`、`gpt-6-astra`で構成する。この節は配布設定と採用理由の説明であり、作業時の委譲基準は[Subagent Review Boundary](docs/architecture/subagent-workspace.md)が正本である。
 
 ### 公式情報と運用判断
 
-OpenAI公式は[GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)を、複雑な作業でAstraに近い性能を低いコストで提供するモデルと説明し、実際のtaskで比較するよう案内している。[Codexでの提供状態](https://learn.chatgpt.com/docs/models#gpt-61-sol)はplan・client・workspace設定等に依存する。
+OpenAI公式の[model選択](https://learn.chatgpt.com/docs/models#recommended-models)では、Solを複雑で長い作業、Lunaを明確で反復可能な作業、Terraを文章・視覚・computer use、Astraを最難関の作業に位置づける。[Terraの選択案内](https://learn.chatgpt.com/docs/model-selection#when-to-consider-gpt-61-terra)は、明確な入力・要求・検証方法を持つ局所的なcode修正も候補に含める。以下はこのrepositoryでの運用判断であり、各用途での優位を実測したものではない。
 
-本repositoryは次の担当分けを運用方針として採用する。taskの短さや範囲の小ささだけでLunaへ寄せず、必要な判断で選ぶ。
+本repositoryは次の担当分けを採用する。taskの短さやtoken単価だけで決めず、必要な成果・判断と完了条件から直接選ぶ。
 
 | model | このrepositoryでの担当 |
 | --- | --- |
-| GPT-6.1 Sol | 通常の親・一般childの既定。調査、設計、実装、debug、review |
-| GPT-6 Luna | 進め方・手順・期待結果がほぼ決まっている作業 |
-| GPT-6 Astra | 高度な判断が要求される作業。非Astra親から必要な問題を絞って委譲する |
+| GPT-6.1 Sol | 通常の親・一般childの既定。調査、設計、実装、debug、review。広い文脈や未解決の判断を含む一般作業 |
+| GPT-6 Luna | 手順・期待結果がほぼ決まっている抽出、変換、照合、設計済みの実装 |
+| GPT-6.1 Terra | 明確な入力・完了条件を持つ画像・画面の読解、描画確認、素材に基づく文章作成、検証方法が明確な局所修正 |
+| GPT-6 Astra | 難しいtradeoff、契約間の矛盾、反例等の高度な判断。非Astra親から必要な問題を絞って委譲する |
+
+Lunaで手順化できる作業をTerraへ一律に置き換えず、局所修正を必ずTerraへ渡す工程にもせず、一般既定のSolと必要に応じて使い分ける。上位modelを選ぶ前に下位modelを試す必要はない。Computer Use等の操作権限や、test価値審査・実描画等の必須確認はmodel選択で変わらない。
 
 [API価格](https://developers.openai.com/api/docs/pricing)のtoken単価を、Codexの実消費枠や1タスクの費用比とは扱わない。担当分けの効果は実測済みではなく、再作業、推論token、cache、実行時間を含めて[比較手順](docs/runbooks/compare-subagent-roles.md)で確認する。
 
@@ -141,13 +144,16 @@ OpenAI公式は[GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6
 | 手動切替の`astra` profile | `gpt-6-astra` | low、Standard速度 |
 | 一般childの既定／`general_sol` | `gpt-6.1-sol` | medium |
 | `general_luna` | `gpt-6-luna` | high |
+| `general_terra` | `gpt-6.1-terra` | medium |
 | `general_astra` | `gpt-6-astra` | medium |
 
-上記のeffortは配布設定の開始値であり、最適値を実証したものではない。具体的な品質不足がある時に、対応modelで利用可能なeffortを調整する。端末の実configやsessionで選択したeffortは配布設定とは区別する。
+上記のeffortは配布設定の開始値であり、最適値を実証したものではない。Luna highと手動Astra lowは[Codexの開始推奨](https://learn.chatgpt.com/docs/models#pick-a-reasoning-effort)、Terra mediumは[公式guide](https://developers.openai.com/api/docs/guides/latest-model#gpt-61-terra)を参照する。Astra子は高度な判断を限定して渡すためmediumとする。taskの要求と確認結果に応じて、対応modelで利用可能なeffortを調整する。端末の実configやsessionで選択したeffortは配布設定とは区別する。
+
+Terraの利用にはCodex CLI 0.159.0以降が必要であり、提供状態はplan・client・workspace設定等にも依存する。model一覧への掲載と、その環境での実起動成功は分けて確認する。
 
 委譲基準の正本は[Subagent Review Boundary](docs/architecture/subagent-workspace.md)。hookはその要点を再通知する。標準`default`／`worker`／`explorer`はカスタムroleとは別であり、model省略時は設定例の一般child既定値を使う。汎用roleの権限は親から継承し、read-only依頼は起動時に明示し、利用可能なruntimeの制限も適用する。`review-test-value`も同じ委譲基準で担当を選び、抽出契約・全recordの審査・統合基準を維持する。
 
-`PreToolUse` hookは3モデル以外の明示的な`model`指定を拒否する。Astra親からの`general_astra`とAstraの直接指定も拒否する。許可された`spawn_agent`／`Agent`の`fork_turns`は常に`none`へ置き換え、他の引数は保持する。roleの実modelやmodel未指定時の既定値はconfigと新規sessionで確認し、hookが任意の外部role定義まで検証すると扱わない。設定例の待機timeoutの最小値と既定値は120000 msを維持する。
+`PreToolUse` hookは上記4モデル以外の明示的な`model`指定を拒否する。Astra親からの`general_astra`とAstraの直接指定も拒否する。許可された`spawn_agent`／`Agent`の`fork_turns`は常に`none`へ置き換え、他の引数は保持する。roleの実modelやmodel未指定時の既定値はconfigと新規sessionで確認し、hookが任意の外部role定義まで検証すると扱わない。設定例の待機timeoutの最小値と既定値は120000 msを維持する。
 
 profileを明示して親を選ぶ場合は、有効な`CODEX_HOME`直下へ配置した`sol.config.toml`または`astra.config.toml`を使う。
 
@@ -156,14 +162,14 @@ codex --profile sol
 codex --profile astra
 ```
 
-どちらも同じ3つの汎用role・共通ルールを使う。指定modelがruntimeで利用できない場合は、許可された構成の親で可能な作業を続ける。配布元の設定とlive設定・実行結果を区別する。
+どちらも同じ4つの汎用role・共通ルールを使う。指定modelがruntimeで利用できない場合は、許可された構成の親で可能な作業を続ける。配布元の設定とlive設定・実行結果を区別する。
 
 ### model選択の定義箇所
 
 | 対象 | model選択を持つ箇所・扱い |
 | --- | --- |
-| 共有config・profile・registry | `config.example.toml`、`config/*.toml`。親、一般child、3 roleの登録を揃える |
-| カスタムrole | `agents/general_{astra,sol,luna}.toml`。model ID、effort、担当範囲を定義する |
+| 共有config・profile・registry | `config.example.toml`、`config/*.toml`。親、一般child、4 roleの登録を揃える |
+| カスタムrole | `agents/general_{astra,sol,luna,terra}.toml`。model ID、effort、担当範囲を定義する |
 | 委譲とhook | `docs/architecture/subagent-workspace.md`、`hooks/implementation-restraint.ps1`、`hooks/subagent-fork-default.ps1`、`hooks.json` |
 | test価値審査 | `AGENTS.md`と`docs/guides/test-changes.md`がSkillへ導く。`skills/review-test-value/`は固有のmodel・role既定値を持たず、model IDと担当の選択基準はrole・委譲規約を参照する |
 | 指示ファイル・Skill・CI・script | `.codex/model-instructions-withmate*.md`を含め確認。上記以外に運用modelの固定指定はない |
