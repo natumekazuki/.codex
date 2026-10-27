@@ -2,6 +2,10 @@
 
 各adapterはsource declarationを構文解析し、runtime runnerのcollection結果は再現しない。一回のCLI呼び出しには同一言語のpathだけを渡す。
 
+metadataのTOML parse、schema検証、宣言との結合、JSON projectionは共通のPython CLIが担う。同じsourceとpath入力から同じ結果を生成し、recordはrepository相対path・宣言開始行・symbol順、diagnosticはpath・行・code順に並べる。入力pathの順序に依存せず、source textはLFへ正規化する。
+
+明示path modeでもroot外へ解決されるpathは内容を読まず`SOURCE_OUTSIDE_ROOT`で拒否し、要求された言語のadapter・coverageを保持する。対応外拡張子や複数言語の入力はCLIの不正呼出しとして扱う。
+
 ## Python
 
 - Extensions: `.py`
@@ -40,6 +44,7 @@ Result fields:
 
 - Extension: `.cs`
 - Parser: Roslyn
+- syntax diagnosticのmessageは`InvariantCulture`で生成し、実行時の`CurrentUICulture`に依存させない。
 - Declarations: methodへ付いた次のattributeを構文上のtest declarationとして扱う
   - xUnit: `Fact`、`Theory`
   - NUnit: `Test`、`TestCase`、`TestCaseSource`
