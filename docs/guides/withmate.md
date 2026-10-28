@@ -37,3 +37,7 @@ repositoryの契約・実装状態・検証結果はrepositoryを正本とし、
 repository固有の用語・alias・境界・概念の意味を確認する時や、source等で意味が確定した再利用可能な用語を登録する時に利用する。参照・登録の判断は現在のruntime-managed Skillに従い、MemoryをGlossaryの代わりに使わない。
 
 Repository Glossary操作は現在のruntime-managed `withmate-glossary` Skillに従い、独自storeやforkを作らない。Glossaryのread/search/validate/create/create-batch/updateには継続的な許可を与える。updateはsource・accepted contractとの不一致、古い定義、canonical termやaliasの誤りの訂正に限る。deleteは対象entryとrevisionを確認し、entryごとの明示承認を得る。runtimeのtarget・Settings・schemaの制約を守る。
+
+## Session Graph
+
+現在の作業の要求・制約・判断・作業状態の共有と復元には、Session-boundのSession Graph MCPを使う。利用契機と記録権限は共通AGENTS.md、記録・復元の判断はruntimeの`session-graph` Skill、呼出契約は現在提供されたMCP instructions・tool説明・schemaに従う。Memoryを作業状態の正本として代用しない。
