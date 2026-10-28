@@ -184,7 +184,7 @@ codex --profile astra
 | `natural-japanese` | 明示的な自然さの推敲・採点・文体調整 |
 | `audit-codex-work-quality` | 日次・固定期間の作業監査 |
 | `relaygraph` | 採用済みrepositoryの関係調査・変更・検証。新規導入は明示依頼時 |
-| `session-graph` | SessionFolderの入口と話題別の図へ指示を先行記録し、現在地・判断経緯の共有、訂正、再開・Compact後の復元を行う |
+| `session-graph` | WithMateのSession Graph MCPへ指示を先行記録し、現在地・判断経緯の共有、訂正、再開・Compact後の復元を行う |
 
 UIの新設・変更では`AGENTS.md`から`design-ui-information`の参照を求め、同Skillの`agents/openai.yaml`は暗黙呼出しを許可する。二つの文書Skillは各Skillの明示呼出し設定を維持する。`review-test-value`は通常のSkillとして利用する。通常のREADME編集、commit、短報告へ自動の校正工程を付けない。明示された文書modeの必要工程は保つ。
 
@@ -201,9 +201,9 @@ pwsh ./scripts/sync-natural-japanese.ps1
 
 ### Session Graphの配置と検証
 
-必須利用の入口と権限境界は共通AGENTS.md、読書き・表示・共有編集・復元の詳細は[`session-graph` Skill](skills/session-graph/SKILL.md)を正本とする。共有記録は`SessionFolder/session-graph/index.mmd`と話題別mmdで構成し、実SessionFolderのpathを共通設定へ固定しない。`skills/session-graph/`全体を既存のSkill配置方法で導入し、AGENTS.md・再通知hookと併せて確認する。Python 3.10以降の保存helperは標準ライブラリのみで、対象mmdを`--graph`で指定する。
+必須利用の入口と権限境界は共通AGENTS.md、記録・復元の判断は[`session-graph` Skill](skills/session-graph/SKILL.md)を正本とする。Graphの保存・Main/Auxiliary間の共有・表示はWithMateが担い、Skillは現在のSessionへ提供された専用MCPを使う。呼出契約はruntimeのMCP instructions・tool説明・schemaに従い、SessionFolderのpathや接続URL・tokenを共通設定へ固定しない。`skills/session-graph/`を既存のSkill配置方法で導入し、AGENTS.md・再通知hookと併せて確認する。
 
-通常のmmd更新の確認はSkill本文に従う。Skill指示・保存helperの改修、runtime配置、既存記録の移行では[変更対象別の検証](skills/session-graph/references/validation.md)から必要な確認を選ぶ。保存処理の既存CIはWindows／Linuxで実行する。配布元改修・runtime反映・実セッション確認・移行の結果は区別する。作業記録・表示結果の恒久保存は不要。
+通常の記録更新ではMCPの保存結果と必要なread-backを確認する。定義変更時は入口・Skill metadata・hook・関連guideの整合を確認し、必要な範囲で要求の先行記録、対象を絞った復元、全体置換時の情報保持、競合・結果不明時の再取得を確認する。配布元の編集、live配置、新規sessionでのSkill発見、MCPの読書き、画面表示の確認は区別し、未実施を成功扱いしない。独自の保存・描画基盤や恒久testは追加しない。
 
 ### UI Skillの適用と検証
 
@@ -247,7 +247,7 @@ Metadataの`allow_implicit_invocation: true`は暗黙呼出しの許可であり
 
 配置後は別repositoryのrootと下位ディレクトリから、読み込まれたAGENTS.mdの実path、`~/.codex/`配下の該当する詳細への到達、対象repositoryの管理先・互換性定義を確認する。`.codex`専用のIssue管理先・リリース契約を他repositoryへ適用しない。参照先が欠けた場合は配置を修復してから該当作業へ進み、同名のrepository内文書や本文のhook全注入で代用しない。
 
-端末への適用時は既存`config.toml`へ設定例の必要sectionだけを反映する。MCP binding、認証、private path、無関係な設定を共有例へ持ち込まず、live全体を上書きしない。WithMate 6.3.29のMemory／Glossary MCPはWithMateがSessionへHTTP接続を自動供給するため、通常は手動登録せず、URL・短命tokenを永続化しない。手動STDIOは接続runbookの開発・診断用途に限る。`agents/`とregistry例、選択profileを同じCodex homeへ配置する。
+端末への適用時は既存`config.toml`へ設定例の必要sectionだけを反映する。MCP binding、認証、private path、無関係な設定を共有例へ持ち込まず、live全体を上書きしない。WithMateのMemory／Glossary／Session Graph MCPはWithMateがSessionへHTTP接続を自動供給するため、通常は手動登録せず、URL・短命tokenを永続化しない。Memory／Glossaryの手動STDIOは接続runbookの開発・診断用途に限る。`agents/`とregistry例、選択profileを同じCodex homeへ配置する。
 
 hookは有効な`CODEX_HOME`（未指定ならユーザーhomeの`.codex`）から解決する。`/hooks`でtrustと到達を確認し、inline hooks等との重複を避ける。共通ルールの再通知は`SessionStart`のstartup・resume・compactと`SubagentStart`に限定し、`PreToolUse`の委譲制御は別に維持する。read-only reviewの境界は起動時の依頼で明示する。
 WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合は、最初の応答前に[WithMate利用方針](docs/guides/withmate.md)を読む。本人による必要時の想起・経験の記録、Character Affectの反映、継続的な許可・保存範囲は同文書、利用可能な操作・探索例・呼出契約は現在提供されているMCP instructions・tool説明・schemaに従う。[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
