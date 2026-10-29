@@ -201,9 +201,9 @@ pwsh ./scripts/sync-natural-japanese.ps1
 
 ### Session Graphの配置と検証
 
-必須利用の入口と権限境界は共通AGENTS.md、記録・復元の判断は[`session-graph` Skill](skills/session-graph/SKILL.md)を正本とする。Graphの保存・Main/Auxiliary間の共有・表示はWithMateが担い、Skillは現在のSessionへ提供された専用MCPを使う。呼出契約はruntimeのMCP instructions・tool説明・schemaに従い、SessionFolderのpathや接続URL・tokenを共通設定へ固定しない。`skills/session-graph/`を既存のSkill配置方法で導入し、AGENTS.md・再通知hookと併せて確認する。
+Session Graphは現在のMain Sessionと配下Auxiliaryの共有記録であり、保存・共有・表示はWithMateが担う。必須利用の入口と権限境界は共通AGENTS.md、現在のSessionへ提供されたMCPで何を読み、何をいつ記録するかは[`session-graph` Skill](skills/session-graph/SKILL.md)を正本とする。呼出契約はruntimeのMCP instructions・tool説明・schemaに従う。`skills/session-graph/`を既存のSkill配置方法で導入し、AGENTS.md・再通知hookと併せて確認する。
 
-通常の記録更新ではMCPの保存結果と必要なread-backを確認する。定義変更時は入口・Skill metadata・hook・関連guideの整合を確認し、必要な範囲で要求の先行記録、対象を絞った復元、全体置換時の情報保持、競合・結果不明時の再取得を確認する。配布元の編集、live配置、新規sessionでのSkill発見、MCPの読書き、画面表示の確認は区別し、未実施を成功扱いしない。独自の保存・描画基盤や恒久testは追加しない。
+定義変更時は入口・Skill metadata・hook・関連guideの整合を確認し、変更範囲に応じて指示の先行記録、対象を絞った復元、全体置換時の情報保持、競合・結果不明時の再取得を確認する。配布元編集、live配置、新規sessionでのSkill発見、MCP読書き、画面表示の確認を区別し、実施した確認と未確認の範囲を報告する。
 
 ### UI Skillの適用と検証
 
