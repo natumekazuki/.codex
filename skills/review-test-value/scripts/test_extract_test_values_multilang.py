@@ -1848,9 +1848,75 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
 
     # @test-value v2
     # kind = "contract"
-    # claim = "一対多置換でも旧新の不正metadataと新側の未付与を診断し、保持行の宣言外投影を置換成功へ変えない"
+    # claim = "宣言外へ空白保持行が投影される一対多置換でも、3snapshotで旧新の全文・位置・metadataを欠落なく保持する"
     # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
-    # fault = "DELETEDへの分離が旧metadataのschema診断や新側の診断を捨てるか、宣言外の保持行を無視する"
+    # fault = "空白行の所属を要求して抽出が停止するか、単一宣言の存続を推測するか、審査recordから空白やmetadataを削る"
+    # observable = "working・staged・headのexit、diagnostics、DELETED.beforeとADDED.afterの全record、tests集合"
+    # observation_boundary = "public-boundary"
+    # scope = "git-diff-transition"
+    # lifecycle = "permanent"
+    # impact = "意味を持たない空白の配置で全件審査が停止するか、旧新の証拠が失われる"
+    # distinction = "空行とspace/tabだけの保持行が宣言外へ投影される実Git差分を使い、既存の宣言内分散ケースでは検出できない境界を確認する"
+    # @end-test-value
+    def test_git_mode_preserves_split_records_with_external_blank_lines(self) -> None:
+        path = "tests/selection.test.ts"
+        metadata = metadata_block("//")
+        for blank in ("", " \t"):
+            with self.subTest(blank=repr(blank)), tempfile.TemporaryDirectory() as tmp:
+                self.root = Path(tmp)
+                before = (
+                    'test("original", () => {\n'
+                    "  prepareOld();\n  render(widget);\n" + blank + "\n"
+                    "  expect(oldResult()).toBe(true);\n  cleanupOld();\n});\n"
+                )
+                first = (
+                    'test("added", () => {\n'
+                    "  setup();\n  another();\n  x();\n  y();\n  z();\n  render(widget);\n});\n"
+                )
+                second = (
+                    'test("renamed", () => {\n'
+                    "  prepareNew();\n  expect(newResult()).toBe(true);\n  cleanupNew();\n});\n"
+                )
+                self.write(path, metadata + before)
+                old_result, old_status = self.extract(path)
+                self.assertEqual(old_status, 0)
+                base = self.initialize_git()
+                self.git("config", "core.autocrlf", "false")
+                self.git("config", "diff.algorithm", "myers")
+                self.write(path, metadata + first + blank + "\n" + metadata + second)
+                new_result, new_status = self.extract(path)
+                self.assertEqual(new_status, 0)
+                working = self.extract_git(base, "typescript")
+                self.git("add", path)
+                self.write(path, 'test("dirty", () => {\n')
+                staged = self.extract_git(base, "typescript", "--staged")
+                self.git("commit", "--quiet", "-m", "replace declaration across blank line")
+                committed = self.extract_git(base, "typescript", "--head", self.git("rev-parse", "HEAD"))
+
+                for mode, (result, status, stderr) in {
+                    "working": working, "staged": staged, "head": committed,
+                }.items():
+                    with self.subTest(mode=mode):
+                        self.assertEqual(status, 0, (stderr, result.get("diagnostics")))
+                        self.assertEqual(result["diagnostics"], [])
+                        self.assertEqual([t["kind"] for t in result["transitions"]], ["ADDED", "DELETED", "ADDED"])
+                        removed = result["transitions"][1]
+                        self.assertEqual(removed["before"], old_result["tests"][0])
+                        self.assertEqual(removed["before"]["source_text"], before)
+                        self.assertIsNotNone(removed["before"]["metadata"])
+                        self.assertIsNone(removed["after"])
+                        self.assertEqual(result["tests"], new_result["tests"])
+                        self.assertEqual([r["source_text"] for r in result["tests"]], [first, second])
+                        self.assertEqual(result["tests"], [t["after"] for t in result["transitions"] if t["after"] is not None])
+                        self.assertTrue(all(t["before"] is None for t in result["transitions"] if t["kind"] == "ADDED"))
+                self.assertEqual(working[0], staged[0])
+                self.assertEqual(working[0], committed[0])
+
+    # @test-value v2
+    # kind = "contract"
+    # claim = "空白保持行が宣言外に残る一対多置換でも旧新の不正metadataと新側の未付与を診断し、実行文・コメントの宣言外投影を成功へ変えない"
+    # oracle = { type = "contract", ref = "skills/review-test-value/references/git-selection-v1.md" }
+    # fault = "DELETEDへの分離が旧metadataのschema診断や新側の診断を捨てるか、宣言外の非空白保持行を無視する"
     # observable = "CLIのexitとdiagnostic code、DELETED.before、ADDED.afterの本文とmetadata"
     # observation_boundary = "public-boundary"
     # scope = "git-diff-transition"
@@ -1862,7 +1928,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         path = "tests/selection.test.ts"
         before = (
             'test("original", () => {\n'
-            "  prepareOld();\n  render(widget);\n"
+            "  prepareOld();\n  render(widget);\n\n"
             "  expect(oldResult()).toBe(true);\n  cleanupOld();\n});\n"
         )
         added = (
@@ -1876,21 +1942,25 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
         metadata = metadata_block("//")
         invalid = metadata.replace('kind = "invariant"', 'kind = "unknown"')
         cases = (
-            ("invalid before", invalid, metadata, added, "TEST_VALUE_SCHEMA_ERROR"),
-            ("invalid after", metadata, invalid, added, "TEST_VALUE_SCHEMA_ERROR"),
-            ("missing after", "", "", added, "TEST_VALUE_MISSING"),
-            ("outside declaration", metadata, metadata,
+            ("invalid before", invalid, metadata, before, added, "TEST_VALUE_SCHEMA_ERROR"),
+            ("invalid after", metadata, invalid, before, added, "TEST_VALUE_SCHEMA_ERROR"),
+            ("missing after", "", "", before, added, "TEST_VALUE_MISSING"),
+            ("outside declaration", metadata, metadata, before,
              added.replace("  render(widget);\n", "") + "  render(widget);\n",
              "RECORD_TRANSITION_UNRESOLVED"),
+            ("outside comment", metadata, metadata,
+             before.replace("  render(widget);", "  // retained obligation"),
+             added.replace("  render(widget);\n", "") + "  // retained obligation\n",
+             "RECORD_TRANSITION_UNRESOLVED"),
         )
-        for name, old_metadata, new_metadata, first, diagnostic in cases:
+        for name, old_metadata, new_metadata, old_body, first, diagnostic in cases:
             with self.subTest(case=name), tempfile.TemporaryDirectory() as tmp:
                 self.root = Path(tmp)
-                self.write(path, old_metadata + before)
+                self.write(path, old_metadata + old_body)
                 base = self.initialize_git()
                 self.git("config", "core.autocrlf", "false")
                 self.git("config", "diff.algorithm", "myers")
-                self.write(path, new_metadata + first + metadata + renamed)
+                self.write(path, new_metadata + first + "\n" + metadata + renamed)
 
                 result, status, stderr = self.extract_git(base, "typescript")
 
@@ -1900,7 +1970,7 @@ class ExtractMultilanguageTestValuesTests(unittest.TestCase):
                 added_records = [t["after"] for t in result["transitions"] if t["kind"] == "ADDED"]
                 self.assertEqual(result["tests"], added_records)
                 self.assertEqual(len(added_records), 2)
-                if name == "outside declaration":
+                if diagnostic == "RECORD_TRANSITION_UNRESOLVED":
                     self.assertEqual(removed, [])
                     self.assertIn("overlaps selected declarations=[]", result["diagnostics"][0]["message"])
                 else:

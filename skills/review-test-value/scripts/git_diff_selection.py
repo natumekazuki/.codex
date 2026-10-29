@@ -506,11 +506,13 @@ def _retained_declaration_is_split(
     hunks: tuple[DiffHunk, ...],
     after_records: Sequence[dict[str, Any]],
 ) -> bool:
-    """Require every retained line to belong to a still-unmatched declaration."""
+    """Require nonblank retained lines to belong to multiple unmatched declarations."""
     owners: set[int] = set()
     source = record["source"]
-    for line in range(source["declaration_start_line"], source["declaration_end_line"] + 1):
-        if any(h.old_count and h.old_start <= line <= h.old_end for h in hunks):
+    for line, text in enumerate(
+        record["source_text"].splitlines(), source["declaration_start_line"]
+    ):
+        if not text.strip() or any(h.old_count and h.old_start <= line <= h.old_end for h in hunks):
             continue
         projected = _map_old_line_to_new(line, hunks)
         owner = next((
