@@ -25,7 +25,7 @@
 | 課題・対応予定の確認・登録・変更・完了判断前、開発の完了条件を決める時、実装変更着手前、review開始・結果確認・対応開始／再開・完了判断前、リリース範囲の確定・統合・公開判断前 | 開発・review・統合: `~/.codex/docs/guides/development.md`と、対象repositoryの`README.md`にある管理先・リリース境界等の関連節、または同repositoryのAGENTS.mdが明示する運用文書。SessionFolderのreview記録・対応管理、実装を伴わない課題管理にも適用し、互換性対象の契約を変更する前にも確認する |
 | 調査・設計・実装・reviewで共有判断の不足・矛盾を検出した時、共有方針の新設・変更や、それに伴う現行説明の更新・統合を判断する時 | 設計判断・文書化: `~/.codex/docs/guides/design-decisions.md`。文書作成の明示依頼を待たず、単なる設計書の不在を毎回監査する工程にはしない |
 | Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-onlyサブエージェント審査は必須 |
-| ユーザー向けUIの設計・実装開始前、変更後の確認時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
+| UI開発環境の整備、ユーザー向けUIの設計・実装開始前、変更後の確認・報告時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
 | サブエージェントへ委譲する前 | 委譲: `~/.codex/docs/architecture/subagent-workspace.md`。担当範囲・適用契約・必要な参照先と権限を渡し、履歴継承を前提にしない |
 | WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合、最初の応答前 | WithMate利用方針: `~/.codex/docs/guides/withmate.md`を読み、利用契機と承認条件に従う。確認済みの内容を毎turn再読する必要はない |
 | WithMateのSession Graph MCPが提供された開発・調査・設計・reviewを開始・中断から再開・Compact後に復元する時、または要求・制約・承認・判断・作業状態が変わる時 | runtimeの実pathの`session-graph` Skillを必ず使う。MCPから関連する現在の記録を読み、指示を記録・照合してから依存する作業へ進む。既存内容だけで答えられ、要求・判断等が変わらない説明・確認・言い換えでは起動しない。判断・実装・検証の区切りと終了前の同期、読書き・復元の詳細は同Skillに従う |
@@ -46,6 +46,7 @@
 - 委譲で品質や速度が上がる場合に対象・必要な結果・権限を渡し、同じfileの競合編集を避ける。親が統合と最終確認を行う。汎用roleの自己評価を専門審査の代行にしない。
 - 回答・生成文書・commit messageは日本語を基本とし、明示された別言語や会話のCharacter指定を尊重する。code commentと機械が読む文字列、成果物は既存文体と目的に従う。commit messageはConventional Commits形式とする。
 - 変更と実際の検証結果を短く伝える。実行や保存の結果が不明なものを成功扱いしない。通常の短報告へ文書校正工程を足さない。
+- 取得済みの共有可能なUIスクリーンショットは、ユーザーから求められるのを待たず返答へ画像として示す。保存・提示方法と未取得時の扱いは、条件付き参照のUI基準に従う。
 
 ## 作業ファイル
 
