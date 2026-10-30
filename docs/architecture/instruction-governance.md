@@ -6,6 +6,7 @@
 
 | 情報 | 正本 |
 | --- | --- |
+| 削減・修正可能性・複雑さの設計選択基準、共有判断と文書化 | [設計判断・文書化](../guides/design-decisions.md)。入口は常時の原則、開発guideは実装責務と検証・統合、Skillは固有手順を担い、詳細の重複定義をしない |
 | 課題・対応予定・リリース運用の共通観点と開発・統合の判断原則 | [開発・review・統合](../guides/development.md)。具体的な運用は共通または各プロジェクトのAGENTS.mdから読む条件を明示した対象repositoryのREADMEの節・既存の運用文書等、個々の課題の予定・状態はそこで選んだ管理先 |
 | 親・一般子の既定modelと設定例 | `config.example.toml`、`config/agents.example.toml` |
 | 汎用roleのmodel・指示 | `agents/*.toml` |
@@ -17,6 +18,6 @@
 | WithMate Memoryの想起・記録判断、Character Affectの反映・許可・保存範囲 | [WithMate利用方針](../guides/withmate.md)。AGENTS.mdは提供情報に基づく読込条件、MCP instructions・tool説明・schemaは利用可能な操作・探索例・呼出契約、runbookは接続設定・障害調査を担う |
 | Repository Glossaryの操作契約 | runtime-managed `withmate-glossary` Skill。利用契機・継続的な許可とdeleteの個別承認は[WithMate利用方針](../guides/withmate.md) |
 
-`hooks/implementation-restraint.ps1`はSessionStartのstartup・resume・compactとSubagentStartで共通ルールを短く再通知し、別のworkflowを設けない。既存のモデル選択を再提示するが、分割先本文は注入しない。
+`hooks/implementation-restraint.ps1`はSessionStartのstartup・resume・compactとSubagentStartで入口と正本への参照を短く再通知する。許可modelの範囲は再提示するが、選択手順・例外・停止条件等の詳細本文を複製せず、別のworkflowを設けない。
 
 文書更新・履歴保存・リリースノートのリンクに関する共通ルールの正本は[設計判断・文書化](../guides/design-decisions.md)である。このrepository自身の判断履歴は`docs/adr/`、公開記録は`docs/releases/`に置かれている。

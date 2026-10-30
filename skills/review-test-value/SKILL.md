@@ -23,8 +23,8 @@ python -X utf8 skills/review-test-value/scripts/extract_test_values.py `
 working treeが既定で、indexだけを対象にする場合は`--staged`、commitへ固定する場合は`--head <commit>`を追加する。[Git選択契約](references/git-selection-v1.md)のsnapshot semanticsを維持する。
 
 4. exit `0`のJSONを読み、`tests`と`transitions`の全recordを確認する。exit `1`は抽出未完了であり、sourceまたはmetadataに実際の不備があれば修正する。直比較が`RECORD_TRANSITION_UNRESOLVED`だけで停止した場合は、[統合履歴による審査](references/git-selection-v1.md#統合履歴による審査)の条件を満たす別経路を利用できる。抽出を通すために製品testの意味・配置を変えない。exit `2`はCLI、adapter、I/Oなどの失敗であり、いずれの失敗でも部分結果をレビューへ渡さない。
-5. 親エージェントは、相互に独立して扱えるrecordまたは小さなbatchごとに、利用できるサブエージェント枠の範囲で選択した担当へreviewを委譲する。並列に委譲できない場合は親の判断で順次扱う。
-6. 各review依頼には、repository root、task baseと対象snapshotまたは現在のdiff、対象fileとlocator、抽出recordのmetadataとtest source、対象scope、read-onlyであること、下記のreview観点と適用される統合基準を含める。production codeやfixtureを親が事前に収集せず、reviewer自身が対象testから必要な範囲をrepository内で探索する。
+5. 親エージェントは、契約・SUT・fixture等を共有するrecordを、担当が全件を確認できるbatchへまとめ、利用できるサブエージェント枠の範囲で選択した担当へreviewを委譲する。並列に委譲できない場合は親の判断で順次扱う。独立した対象やcontext上の必要で分割し、batch内の全recordと遷移を確認する。観点別・念のための多重reviewは増やさない。
+6. 各review依頼には、repository root、task baseと対象snapshotまたは現在のdiff、対象fileとlocator、抽出recordのmetadataとtest source、対象scope、read-onlyであること、下記のreview観点と適用される統合基準を含める。reviewerは対象testから必要なproduction code・fixture・oracle・契約を辿り、自ら妥当性を判断する。親が既知の参照先や、担当のtoolでは取得できない対象snapshotのsourceを提供してよい。対象snapshotと取得元を示し、親の要約・判断でsource確認を代替しない。
 7. 親エージェントは自然言語のreview結果を読み、共通`AGENTS.md`の「条件付き参照」から解決した`docs/guides/development.md`の「統合優先・修正分離」に従って各指摘の採否・対応時期と完了可否を判断する。今回必要なmetadataとtest本文の整合修正等は、依頼範囲内の修正と必要な確認で完結するなら仕上げとして扱う。必須確認や採否・統合判定に必要なcontext不足、仕上げやブロッカーの修正、新たな変更に必要な範囲で、対象recordへ追加contextや追加reviewを依頼できる。担当は同じ委譲基準で選ぶ。全件解消を目的とした改善探索や、同じ入力でのvarianceを期待する自動retryは行わない。
 
 reviewerの起動失敗、内容のない応答、対象recordを確認していない応答はreview済みとして扱わない。親が原因と不足内容を確認し、必要なら対象recordだけへ追加contextまたは別reviewを依頼する。

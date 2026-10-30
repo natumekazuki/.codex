@@ -4,12 +4,8 @@ $ErrorActionPreference = 'Stop'
 
 @"
 Implementation restraint / delegation:
-- WithMateのSession Graph MCPによる共有記録は、共通AGENTS.mdの条件付き参照に従いruntimeの実pathのsession-graph Skillを使う。記録対象の指示は依存作業の前に保存し、対象選択・同期・復元の詳細は同Skillに従う。記録操作で権限を広げず、保存失敗を成功扱いしない。
-- 現在の要求・契約・具体的な不具合に根拠を持つ、最も単純な完全解を作る。不要な抽象化、互換層、fallback、管理文書、testや無関係な整理を増やさない。
-- 共通文書の参照先はユーザーhome直下の~/.codex/に固定する。~は実行環境のユーザーhomeを指し、読み取り前に絶対pathへ解決する。作業対象repositoryや配布元checkout、CODEX_HOMEによる別配置へ切り替えず、参照先が欠けても同名文書で代用しない。
-- 複雑さは必要な保証への効果と継続負担で評価する。共有判断の不足・矛盾や方針・現行説明の変更を扱う時は、~/.codex/docs/guides/design-decisions.mdを読む。必要な調査・推奨案・草案まで自ら進め、未合意の判断の採否を確認する。草案を有効な方針とせず、権限・着手禁止を維持する。
-- 失敗を成功に見せない。必要な確認で終え、明示要求、入力検証、安全性、accessibility、データ保護を保つ。
-- 共通AGENTS.mdの「条件付き参照」に従い、実装を伴わない課題・対応予定の管理でも、~/.codex/docs/guides/development.mdと対象repositoryが明示する関連運用文書を読む。開発・review・リリース範囲の確定・統合・公開判断等の読込条件も同入口に従う。互換性境界や残件管理先の不足は、実際の変更影響と依存先を調べ、その判断に依存する変更・引継ぎだけを止める。独立した作業は進め、未合意の保護対象を独断で確定・廃止しない。必須確認と権限を満たして統合し、現在の変更や依存先を非ブロッカーの全件修正待ちにしない。
-- 使用modelはgpt-6.1-sol、gpt-6-luna、gpt-6.1-terra、gpt-6-astraのみ。基本は6.1 Sol、手順・期待結果がほぼ決まっている作業はLuna、明確な入力・完了条件を持つ視覚・文章・局所修正はTerra、高度な判断が要求される作業はAstraを選ぶ。taskの短さや単価だけで決めず、下位modelの試行を選択の前提にしない。委譲前に~/.codex/docs/architecture/subagent-workspace.mdを読み、Astra子は非Astra親から必要な問題を絞って委譲する。Astra→Astraは禁止。専門審査と操作権限は既存の契約に従う。指定modelが未提供なら旧modelへfallbackせず、親で可能な範囲を続ける。履歴継承はhookでnoneに固定されるため、対象・必要な文脈・完了条件を起動時の依頼へ含める。
-- review-test-valueでは、testの新規追加・意味変更・削除・移設をGit差分から抽出し、通常のread-only reviewへ渡す。対象を都合よく選び直したり、審査を通すために契約を弱めたりしない。
+- 共通ルールの入口は~/.codex/AGENTS.md。~は実行環境のユーザーhomeへ解決し、作業対象repositoryや別配置で代用しない。入口の操作境界と条件付き参照に従い、作業に必要なguide・runtimeのSkillを読む。
+- 追加前の削減・統合と、保守者が修正できる構造を優先する。設計の選択基準は~/.codex/docs/guides/design-decisions.md、開発・review・統合の判断は~/.codex/docs/guides/development.mdを正本とする。
+- WithMate Session Graphの利用条件は共通入口に従い、runtimeのsession-graph Skillで必要な指示を依存作業前に保存する。記録を権限拡大や未実施の確認の代わりにしない。
+- 委譲前に~/.codex/docs/architecture/subagent-workspace.mdを読む。使用modelはgpt-6.1-sol、gpt-6-luna、gpt-6.1-terra、gpt-6-astraのみ。選択・実効権限・履歴を継承しない依頼の条件は同guideに従う。
 "@
