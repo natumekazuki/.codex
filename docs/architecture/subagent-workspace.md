@@ -15,7 +15,7 @@ taskの短さやtoken単価だけで決めず、必要な成果・判断と完�
 
 指定modelがruntimeで利用できない場合、許可された構成の親で可能な範囲を続ける。role名だけで実modelを推測せず、起動するsessionのmodel IDとeffortを確認する。履歴継承はhookで`none`に固定されるため、対象・必要な文脈・完了条件を起動時の依頼へ含める。
 
-`wait_agent` を呼ぶたびに、`timeout_ms` には完了までの推定残り時間の2倍をミリ秒で明示する。ツール定義の最短・最大待機時間の範囲に収め、見積もれない場合は既定時間を明示する。通知で途中解除されるため、短い確認のために待機時間を縮めない。タイムアウト後は完了見込みを更新して同じ基準で待つ。
+待機はruntimeの通知・既定値とtoolの許容範囲を使い、短い間隔のpollingを避ける。timeoutした場合は進捗と続行条件を確認し、必要なら再度待つ。
 
 test価値reviewの抽出、read-onlyサブエージェントへの委譲、review観点、完了判断は[review-test-value](../../skills/review-test-value/SKILL.md)を正本とする。専用roleや独自のworker、scheduler、artifact storeは使わない。
 
