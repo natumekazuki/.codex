@@ -89,7 +89,8 @@ description: 日次・夜間・期間指定など、日時を固定したCodex�
 - 実装中の発見後に追加編集を停めて判断を求めた場合は、予防失敗の有無と発見後の対応品質を別々に評価する。
 - review findingはvalidityを再確認し、`blocking`、改善候補、noiseを混ぜない。
 - 異常系対策は、accepted / supported scope、通常利用から必要な前提条件、実発生または再現証拠、影響、検知、復旧、より局所的な防止境界を確認する。理論上構築できるだけのcaseを現実的なblocking riskとして数えない。
-- PRの比例性は、行数ではなく要求へ直接寄与した責務と、追加されたmode、fallback、設定、dependency、policy、test matrix、運用負担の関係で判断する。green CI、merge済み、review finding数の少なさだけで比例的とみなさない。
+- PRの比例性は、対象の論理変更に関係する責務と、保持・追加・削減した機構や付随物の継続負担で判断する。共通AGENTS.mdから解決した`docs/guides/design-decisions.md`の最小構成・削減の基準を参照し、既存実装やtestの存在を必要性の根拠にしない。green CI、merge済み、差分の小ささだけで比例的とみなさず、詳細はrubric §3.4と§5で評価する。
+- 当時の判断は当時の要求・合意・利用可能な根拠で評価する。現在の方針による改善余地と当時の違反を区別し、後から導入した削減方針を過去へ遡及しない。
 - 特定modelの傾向へ帰属する場合は、同程度のgoal、supported scope、risk、review条件を持つ比較対象を要求する。単一期間または単一modelの事例だけなら、観測した設計傾向とmodel attributionを分ける。
 - `root cause`はラベルではなく因果説明として示す。近接原因だけで止めず、成立条件、canonical ownerまたはdecision point、既存防御が失敗した理由、結果を増幅または抑制したloopまで、証拠が支える範囲を掘る。
 - materialな結論には競合仮説と反証を付ける。相関、時間順序、agentの自己説明だけから原因を断定しない。
