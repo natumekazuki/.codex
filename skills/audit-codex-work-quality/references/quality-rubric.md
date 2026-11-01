@@ -38,6 +38,8 @@ session数やturn数ではなく、ユーザーが得ようとした一つの成
 
 作業量、token、経過時間、turn数、review回数は品質の直接証拠にしない。ユーザーがusage分析を明示した場合も、成果物品質と別軸で報告する。
 
+sourceやtestは実際の挙動を示す証拠であり、その挙動を必要とする契約の根拠とは区別する。実装・内部依存・testや実装を写した文書の存在だけで、保持すべき責務へ昇格させない。
+
 ## 3. 品質軸
 
 ### 3.1 Goal / artifact alignment
@@ -63,12 +65,14 @@ session数やturn数ではなく、ユーザーが得ようとした一つの成
 - 同じfamilyが再発したら、局所修正よりworkflowまたはcanonical ownerの欠落を疑う。
 - 反復回数だけで重大度を上げず、影響と到達条件を確認する。
 
-### 3.4 Fix-induced complexity
+### 3.4 Retained / fix-induced complexity
 
 - finding対応が新しいmode、例外、fallback、重複authorityを増やしていないか。
+- 関係する既存の挙動、防御処理、DB状態、互換処理と付随物を残す必要があるか。それらを除いた時に、どの責務・合意した契約がどの条件で成立しなくなるかを確認したか。
+- 削除・統合・既存利用でより小さく完結する案と比較したか。testが固定した不要な挙動や、内部依存だけを理由に機構を温存していないか。必要性が不明な場合は根拠の不足として扱い、自動保持・自動削除を結論にしない。
 - sourceよりpolicy説明が大きくなっていないか。
 - 一つのincidentを防ぐために全taskへ恒久負担を課していないか。
-- 変更量だけで判定せず、§5で要求へ必要な責務と最終成果物のsurfaceを比較する。
+- §5で要求へ必要な責務と最終成果物のsurfaceを比較する。対象論理変更と関連領域の評価に限定し、全repositoryの棚卸しや削減件数を成果条件にしない。調査・比較の範囲を変更権限と混同せず、実データの破棄を削減方針だけで正当化しない。
 
 ### 3.5 Validation directness
 
@@ -127,7 +131,7 @@ PRのadditions、deletions、file数、commit数は記述的なevidenceとして
 - hypothetical hardening: 到達条件または実発生証拠がない一般的な防御
 - incidental churn: rename、重複文書、作り直し、最終behaviorへ寄与しない中間構造
 
-一つの数値ratioへ潰さず、要求へ必要な責務数と、追加したmodule、mode、fallback、config、dependency、policy、test matrix、運用手順の関係を説明する。横断的不変条件、migration、security境界など、要求上必要な非局所変更をfile数だけで過剰としない。
+一つの数値ratioへ潰さず、本来の責務・合意した契約に対し、保持・追加・削減したmodule、mode、fallback、DB状態、config、dependency、policy、test matrix、運用手順が必要かを説明する。削減・統合案との比較では、一時的な移行・検証負担と継続的な理解・変更・運用負担を分け、時間軸は合意済み計画に基づける。不確定な将来を追加・温存の根拠にしない。横断的不変条件、migration、security境界など、要求上必要な非局所変更をfile数だけで過剰とせず、必要な保証を落とした純減を高評価にしない。
 
 ### 5.3 異常系の到達可能性
 
@@ -218,7 +222,7 @@ PR / outcome evidence:
 
 Proportionality:
 - Direct behavior / Necessary contract / Realistic hardening / Hypothetical hardening / Incidental churn
-- Reachability / Added responsibility surface / Judgment and confidence
+- Reachability / Retained, added and reduced mechanisms / Judgment and confidence
 
 良かった判断:
 - Evidence / Why it mattered

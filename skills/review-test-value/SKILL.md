@@ -24,12 +24,12 @@ working treeが既定で、indexだけを対象にする場合は`--staged`、co
 
 4. exit `0`のJSONを読み、`tests`と`transitions`の全recordを確認する。exit `1`は抽出未完了であり、sourceまたはmetadataに実際の不備があれば修正する。直比較が`RECORD_TRANSITION_UNRESOLVED`だけで停止した場合は、[統合履歴による審査](references/git-selection-v1.md#統合履歴による審査)の条件を満たす別経路を利用できる。抽出を通すために製品testの意味・配置を変えない。exit `2`はCLI、adapter、I/Oなどの失敗であり、いずれの失敗でも部分結果をレビューへ渡さない。
 5. 親エージェントは、契約・SUT・fixture等を共有するrecordを、担当が全件を確認できるbatchへまとめ、利用できるサブエージェント枠の範囲で選択した担当へreviewを委譲する。並列に委譲できない場合は親の判断で順次扱う。独立した対象やcontext上の必要で分割し、batch内の全recordと遷移を確認する。観点別・念のための多重reviewは増やさない。
-6. 各review依頼には、repository root、task baseと対象snapshotまたは現在のdiff、対象fileとlocator、抽出recordのmetadataとtest source、対象scope、read-onlyであること、下記のreview観点と適用される統合基準を含める。reviewerは対象testから必要なproduction code・fixture・oracle・契約を辿り、自ら妥当性を判断する。親が既知の参照先や、担当のtoolでは取得できない対象snapshotのsourceを提供してよい。対象snapshotと取得元を示し、親の要約・判断でsource確認を代替しない。
+6. 各review依頼には、repository root、task baseと対象snapshotまたは現在のdiff、対象fileとlocator、抽出recordのmetadataとtest source、対象scope、本来の責務・合意した維持契約とその根拠、read-onlyであること、下記のreview観点と適用される統合基準を含める。機構やtestの廃止・変更理由と未確認事項も区別して伝える。reviewerは対象testから必要なproduction code・fixture・oracle・契約を辿り、自ら妥当性を判断する。関連する未変更testも判断に必要な参照には使えるが、抽出対象の選び直しや全repositoryの追加審査へ広げない。親が既知の参照先や、担当のtoolでは取得できない対象snapshotのsourceを提供してよい。対象snapshotと取得元を示し、親の要約・判断でsource確認を代替しない。
 7. 親エージェントは自然言語のreview結果を読み、共通`AGENTS.md`の「条件付き参照」から解決した`docs/guides/development.md`の「統合優先・修正分離」に従って各指摘の採否・対応時期と完了可否を判断する。今回必要なmetadataとtest本文の整合修正等は、依頼範囲内の修正と必要な確認で完結するなら仕上げとして扱う。必須確認や採否・統合判定に必要なcontext不足、仕上げやブロッカーの修正、新たな変更に必要な範囲で、対象recordへ追加contextや追加reviewを依頼できる。担当は同じ委譲基準で選ぶ。全件解消を目的とした改善探索や、同じ入力でのvarianceを期待する自動retryは行わない。
 
 reviewerの起動失敗、内容のない応答、対象recordを確認していない応答はreview済みとして扱わない。親が原因と不足内容を確認し、必要なら対象recordだけへ追加contextまたは別reviewを依頼する。
 
-削除・移設では`transitions`の`DELETED.before`、`ADDED.after`、`SURVIVED.after`を漏れなく確認する。削除だけで過去のreview義務が解消したとみなさず、現在の契約に対して保持、移設、削除の根拠を親が判断する。固定baseの削除前testがmetadata未付与でも、`DELETED.before`の`metadata: null`を歴史的証拠として審査へ渡す。追加・surviving側の未付与／不正metadataは診断対象のままにし、pathやsymbol名だけで移設を`SURVIVED`へ対応付けない。
+削除・移設では`transitions`の`DELETED.before`、`ADDED.after`、`SURVIVED.after`を漏れなく確認する。削除で審査を免除せず、本来の責務・合意した契約に対して保持、移設、削除の根拠を親が判断する。不要な機構と専用testを一緒に廃止する場合、同じ旧挙動の代替testを一律に要求しない。残る必要な保証の検証は確認し、旧testを通すために不要な実装を復活させない。固定baseの削除前testがmetadata未付与でも、`DELETED.before`の`metadata: null`を歴史的証拠として審査へ渡す。追加・surviving側の未付与／不正metadataは診断対象のままにし、pathやsymbol名だけで移設を`SURVIVED`へ対応付けない。
 
 固定baseのTypeScript動的titleは、式を評価しないsource declarationとして抽出される。`[title expression: ...]`というsymbolをruntime titleやcase一覧と解釈せず、保持された削除前本文とmetadataを審査する。現行側の動的titleなど、対応外sourceの失敗条件は変わらない。
 
@@ -48,7 +48,11 @@ metadataを使う場合は、既存の`impact`に影響、`distinction`に既存
 
 ## 一回のreviewで確認する観点
 
-reviewerには三つの観点を一つの依頼で渡す。観点ごとに別の依頼や専用agentへ分割しない。
+評価は「守る機構・挙動の必要性」「その保証をtestで担う必要性」「testの整合・検出力」の順に考える。共通入口から解決した`docs/guides/design-decisions.md`の最小構成・削減の基準に従い、以下を三つの観点に通して確認する。別の事前審査や専用agentは増やさず、一つの依頼で扱う。
+
+- 機構と付随物を除いた時、どの責務・合意した契約がどの条件で成立しなくなるか。実装・内部依存・test・metadataや実装を写した文書だけでは必要性を証明しない。具体的で反証可能なclaimでも、不要な挙動を固定していれば保持理由にはならない。
+- 必要な保証を、より小さいtest、既存test、type・schema・static・build等で十分に担えないか。残す実装と保証に合わせて削除・統合・縮小・再設計を比較し、単純なtest件数削減やcoverage値だけで決めない。
+- 必要性が不明なら根拠を調べ、必要な採否・必須確認を妨げる不足を示す。不明を自動保持・自動削除へ変えず、未合意の契約廃止をreviewerが確定しない。characterizationやpermanentの指定も、観測済みの挙動を維持契約に昇格させない。
 
 ### metadata
 
@@ -74,7 +78,7 @@ reviewerはtest sourceからproduction code、fixture、helper、mock、oracle�
 - testが意図したproduction pathを実際に通るか。
 - mock、fixture、helperが欠陥を隠したりproduction behaviorを迂回したりしていないか。
 - 欠陥を入れたときassertionまで観測が伝播するか。
-- production contractに対して保持価値があるか。今回の変更完了確認だけならtemporaryとして削除し、現在のcontractやpolicyを守るtestなら保持理由と継続コストを確認する。削除、移設、再設計が適切な場合はその判断も示す。
+- 本来の責務・合意した契約に対して保持価値があるか。今回の変更完了確認だけならtemporaryとして削除し、必要な保証を守るtestなら保持理由と継続コストを確認する。不要な挙動を正確に検証していることを価値とせず、削除、統合、縮小、移設、再設計が適切な場合はその判断も示す。
 - supplied contextだけでは判断できない具体的事項があるか。
 
 通常の自然言語reviewで、結論、理由、具体的な問題、統合への影響、判断に足りないcontextが分かるよう依頼する。対応の必要性は要求・契約・具体的な支障に結び付け、単なる改善余地や好みは必要な修正と区別する。停止を提案する場合は適用する統合基準と根拠を示し、testの改善価値だけで全指摘をブロッカーにしない。返答のJSON schema、必須field、固定verdict、識別子の復唱を応答契約にしない。
