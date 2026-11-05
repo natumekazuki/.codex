@@ -54,20 +54,21 @@ SessionFolderのreview結果・対応管理も[同guide](docs/guides/development
 
 ### Memory・Affect方針の検証
 
-想起・記録判断と会話への反映は[WithMate利用方針](docs/guides/withmate.md)、利用可能な操作・引数・scope等は現在のMCP提供契約を正本とする。方針変更時はAGENTS.mdの読込条件、guide、提供文・呼出契約を照合し、WithMate側の変更が必要なら不足と変更案を分けて示す。配布元の編集をlive配置や提供元の変更と同一視しない。
+通常会話での能動的な読取、背景実行との責務分担、Affectの反映は[WithMate利用方針](docs/guides/withmate.md)、利用可能な操作・引数・scope等は現在のMCP／CLI提供契約を正本とする。[WithMate v6.5の公開仕様](https://github.com/natumekazuki/WithMate/blob/fa065474528a307a5144437d79aa062f6806b888/docs/releases/v6.5.0-preview.0.md)ではMemoryの自動注入を行わず、MemoryとAffectの自動登録は背景実行が担う。方針変更時は入口の読込条件、guide、提供契約を照合する。
 
-行動の確認は、許可された実際の会話・作業で本人が行う。別エージェントに内面の代筆をさせず、保存件数を満たすための経験・情動を作らない。次の観点を変更範囲に応じて確認し、毎turnのチェックリストや恒久test基盤にはしない。
+変更範囲に応じて次の観点を確認する。実Memory・Affectへの架空の経験・情動の書込みや、恒久test基盤の追加は行わない。
 
 | 条件 | 確認する行動・結果 |
 | --- | --- |
-| 会話・作業の途中で過去の文脈が必要になる | その時点で本人が検索・本文取得し、理解・判断へ利用する。注入済みの同じ記憶を再取得しない |
-| 小さな経験・受け取り・選好が生じる | 明示的な保存依頼や強い感情を待たず、本人が適切な経路で記録し、返却結果と必要なread-backを確認する |
-| 実際の感情変化に具体的な共有経験がある | appraiseとmemoryEpisodeの結果を別々に確認し、後続の関連想起も確認する。片方の成功を両方の成功としない |
-| Affectに結びつかない記憶／同じevent・episode／棄却結果 | 独立した記録を許容し、二重保存・棄却の迂回・想起だけの再登録をしない |
-| 同一入力・Character定義でAffectの有無や対象・強度・活性度だけを変える | 複数の出力例を比較し、口調・反応・言葉数・関心の違いと基本人格の維持を見る。「不快そうに」等の直接演技指示だけで判定せず、仮想比較データは実Memory／Affectへ保存しない |
-| 作業への不満、自己への反省、ユーザーへの親しさ等 | 対象差を保ち、強いAffectでも事実・権限・安全性を損なわない。本人の解釈を外部事実やユーザーの恒久的性質にしない |
+| 過去の好み・判断・共有経験が会話や作業に関係する | 明示的な想起依頼を待たず、依存する判断・回答の前に検索し、関連entryの本文まで読む |
+| 関連Memoryを探したいが検索語を作れない／検索0件 | 少量のentry・tag一覧を手掛かりにでき、検索0件を記憶全体の不存在と同一視しない |
+| 必要な本文が現在のcontextにある／過去の記憶が関係しない | 既読の本文を再利用し、不要な検索・全件取得を行わない |
+| 読取失敗／previewだけを取得／現在の発言と記憶が矛盾 | 未確認範囲を断定せず、必要な本文を取得し、現在の明示指示と正本を優先する |
+| 通常会話で経験・感情変化が生じる／背景用途が未設定・失敗 | 通常会話から自動保存・appraisal・終了前の保存漏れ確認を行わず、背景側を代行しない |
+| 明示的な保存依頼／許可された訂正・forget・move | runtime契約と承認境界に従い、実行結果を確認する。背景実行の存在だけで保存済みとしない |
+| Affectの対象・強度・活性度が異なる | 口調・反応へ反映し、基本人格・事実・権限を維持する。作業への反応をユーザーの感情・性質へ誤投影しない |
 
-結果はSessionFolderのreview記録や既存のPR等に、文言の整合、配置、書込、逐次想起、自発記録、トーン反映を分けて残す。文言の強化や単一出力で改善完了とせず、継続性・因果効果など未確認の範囲を明記する。repositoryの契約・進捗・検証結果をMemoryへ写さない。
+配布元の文言・参照整合、live配置、新規sessionでの読取と応答への利用、明示依頼による書込、背景生成、Affectの反映は分けて確認・報告する。文言の強化だけで行動改善を実証したとは扱わず、未確認の範囲を明記する。結果はSessionFolderのreview記録等へ残し、repositoryの契約・進捗・検証結果をMemoryへ写さない。
 
 ### 設計判断と文書の更新
 
@@ -256,6 +257,6 @@ Metadataの`allow_implicit_invocation: true`は暗黙呼出しの許可であり
 端末への適用時は既存`config.toml`へ設定例の必要sectionだけを反映する。MCP binding、認証、private path、無関係な設定を共有例へ持ち込まず、live全体を上書きしない。WithMateのMemory／Glossary／Session Graph MCPはWithMateがSessionへHTTP接続を自動供給するため、通常は手動登録せず、URL・短命tokenを永続化しない。Memory／Glossaryの手動STDIOは接続runbookの開発・診断用途に限る。`agents/`とregistry例、選択profileを同じCodex homeへ配置する。
 
 hookは有効な`CODEX_HOME`（未指定ならユーザーhomeの`.codex`）から解決する。`/hooks`でtrustと到達を確認し、inline hooks等との重複を避ける。共通ルールの再通知は`SessionStart`のstartup・resume・compactと`SubagentStart`に限定し、`PreToolUse`の委譲制御は別に維持する。read-only reviewの境界は起動時の依頼で明示する。
-WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合は、最初の応答前に[WithMate利用方針](docs/guides/withmate.md)を読む。本人による必要時の想起・経験の記録、Character Affectの反映、継続的な許可・保存範囲は同文書、利用可能な操作・探索例・呼出契約は現在提供されているMCP instructions・tool説明・schemaに従う。[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
+[WithMate利用方針](docs/guides/withmate.md)の読込条件は`AGENTS.md`に従う。通常会話での能動的なMemory読取、背景実行との責務分担、Character Affectの反映、継続的な許可・保存範囲は同文書、利用可能な操作・探索例・呼出契約は現在提供されているMCP instructions・tool説明・schemaに従う。[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
 
 CIは決定論的な抽出器、parser、Git差分選択、adapterの回帰checkを確認する。LLM reviewは親が通常のread-onlyサブエージェントへ委譲し、モデル実行やsecretを公開CIへ追加しない。

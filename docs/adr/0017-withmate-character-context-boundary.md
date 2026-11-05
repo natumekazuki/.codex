@@ -1,14 +1,15 @@
 # ADR-0017: WithMate Character contextはlifecycle注入とMCPを単一正本へ接続する
 
-- Status: accepted（利用契機・接続案内は一部置換）
+- Status: accepted（想起・記録責務・接続案内は一部置換）
 - Date: 2026-08-10
-- Updated: 2026-10-20
+- Updated: 2026-11-05
 
 ## 現在の適用範囲
 
-WithMate 6.3.29を前提とする運用では、以下の当時の判断を現行運用の適用対象外とし、本文は判断履歴として保持する。
+以下の当時の判断を現行運用の適用対象外とし、本文は判断履歴として保持する。
 
-- 追加想起を「具体的に影響する場合だけ」に限定し、保存候補がないturnではsearchも行わない判断は、[WithMate利用方針](../guides/withmate.md)へ置換した。日常の小さな記録を含め、想起は新規保存候補の有無と分けて判断する。
+- 追加想起を「具体的に影響する場合だけ」に限定し、保存候補がないturnではsearchも行わない判断は、[WithMate利用方針](../guides/withmate.md)へ置換した。想起は新規保存候補の有無と分けて判断する。
+- WithMate v6.5では、Memoryの自動注入、通常会話での終了前reflection・自発的な保存・event-time appraisalの判断を[WithMate利用方針](../guides/withmate.md)へ置換した。自動生成・登録は背景実行が担い、通常会話は関連Memoryの検索・本文取得とAffectの反映を担う。明示的なMemory保存依頼と許可範囲内の訂正等は維持する。
 - 通常接続で各hostのSTDIO登録・`env_vars`設定を必要とする案内は、[Memory／Character runbook](../runbooks/withmate-character-context.md)と[Glossary runbook](../runbooks/withmate-repository-glossary.md)へ置換した。通常はWithMateがHTTP接続を供給し、手動STDIOは開発・診断用途とする。
 - 利用指示の配置は[指示体系の責務分担](../architecture/instruction-governance.md)を正本とする。AGENTS.mdは読込条件、guideは利用姿勢・許可・保存範囲、MCPは具体的契機・探索例・呼出契約、runbookは接続・障害調査を担う。
 

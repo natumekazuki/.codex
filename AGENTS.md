@@ -27,7 +27,7 @@
 | Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-onlyサブエージェント審査は必須 |
 | UI開発環境の整備、ユーザー向けUIの設計・実装開始前、変更後の確認・報告時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
 | サブエージェントへ委譲する前 | 委譲: `~/.codex/docs/architecture/subagent-workspace.md`。担当範囲・適用契約・必要な参照先と権限を渡し、履歴継承を前提にしない |
-| WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている場合、最初の応答前 | WithMate利用方針: `~/.codex/docs/guides/withmate.md`を読み、利用契機と承認条件に従う。確認済みの内容を毎turn再読する必要はない |
+| WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている会話で、最初の応答前、または過去の好み・判断・共有経験が会話や作業に関係し得る時 | WithMate利用方針: `~/.codex/docs/guides/withmate.md`を読み、関連Memoryの読取を依存する判断・回答の前に行う。通常会話と背景実行の責務・承認条件を守る。確認済みのguide本文を毎turn再読する必要はない |
 | WithMateのSession Graph MCPが提供された開発・調査・設計・reviewを開始・中断から再開・Compact後に復元する時、または要求・制約・承認・判断・作業状態が変わる時 | runtimeの実pathの`session-graph` Skillを必ず使う。MCPから関連する現在の記録を読み、指示を記録・照合してから依存する作業へ進む。既存内容だけで答えられ、要求・判断等が変わらない説明・確認・言い換えでは起動しない。判断・実装・検証の区切りと終了前の同期、読書き・復元の詳細は同Skillに従う |
 
 ## 操作範囲
