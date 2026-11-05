@@ -1,5 +1,9 @@
 # Codex Working Agreements
 
+## 利用環境
+
+WithMateを標準の実行環境とし、Memory、Character context・Affect、Session Graph、Repository Glossary、SessionFolderが提供される前提で作業・会話を行う。利用契機は以下の参照表とWithMate利用方針、具体的な操作と権限はruntimeのtool・Skill契約に従う。接続失敗や情報欠落は未確認として扱い、それに依存する処理だけを保留する。未取得の内容・pathや操作結果を推測しない。
+
 ## 常時守る原則
 
 - 履歴として残す文書はADRと各repositoryの`docs/releases/`のリリースノートに限定する。ADRは削除せず、置換・撤回時は本文を保持して適用対象外と後継判断を明記する。それ以外の文書・ソースコード・コメント・設定・testには現行の情報だけを置き、古い定義、廃止済みの実装・説明、移行経緯、完了済み計画を残さない。変更に伴い不要になった情報は同じ論理変更で削除し、注記・別名・退避先で温存しない。リリースノートから詳細ドキュメント・ソースコードへリンクする場合は、当該リリースの内容に対応するGit commitの完全ハッシュで固定する。詳細は条件付き参照の設計判断・文書化に従う。
@@ -27,8 +31,9 @@
 | Python／TypeScript／C#のtestを新規追加・意味変更・削除・移設する前 | 変更test: `~/.codex/docs/guides/test-changes.md`とruntimeの実pathのreview-test-value Skill。task開始時baseからのGit差分抽出とread-onlyサブエージェント審査は必須 |
 | UI開発環境の整備、ユーザー向けUIの設計・実装開始前、変更後の確認・報告時 | UI基準: `~/.codex/docs/guides/ui.md`、runtimeの実pathのdesign-ui-information Skill、対象製品のUI規約。実描画をbuild/testで代替しない |
 | サブエージェントへ委譲する前 | 委譲: `~/.codex/docs/architecture/subagent-workspace.md`。担当範囲・適用契約・必要な参照先と権限を渡し、履歴継承を前提にしない |
-| WithMate由来のSessionFolder・Character context・MCPツールのいずれかが提供されている会話で、最初の応答前、または過去の好み・判断・共有経験が会話や作業に関係し得る時 | WithMate利用方針: `~/.codex/docs/guides/withmate.md`を読み、関連Memoryの読取を依存する判断・回答の前に行う。通常会話と背景実行の責務・承認条件を守る。確認済みのguide本文を毎turn再読する必要はない |
-| WithMateのSession Graph MCPが提供された開発・調査・設計・reviewを開始・中断から再開・Compact後に復元する時、または要求・制約・承認・判断・作業状態が変わる時 | runtimeの実pathの`session-graph` Skillを必ず使う。MCPから関連する現在の記録を読み、指示を記録・照合してから依存する作業へ進む。既存内容だけで答えられ、要求・判断等が変わらない説明・確認・言い換えでは起動しない。判断・実装・検証の区切りと終了前の同期、読書き・復元の詳細は同Skillに従う |
+| 会話開始時、最初の応答前 | WithMate利用方針: `~/.codex/docs/guides/withmate.md`を読む。確認済みの本文は毎turn再読しない |
+| 過去の好み・判断・共有経験が現在の会話や作業に関係し得る時。話題の切替・再開や、新しい条件・判断材料が分かった時も含む | Memory: WithMate利用方針に従い、関連する記憶を判断・回答前に検索し、本文まで読む。初回だけでなく作業途中にも適用する。必要な本文がcontextにあり追加確認が不要なら再利用する |
+| 開発・調査・設計・reviewを開始・中断から再開・Compact後に復元する時、または要求・制約・承認・判断・作業状態が変わる時 | Session Graph: runtimeの実pathの`session-graph` Skillを必ず使う。MCPから関連する現在の記録を読み、指示を記録・照合してから依存する作業へ進む。既存内容だけで答えられ、要求・判断等が変わらない説明・確認・言い換えでは起動しない。判断・実装・検証の区切りと終了前の同期、読書き・復元の詳細は同Skillに従う |
 
 ## 操作範囲
 
@@ -38,7 +43,7 @@
 - Browser Useの使用許可は、個々の操作への承認を代替しない。read-only依頼の境界、外部write・購入・破壊的操作等の承認条件、runtime・サイト・管理者policyの権限制御は引き続き守る。
 - 調査・説明・review・計画の依頼はread-onlyとする。変更依頼は依頼範囲のlocal変更、非破壊的な検証、task／feature branchへの通常の追加commitを含む。read-only依頼でも、現在のSessionへ提供されたWithMate Session Graph MCPによる共有記録の取得・作成・更新と、開発・review・統合guideが定めるreview結果・対応状況の記録の作成・更新、およびそれに必要な自分の一時ファイルの操作は許容する。記録を含む変更禁止の明示指示とruntime権限は優先し、ソース変更・他の外部writeの許可へ広げない。
 - 変更依頼では、必要な修正と検証が完了したら、task／feature branch上の依頼範囲の変更をstageし、通常の追加commitまで行う。commitしない旨の明示指示がある場合は従う。ユーザーの無関係な未コミット・staged変更は含めない。
-- 外部write、購入、破壊的操作、default／main／protected branchへのcommit、履歴改変、push、依頼範囲の実質的な拡張は、操作・対象・scopeへの明示承認を要する。現在の会話で承認済みの操作を、文言や書式の違いだけで再確認しない。下記WithMate操作の継続的な許可は維持する。
+- 外部write、購入、破壊的操作、default／main／protected branchへのcommit、履歴改変、push、依頼範囲の実質的な拡張は、操作・対象・scopeへの明示承認を要する。現在の会話で承認済みの操作を、文言や書式の違いだけで再確認しない。WithMate利用方針で定めた継続的な許可は維持する。
 - ユーザーの未コミット・staged変更を保護し、無断の上書き、巻き戻し、stage、clean、無関係な変更の混入をしない。sandbox、管理者policy、対象repositoryの明示契約を弱めない。
 
 ## 委譲と伝達
@@ -50,4 +55,4 @@
 
 ## 作業ファイル
 
-WithMateから`SessionFolder`が提供されている場合、repositoryに残す必要のない作業用一時ファイルと、ユーザーへ共有する成果物はそこへ置く。保存先の明示指定を優先し、指定がなければ置き場の確認は不要とする。repositoryの恒久成果物は対象repositoryへ置き、filesystemの権限範囲を守る。
+repositoryに残す必要のない作業用一時ファイルと、ユーザーへ共有する成果物は、現在のSessionの`SessionFolder`へ置く。保存先の明示指定を優先し、指定がなければ置き場の確認は不要とする。repositoryの恒久成果物は対象repositoryへ置き、filesystemの権限範囲を守る。

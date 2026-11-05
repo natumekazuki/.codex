@@ -15,7 +15,7 @@
 | 文書・監査・RelayGraph操作 | 適用条件に該当する`skills/*/SKILL.md` |
 | Session Graphの共有記録・review結果 | 利用契機・権限境界は共通AGENTS.md。指示の事前記録とMCPによる読書き・復元はruntimeの`session-graph` Skill。Graphの正本・表示はWithMate、呼出契約は現在のMCP提供定義が担う。review結果・対応管理は[開発・review・統合](../guides/development.md#sessionfolderのreview記録と対応管理)、`templates/review.md`は任意の骨格。hookは入口だけを再通知する |
 | 委譲・履歴を継承しない子への入力 | [委譲](subagent-workspace.md) |
-| WithMate Memoryの能動的な読取、背景実行との責務分担、Character Affectの反映・許可・保存範囲 | [WithMate利用方針](../guides/withmate.md)。AGENTS.mdは提供情報に基づく読込条件、MCP instructions・tool説明・schemaは利用可能な操作・探索例・呼出契約、runbookは接続設定・障害調査を担う |
+| WithMate Memoryの能動的な読取、背景実行との責務分担、Character Affectの反映・許可・保存範囲 | [WithMate利用方針](../guides/withmate.md)。AGENTS.mdはWithMateを標準とする利用環境と各機能の利用契機、MCP instructions・tool説明・schemaは利用可能な操作・探索例・呼出契約、runbookは接続設定・障害調査を担う |
 | Repository Glossaryの操作契約 | runtime-managed `withmate-glossary` Skill。利用契機・継続的な許可とdeleteの個別承認は[WithMate利用方針](../guides/withmate.md) |
 
 `hooks/implementation-restraint.ps1`はSessionStartのstartup・resume・compactとSubagentStartで入口と正本への参照を短く再通知する。許可modelの範囲は再提示するが、選択手順・例外・停止条件等の詳細本文を複製せず、別のworkflowを設けない。

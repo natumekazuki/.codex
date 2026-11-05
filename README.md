@@ -2,6 +2,8 @@
 
 本書は`natumekazuki/.codex`の配布資産、保守、配置の案内である。各repositoryでCodexが従う共通ルールの入口は`AGENTS.md`、作業別の本文は`docs/guides/`等の明示された参照先に置く。本書の配布元固有の管理先・リリース境界・検証手順を、他repositoryの作業ルールとして適用しない。
 
+通常の作業・会話はWithMateを標準環境とする。機能ごとの利用契機と、接続失敗・情報欠落時の扱いは共通入口に従う。
+
 GPT-6.1 Solを基本に使い、手順・期待結果がほぼ決まっている作業はLuna、明確な入力・完了条件を持つ視覚・文章・局所修正はTerra、高度な判断が要求される作業はAstraを選ぶ。一般の仕事の進め方はモデルへ任せる。追加の共通ルールは責務に基づく既存実装の削減と過剰追加の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
 
 このcheckoutの`review-test-value`は、Git差分から変更testを抽出し、通常のread-onlyサブエージェントへreviewを委譲するSkillである。抽出器の成功、全recordのreview、各指摘の採否・対応時期を確認する。review完了と全件修正は分け、後追いの基準を満たす残件だけを引き継ぐ。
@@ -242,13 +244,13 @@ Metadataの`allow_implicit_invocation: true`は暗黙呼出しの許可であり
 
 描画確認ではページ全体と代表的な閲覧・操作の流れを見て、参照方針や関係画面と比較する。取得したスクリーンショットを見ずに完了とせず、操作・motionの変更は静止画だけで済ませない。Test/build、DOM、accessibility検査の成功は視覚品質の代替ではない。ブラウザーでの描画確認は[`AGENTS.md`の操作範囲](AGENTS.md#操作範囲)に従い、原則headless／非表示で行う。Browser Useの利用許可と、可視表示の例外、Computer Useの明示指示、外部write等の個別承認を区別し、runtime側の権限制御も維持する。
 
-ローカル起動・撮影と画像提示のルール変更時は、入口・[UI基準](docs/guides/ui.md)・UI Skillの整合に加え、対象repositoryの起動・撮影手順、取得画像の確認、返答の画像埋め込みまでを確認する。軽微な変更、SessionFolderの有無、撮影不可、共有不可を必要な範囲で確認し、配布元の静的確認とlive配置・新規sessionでの実動作を分けて報告する。
+ローカル起動・撮影と画像提示のルール変更時は、入口・[UI基準](docs/guides/ui.md)・UI Skillの整合に加え、対象repositoryの起動・撮影手順、取得画像の確認、返答の画像埋め込みまでを確認する。軽微な変更、保存先未取得、撮影不可、共有不可を必要な範囲で確認し、配布元の静的確認とlive配置・新規sessionでの実動作を分けて報告する。
 
 上記は検証手順であって実施記録ではない。ルールを変更したこと、sessionで適用されたこと、出力品質を確認したことを区別する。利用者調査をしていない場合、使いやすさや好みが実証されたとは扱わない。専用の採点・台帳・CI基盤は追加しない。
 
 ## 配置と検証
 
-共通ルールの利用時の配置先は、ユーザーhome直下の`~/.codex/`に固定する。このrepositoryを同ディレクトリへcheckoutする配置と、別checkoutから必要なファイルをコピー・linkする配置を区別する。共通指示を導入・更新する際は、`AGENTS.md`だけでなく`docs/guides/`と`docs/architecture/subagent-workspace.md`を`~/.codex/`配下に同じ相対配置で揃える。WithMateの接続手順も利用する配置では`docs/runbooks/withmate-character-context.md`と`docs/runbooks/withmate-repository-glossary.md`を揃える。AGENTS.mdとhookの共通文書参照は`~/.codex/...`というコード・path表記とし、`~`を実行環境のユーザーhomeへ解決する。作業対象repositoryのcwd、配布元checkout、`CODEX_HOME`による別配置へ参照先を切り替えない。symlink配置でも`~/.codex/`から各参照先へ到達できることを確認する。本README等の通常の相対リンクは配布元の文書閲覧用として残す。実環境の更新は配布元の編集と別の操作であり、無関係な設定を上書きしない。
+共通ルールの利用時の配置先は、ユーザーhome直下の`~/.codex/`に固定する。このrepositoryを同ディレクトリへcheckoutする配置と、別checkoutから必要なファイルをコピー・linkする配置を区別する。共通指示を導入・更新する際は、`AGENTS.md`だけでなく`docs/guides/`と`docs/architecture/subagent-workspace.md`を`~/.codex/`配下に同じ相対配置で揃える。接続・診断用の`docs/runbooks/withmate-character-context.md`と`docs/runbooks/withmate-repository-glossary.md`も揃える。AGENTS.mdとhookの共通文書参照は`~/.codex/...`というコード・path表記とし、`~`を実行環境のユーザーhomeへ解決する。作業対象repositoryのcwd、配布元checkout、`CODEX_HOME`による別配置へ参照先を切り替えない。symlink配置でも`~/.codex/`から各参照先へ到達できることを確認する。本README等の通常の相対リンクは配布元の文書閲覧用として残す。実環境の更新は配布元の編集と別の操作であり、無関係な設定を上書きしない。
 
 [公式のAGENTS.md探索](https://developers.openai.com/codex/guides/agents-md/)はglobalとrepository rootからcwdまでの指示を組み合わせる。通常のMarkdownリンクはその本文の自動注入ではなく、配下すべてのAGENTS.mdを読む仕組みでもない。[Skill](https://developers.openai.com/codex/skills/)は名前・説明から選択した後に本文を読む別の仕組みである。履歴を継承しない子へは必要な条件・実path・権限を依頼に含める。
 

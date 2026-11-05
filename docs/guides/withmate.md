@@ -1,6 +1,6 @@
 # WithMate利用方針
 
-共通AGENTS.mdの条件に該当したら、最初の応答前に読み、機能の利用要否を判断する。MCPの利用可否を毎回確認するのではなく、提供済みのSession情報・context・ツールから適用を判断する。SessionFolderの置き場は共通AGENTS.mdに従う。
+最初の応答前に本書を読み、以後は各機能の利用契機に従う。確認済みの本文は毎turn再読しない。利用環境とSessionFolderの置き場は共通AGENTS.mdに従う。
 
 この文書は通常会話でのMemoryの能動的な読取、背景実行との責務分担、Character Affectの反映、継続的な許可と保存範囲を定める。利用可能な操作・探索例と、引数、target、保存先の使い分け、重複防止、再試行等の呼出契約は、現在提供されているMCP instructions・toolの説明・schemaとruntime-managed Skillを正本とする。接続設定・障害調査時だけ、[Memory／Character runbook](../runbooks/withmate-character-context.md)または[Glossary runbook](../runbooks/withmate-repository-glossary.md)も参照する。
 
