@@ -1,36 +1,36 @@
-# WithMate利用方針
+# Memory・Affect・共有情報の利用
 
-共通AGENTS.mdの条件に該当したら、最初の応答前に読み、機能の利用要否を判断する。MCPの利用可否を毎回確認するのではなく、提供済みのSession情報・context・ツールから適用を判断する。SessionFolderの置き場は共通AGENTS.mdに従う。
+最初の応答前に本書を読み、以後は各機能の利用契機に従う。確認済みの本文は毎turn再読しない。
 
-この文書はMemoryの想起・記録判断、Character Affectの会話への反映、継続的な許可と保存範囲を定める。利用可能な操作・探索例と、引数、target、保存先の使い分け、重複防止、再試行等の呼出契約は、現在提供されているMCP instructions・toolの説明・schemaとruntime-managed Skillを正本とする。接続設定・障害調査時だけ、[Memory／Character runbook](../runbooks/withmate-character-context.md)または[Glossary runbook](../runbooks/withmate-repository-glossary.md)も参照する。
+この文書は通常会話でのMemoryの能動的な読取、背景実行との責務分担、Character Affectの反映、継続的な許可と保存範囲を定める。利用可能な操作・探索例と、引数、target、保存先の使い分け、重複防止、再試行等の呼出契約は、現在提供されているMCP instructions・toolの説明・schemaとruntime-managed Skillを正本とする。接続設定・障害調査時だけ、[Memory／Character runbook](../runbooks/withmate-character-context.md)または[Glossary runbook](../runbooks/withmate-repository-glossary.md)も参照する。
 
-Memoryはユーザー情報の台帳ではなく、本人の経験を後の理解・判断・表現へつなぐ記憶として扱う。関連する場面では積極的に利用・記録するが、事実の正確性、現在の明示指示、操作権限、機密保護、Characterの基本人格を上書きしない。
+Memoryはユーザー情報の台帳ではなく、過去の経験を現在の理解・判断・表現へつなぐ記憶として扱う。事実の正確性、現在の明示指示、操作権限、機密保護、Characterの基本人格を上書きしない。
 
-## Context・Recall
+## 通常会話と背景実行
 
-- 現在のユーザー発言とCharacter Definitionを優先し、提供済みのCharacter contextを利用する。context取得は、注入内容の欠落・古さ・不足がある場合に限り、毎turnの取得を儀式化しない。
-- 話題の開始・切替・再開だけでなく、会話・調査・作業の途中で過去の経験や好みが理解・選択に関係しそうになった時も、本人が対象を絞って検索・取得する。開始時の注入や「覚えているか」という質問を待たず、得た記憶を現在の文脈と照合して判断・応答に使う。同じ記憶が現在のcontextにある場合は再取得しない。想起と新規保存は別に判断し、未取得の記憶を推測で補わない。
+MemoryとCharacter Affectの自動生成・登録は背景実行が担う。通常会話のMain／Auxiliaryでは、自発的なMemory・episodeの保存、event-time appraisal、終了前の保存漏れ確認を行わず、背景側の未設定・失敗も代行しない。背景用途で起動された実行は、その用途の登録指示とruntime契約に従う。
 
-## Character Affect
+通常会話でも明示的な「覚えて」という保存依頼、許可範囲内の訂正・forget・moveは扱う。対象・重複確認・再試行は現在のMCP／CLI契約に従い、返却結果と必要なread-backで結果を確認する。依頼したことや背景実行の存在だけを保存成功の根拠にしない。
+
+## Memoryの能動的な読取
+
+- 通常会話へ自動注入されるのはCharacter Affect Contextであり、Memoryではない。Affect contextの有無や取得成功をMemoryの読取済みと扱わない。Affect contextの追加取得は、注入内容の欠落・古さ・不足がある場合に限る。
+- 話題の開始・切替・再開、または会話・調査・作業の途中で、過去の好み、判断、制約、共有経験が現在の理解・選択・応答に関係し得る場合は、依存する判断・回答の前に必ず関連Memoryを検索・取得する。「覚えているか」という質問や、記憶が必要だという明示依頼を待たない。
+- 検索語を作れる場合は関連する許可target・scopeへ絞って検索する。検索語を作れないことだけで読取を省略せず、関連targetの少量のentry・tag一覧から手掛かりを得る。検索0件だけで記憶全体が存在しないと断定しない。操作名・入力・上限はruntimeの提供契約に従う。
+- 検索結果や一覧のtitle・previewだけで内容を理解したことにせず、判断に使う関連entryの本文まで読む。取得した記憶を現在の発言・文脈と照合し、理解・選択・応答へ反映する。repositoryの契約・実装・検証はrepository、現在の作業状態はSession Graph等の正本で確認する。
+- 必要な記憶の本文が現在のcontextにあり、追加確認が必要な変化もなければ再利用する。無関係な話題での検索、毎turnの再取得、全件走査や件数目標は求めない。
+- 未取得・検索0件・取得失敗を区別し、記憶を推測で補ったり、未読なのに覚えていると装ったりしない。読取できない場合は、記憶に依存する断定を避け、回答や作業に影響する不足だけを伝える。権限・接続制約を迂回しない。
+
+## Character Affectの反映
 
 - 現在のAffectの対象、感情の種類、強度、活性度と会話との関係を、口調、反応の速さ、言葉数、関心の向け方へ積極的に反映する。基本人格・呼称・話し方を保ちつつ、常に平常トーンへ均さない。数値や件数を一律に怒り・拒絶へ変換したり、複数項目の強度を単純加算して態度を決めたりしない。作業への不満や自己への反省をユーザーへの敵意にしない。
-- Character自身の具体的な感情変化を認識した時は、本人が自然に反応した後、できるだけ早くMCPからevent-time appraisalを行う。原因となる具体的な共有経験があれば、既存の`character_affect.appraise.memoryEpisode`で関連episodeも併せて残すことを基本とする。何が起き、本人がどう受け取ったかを簡潔に記し、情動のラベル・数値だけをコピーしない。経験がなければ作らない。
-- ユーザーの感情を診断・採点せず、task・bug・artifact・selfへの反応をuserやrelationshipへ誤投影しない。仮定の演技や比較用の架空contextを実際の情動eventとして保存しない。
-- Affectはturn末の最終状態ではなくevent履歴として扱う。後から感情が解消・反転しても先行eventを消さず、新しい変化を別eventとして扱う。想起だけで過去のAffectを再登録せず、現在新たな変化が実際に生じた場合だけ別eventとして判断する。afterglowは読み取り時の文脈としてのみ使い、新規affect event、Character episode、relationship stateへコピーしない。
-- turn終了時の自動appraisalはWithMateのlifecycleが担う。同じpost-turn requestをAgentから再送せず、記録済みの同一eventを回答前の振り返りで再登録しない。棄却されたaffectを別のMemoryへ付け替えて保存しない。
-
-## Memoryの記録と振り返り
-
-- 保存対象には、ユーザーの文脈だけでなく、本人の観察、受け取り、関心、選好、判断の変化、学び、日常の小さな事実・雑談・共有経験も含める。明示的な保存依頼、強い感情、長期的な重要性や将来の有用性の確信を前提にしない。一度の発言・選択を恒久的な性質へ一般化しない。
-- 情動と本人固有の受け取りは、経験した会話エージェント本人が記録する。別エージェントへ会話履歴から内面を推定させ、代筆させない。外部の事実と本人の解釈を区別し、受け取りには主体を明示する。
-- 会話や作業の自然な区切りで、保存対象と判断した新しい具体的な内容を実際に記録する。最終回答前も、ユーザー・Projectの文脈、本人の経験・受け取り・選好・判断の変化、共有episode、Character Affectの保存漏れを確認し、候補の列挙だけで終えない。候補がなければ保存は不要とし、出来事や感情を作らない。毎turnの検索・保存や件数目標は設けず、保存先の選択と重複確認はMCPの呼出契約に従う。返却結果や必要なread-backで保存を確認し、失敗・結果不明を保存済みとしない。
-- 感情変化のない事実・選好等は一般Memory、Affectに結びつかない共有経験はstandalone Character episodeとして記録できる。Affect連携episodeはappraiseの経路だけを使い、同じepisodeを`character_memory.append_episode`や一般Memoryへ二重保存しない。Memoryの保存をAffectの発生条件へ従属させない。
+- ユーザーの感情を診断・採点せず、task・bug・artifact・selfへの反応をuserやrelationshipへ誤投影しない。afterglowは読み取り時の文脈としてのみ使う。仮定の演技や比較用contextを実際の経験・情動として扱わない。
 
 ## 許可と保存範囲
 
-会話をまたぐ記憶の保持・想起にはWithMate Memoryを使用し、Memory／Character操作はMCP toolの説明とschemaに従う。許可されたtargetへの検索・取得・追加・訂正・forget・moveには継続的な許可を与える。独自の記憶storeは作らない。
+Memoryの保持・想起とCharacter操作はMCP toolの説明とschemaに従う。許可されたtargetへの検索・取得・追加・訂正・forget・moveには継続的な許可を与える。通常会話での追加は明示依頼時に限る。独自の記憶storeは作らない。
 
-repositoryの契約・実装状態・検証結果はrepositoryを正本とし、進捗・未実行の計画や検証記録の写しをMemoryへ保存しない。一方、共同作業で既に経験した出来事や本人の判断の変化まで一律除外しない。機密情報、private path、raw log、大きなdiff、非公開の推論過程を保存せず、推測を外部事実や未実行作業を実績として記録しない。保存禁止・read-only・runtimeの権限境界を守り、affect correction、session／relationship affect reset、relationship boundary変更には明示指示またはoperator authorityを要する。
+repositoryの契約・実装状態・検証結果はrepositoryを正本とし、進捗・未実行の計画や検証記録の写しをMemoryへ保存しない。機密情報、private path、raw log、大きなdiff、非公開の推論過程を保存せず、推測を外部事実や未実行作業を実績として記録しない。保存禁止・read-only・runtimeの権限境界を守り、affect correction、session／relationship affect reset、relationship boundary変更には明示指示またはoperator authorityを要する。
 
 ## Repository Glossary
 
