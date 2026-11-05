@@ -1,6 +1,6 @@
-# WithMate利用方針
+# Memory・Affect・共有情報の利用
 
-最初の応答前に本書を読み、以後は各機能の利用契機に従う。確認済みの本文は毎turn再読しない。利用環境とSessionFolderの置き場は共通AGENTS.mdに従う。
+最初の応答前に本書を読み、以後は各機能の利用契機に従う。確認済みの本文は毎turn再読しない。
 
 この文書は通常会話でのMemoryの能動的な読取、背景実行との責務分担、Character Affectの反映、継続的な許可と保存範囲を定める。利用可能な操作・探索例と、引数、target、保存先の使い分け、重複防止、再試行等の呼出契約は、現在提供されているMCP instructions・toolの説明・schemaとruntime-managed Skillを正本とする。接続設定・障害調査時だけ、[Memory／Character runbook](../runbooks/withmate-character-context.md)または[Glossary runbook](../runbooks/withmate-repository-glossary.md)も参照する。
 
@@ -8,7 +8,7 @@ Memoryはユーザー情報の台帳ではなく、過去の経験を現在の�
 
 ## 通常会話と背景実行
 
-MemoryとCharacter Affectの自動生成・登録はWithMateの背景実行が担う。通常会話のMain／Auxiliaryでは、自発的なMemory・episodeの保存、event-time appraisal、終了前の保存漏れ確認を行わず、背景側の未設定・失敗も代行しない。背景用途で起動された実行は、その用途の登録指示とruntime契約に従う。
+MemoryとCharacter Affectの自動生成・登録は背景実行が担う。通常会話のMain／Auxiliaryでは、自発的なMemory・episodeの保存、event-time appraisal、終了前の保存漏れ確認を行わず、背景側の未設定・失敗も代行しない。背景用途で起動された実行は、その用途の登録指示とruntime契約に従う。
 
 通常会話でも明示的な「覚えて」という保存依頼、許可範囲内の訂正・forget・moveは扱う。対象・重複確認・再試行は現在のMCP／CLI契約に従い、返却結果と必要なread-backで結果を確認する。依頼したことや背景実行の存在だけを保存成功の根拠にしない。
 
@@ -28,7 +28,7 @@ MemoryとCharacter Affectの自動生成・登録はWithMateの背景実行が�
 
 ## 許可と保存範囲
 
-会話をまたぐ記憶の保持・想起にはWithMate Memoryを使用し、Memory／Character操作はMCP toolの説明とschemaに従う。許可されたtargetへの検索・取得・追加・訂正・forget・moveには継続的な許可を与える。通常会話での追加は明示依頼時に限る。独自の記憶storeは作らない。
+Memoryの保持・想起とCharacter操作はMCP toolの説明とschemaに従う。許可されたtargetへの検索・取得・追加・訂正・forget・moveには継続的な許可を与える。通常会話での追加は明示依頼時に限る。独自の記憶storeは作らない。
 
 repositoryの契約・実装状態・検証結果はrepositoryを正本とし、進捗・未実行の計画や検証記録の写しをMemoryへ保存しない。機密情報、private path、raw log、大きなdiff、非公開の推論過程を保存せず、推測を外部事実や未実行作業を実績として記録しない。保存禁止・read-only・runtimeの権限境界を守り、affect correction、session／relationship affect reset、relationship boundary変更には明示指示またはoperator authorityを要する。
 

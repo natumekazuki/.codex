@@ -2,7 +2,7 @@
 
 委譲前に読む。汎用`general_sol`、`general_luna`、`general_terra`、`general_astra`には、対象、必要な結果、権限を依頼ごとに渡す。調査だけの依頼では編集しない。履歴継承に頼らず、review依頼には主要動作、後続の依存、[開発・review・統合](../guides/development.md)の統合基準と、非ブロッカーを全件修正待ちにしないことを含める。必要な参照先は参照元文書から解決した実pathで渡し、全規約を無条件に複製しない。
 
-委譲時は現在のSessionFolderと、作業に必要なWithMateの共有情報・参照先を渡す。子がtool制限等でMemory・Session Graph・Glossaryを直接利用できない場合は、親が許可範囲内で必要な取得・記録を担い、子へ必要な結果を渡す。WithMateを利用する前提は、子のtool権限やSession bindingを追加・転用する許可ではない。
+委譲時は現在のSessionFolderと、作業に必要な共有情報・参照先を渡す。子がtool制限等でMemory・Session Graph・Glossaryを直接利用できない場合は、親が許可範囲内で必要な取得・記録を担い、子へ必要な結果を渡す。子のtool権限とSession bindingの制約を守る。
 
 共有する設計判断に関わる依頼では、必要な要求・前提、採用済みの判断と適用状況、未合意事項、[設計判断・文書化](../guides/design-decisions.md)の参照先も渡す。同じ前提の判断を再利用し、現行実装や草案を採用根拠に置き換えない。不足の調査・推奨案・草案作成までを依頼できるが、親からの委譲を未合意方針の採用や操作権限の拡大と解釈しない。
 

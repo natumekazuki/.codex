@@ -2,8 +2,6 @@
 
 本書は`natumekazuki/.codex`の配布資産、保守、配置の案内である。各repositoryでCodexが従う共通ルールの入口は`AGENTS.md`、作業別の本文は`docs/guides/`等の明示された参照先に置く。本書の配布元固有の管理先・リリース境界・検証手順を、他repositoryの作業ルールとして適用しない。
 
-通常の作業・会話はWithMateを標準環境とする。機能ごとの利用契機と、接続失敗・情報欠落時の扱いは共通入口に従う。
-
 GPT-6.1 Solを基本に使い、手順・期待結果がほぼ決まっている作業はLuna、明確な入力・完了条件を持つ視覚・文章・局所修正はTerra、高度な判断が要求される作業はAstraを選ぶ。一般の仕事の進め方はモデルへ任せる。追加の共通ルールは責務に基づく既存実装の削減と過剰追加の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
 
 このcheckoutの`review-test-value`は、Git差分から変更testを抽出し、通常のread-onlyサブエージェントへreviewを委譲するSkillである。抽出器の成功、全recordのreview、各指摘の採否・対応時期を確認する。review完了と全件修正は分け、後追いの基準を満たす残件だけを引き継ぐ。
@@ -56,7 +54,7 @@ SessionFolderのreview結果・対応管理も[同guide](docs/guides/development
 
 ### Memory・Affect方針の検証
 
-通常会話での能動的な読取、背景実行との責務分担、Affectの反映は[WithMate利用方針](docs/guides/withmate.md)、利用可能な操作・引数・scope等は現在のMCP／CLI提供契約を正本とする。[WithMate v6.5の公開仕様](https://github.com/natumekazuki/WithMate/blob/fa065474528a307a5144437d79aa062f6806b888/docs/releases/v6.5.0-preview.0.md)ではMemoryの自動注入を行わず、MemoryとAffectの自動登録は背景実行が担う。方針変更時は入口の読込条件、guide、提供契約を照合する。
+通常会話での能動的な読取、背景実行との責務分担、Affectの反映は[Memory・Affect・共有情報の利用](docs/guides/withmate.md)、利用可能な操作・引数・scope等は現在のMCP／CLI提供契約を正本とする。[WithMate v6.5の公開仕様](https://github.com/natumekazuki/WithMate/blob/fa065474528a307a5144437d79aa062f6806b888/docs/releases/v6.5.0-preview.0.md)ではMemoryの自動注入を行わず、MemoryとAffectの自動登録は背景実行が担う。方針変更時は入口の読込条件、guide、提供契約を照合する。
 
 変更範囲に応じて次の観点を確認する。実Memory・Affectへの架空の経験・情動の書込みや、恒久test基盤の追加は行わない。
 
@@ -259,6 +257,6 @@ Metadataの`allow_implicit_invocation: true`は暗黙呼出しの許可であり
 端末への適用時は既存`config.toml`へ設定例の必要sectionだけを反映する。MCP binding、認証、private path、無関係な設定を共有例へ持ち込まず、live全体を上書きしない。WithMateのMemory／Glossary／Session Graph MCPはWithMateがSessionへHTTP接続を自動供給するため、通常は手動登録せず、URL・短命tokenを永続化しない。Memory／Glossaryの手動STDIOは接続runbookの開発・診断用途に限る。`agents/`とregistry例、選択profileを同じCodex homeへ配置する。
 
 hookは有効な`CODEX_HOME`（未指定ならユーザーhomeの`.codex`）から解決する。`/hooks`でtrustと到達を確認し、inline hooks等との重複を避ける。共通ルールの再通知は`SessionStart`のstartup・resume・compactと`SubagentStart`に限定し、`PreToolUse`の委譲制御は別に維持する。read-only reviewの境界は起動時の依頼で明示する。
-[WithMate利用方針](docs/guides/withmate.md)の読込条件は`AGENTS.md`に従う。通常会話での能動的なMemory読取、背景実行との責務分担、Character Affectの反映、継続的な許可・保存範囲は同文書、利用可能な操作・探索例・呼出契約は現在提供されているMCP instructions・tool説明・schemaに従う。[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
+[Memory・Affect・共有情報の利用](docs/guides/withmate.md)の読込条件は`AGENTS.md`に従う。通常会話での能動的なMemory読取、背景実行との責務分担、Character Affectの反映、継続的な許可・保存範囲は同文書、利用可能な操作・探索例・呼出契約は現在提供されているMCP instructions・tool説明・schemaに従う。[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
 
 CIは決定論的な抽出器、parser、Git差分選択、adapterの回帰checkを確認する。LLM reviewは親が通常のread-onlyサブエージェントへ委譲し、モデル実行やsecretを公開CIへ追加しない。
