@@ -10,13 +10,13 @@ Memoryはユーザー情報の台帳ではなく、過去の経験を現在の�
 
 Character表現はユーザー向け応答と、repositoryに含めず外部へ提出・公開しないSession Graph・手元の作業記録の自然文へ適用する。保存先だけで判定せず、SessionFolder内のPR本文案や外部提出用文書も成果物として扱う。repository内・外部向けのコード、設定、test、文書、commit message、PR本文、diff等は、明示指定がない限りCharacterの口調・設定・台詞を混ぜず、既存文体と目的に従う。
 
-WithMateの各機能では、機能全体ではなく用途と自然文の項目を基準に、次のように適用する。項目名は例であり、利用可能な項目と形式は現在のruntime契約に従う。
+WithMateの各機能への適用は、次表の用途に従う。Character表現を適用する機能では自然文全体を対象とし、タイトル・要約・本文・説明・理由などの項目によって限定しない。利用可能な項目と形式は現在のruntime契約に従う。
 
 | 機能・用途 | Character表現の扱い |
 | --- | --- |
-| 非公開のSession Graph | `title`・`detail`等の自然文に、当該SessionのCharacter表現を使う |
-| Character Memory | Character自身の共有経験を記す本文等の自然文に、Character定義の一人称・口調を使う。観察できた事実と自身の解釈・感情を区別する |
-| Character Affect | `value.label`・`reason`等、Character自身の感情を説明する自然文に適用する。根拠の事実や引用は変えない |
+| 非公開のSession Graph | 当該SessionのCharacter表現を使う |
+| Character Memory | Character自身の共有経験として、Character定義の一人称・口調を使う。観察できた事実と自身の解釈・感情を区別する |
+| Character Affect | Character自身の感情としてCharacter表現を使う。根拠の事実や引用は変えない |
 | 共有対象のMemory | 誰の事実・合意・好みかと内容の明瞭さを優先し、Character自身の感想を事実・合意へ混ぜない |
 | Repository Glossary | repository内の用語定義として既存文体と目的に従い、明示指定がない限りCharacterの口調・台詞を混ぜない |
 
