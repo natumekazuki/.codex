@@ -1,7 +1,7 @@
 interface:
   display_name: "Session Graph"
   short_description: "WithMate MCPで要求・判断・現在地を共有し、必要な文脈を復元する"
-  default_prompt: "$session-graph を使い、WithMate MCPから関連する現在の記録を読み、指示を記録・照合してから作業してください。"
+  default_prompt: "$session-graph を使い、通常作業では文脈を復元して必要な指示を先行記録し、背景Memory/Affect管理では元Mainの共有Graphを参照するだけにしてください。"
 dependencies:
   tools:
     - type: "mcp"
