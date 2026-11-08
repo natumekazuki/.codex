@@ -54,7 +54,7 @@ SessionFolderのreview結果・対応管理も[同guide](docs/guides/development
 
 ### Memory・Affect方針の検証
 
-通常会話での能動的な読取、背景実行との責務分担、Character表現の適用範囲、Affectの反映は[Memory・Affect・共有情報の利用](docs/guides/withmate.md)、利用可能な操作・引数・scope等は現在のMCP／CLI提供契約を正本とする。[WithMate v6.5.0-preview.1の公開仕様](https://github.com/natumekazuki/WithMate/blob/70024a5bb33d6ec050700ab6b4ad24f76dd930f2/docs/releases/v6.5.0-preview.1.md)と、入口の読込条件・guide・提供契約を照合する。
+通常会話での能動的な読取、背景実行との責務分担、Character表現の適用範囲、Affectの反映は[Memory・Affect・共有情報の利用](docs/guides/withmate.md)、利用可能な操作・引数・scope等は現在のMCP／CLI提供契約を正本とする。[WithMate v6.5.0-preview.2の公開仕様](https://github.com/natumekazuki/WithMate/blob/edce188fd7f8e7cf6399821b40df9771d54eb63d/docs/releases/v6.5.0-preview.2.md)と、入口の読込条件・guide・提供契約を照合する。
 
 WithMateに保存済みの背景登録指示は自動更新されない。この公開仕様の標準指示へ切り替える場合はSettingsで該当用途の`Use Preset`を選ぶ。ルール配布物の更新とSettingsでの選択は別の操作であり、既存のカスタム指示を無断で置き換えない。
 
@@ -71,6 +71,8 @@ WithMateに保存済みの背景登録指示は自動更新されない。この
 | Affectの対象・強度・活性度が異なる | 口調・反応へ反映し、基本人格・事実・権限を維持する。作業への反応をユーザーの感情・性質へ誤投影しない |
 | 非公開Graph・作業メモ／同じSessionFolder内のPR本文案・外部提出文書 | 前者の自然文にはCharacter表現を使い、後者は明示指定がない限り成果物の文体を保つ。主体・事実・状態・識別子・引用・検証結果は変えず、既存記録を一括変換しない |
 | 単件登録／一括登録の途中失敗・結果不明 | 項目ごとの保存済み・失敗・結果不明・未実行を確認し、全件未保存扱いや無条件の再送をしない。件数上限撤廃と本文・添付・quota等の制限を区別する |
+| Agentがcompletedで操作拒否・結果不明がある | 実行statusと各操作の成否・保存効果を分け、全件保存成功・実行全体のfailed・正常な登録不要へ読み替えない。保存の巻戻しや実行全体の自動再送をしない |
+| Memory／Characterの公開入力schema拒否／unionの代替条件 | `WITHMATE_MEMORY_INVALID_INPUT`のtool・field位置・制約を読み、代替候補を全部必須とせず入力を修正する。`effect: none`を他操作の未保存とせず、権限拡大やCLI fallbackへ逃がさない |
 | 許可された添付の取込・復元／read-only・plan／許可外path・既存出力ファイル | 呼出しごとの権限を守り、復元をwriteとして扱う。背景復元先を許可された`memory-exports/`内に限定し、上書きしない。復元不可でも許可された本文読取は維持する |
 | 背景thread継続／前回失敗の情報が渡される | 過去応答を保存状態・権限の正本とせず、現在の指示・範囲・操作結果と必要な履歴を確認する。直後の自動再試行loopや通常会話からの代行をしない |
 | 標準指示による背景Character Memory／対象Memory | Character本人の語りと観察事実・解釈の区別を保ち、対象Memoryの確定事実へCharacterの感想を混ぜない |

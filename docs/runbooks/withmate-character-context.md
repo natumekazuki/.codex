@@ -39,7 +39,13 @@ Codexを手動STDIO clientにする場合は、診断用server設定の`env_vars
 
 ## 背景登録と添付の診断
 
-背景登録の失敗はWithMateの`userData/logs/background-failures.jsonl`で、失敗段階と操作ごとの成否・保存効果を確認する。Agentの正常終了だけで保存成功と判断せず、一括登録の途中保存と結果不明を区別する。Memory本文・会話本文・prompt・tool引数や応答本文・認証情報を追加dumpしない。
+背景処理の実行結果と操作診断はWithMateの`userData/logs/background-failures.jsonl`で、Agentの終了状態と個々のtool操作の成否・保存効果を分けて読む。`completed`は全件保存成功の証明ではなく、操作拒否の併存だけで実行全体を`failed`へ読み替えない。全操作拒否も正常な登録不要とは扱わない。
+
+このログには正常終了した実行の操作拒否・失敗・結果不明も記録される。ログの存在だけから実行失敗を推定せず、先行する保存を巻き戻したり、実行全体を無条件に再送したりしない。
+
+MCP／CLIが`WITHMATE_MEMORY_INVALID_INPUT`を返した場合は、`error.details.tool`と`error.details.issues`のfield位置・制約・代替条件を読んで入力を修正し、呼び直す。unionの候補内の条件はすべて必要だが、候補間は代替関係であり、全候補を同時に満たす必要はない。公開schemaでの拒否は当該呼出しが保存前に拒否されたことを示し、`effect: none`を他の操作の保存まで未実施という意味にしない。
+
+この入力拒否を認可・通信・保存の障害やCLI fallbackの許可へ読み替えず、変更なしの要求を繰り返さない。Memory本文・会話本文・prompt・tool引数や応答本文・入力値全体・secret・認証情報を追加dumpしない。
 
 背景thread・前回失敗・待機状態はアプリ再起動をまたいで復元されないが、保存済みMemory・Affectは保持される。threadの継続や失敗情報の有無から保存状態を推測しない。
 
