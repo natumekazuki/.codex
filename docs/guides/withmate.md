@@ -6,11 +6,27 @@
 
 Memoryはユーザー情報の台帳ではなく、過去の経験を現在の理解・判断・表現へつなぐ記憶として扱う。事実の正確性、現在の明示指示、操作権限、機密保護、Characterの基本人格を上書きしない。
 
+## Character表現の適用範囲
+
+Character表現はユーザー向け応答と、repositoryに含めず外部へ提出・公開しないSession Graph・手元の作業記録の自然文へ適用する。保存先だけで判定せず、SessionFolder内のPR本文案や外部提出用文書も成果物として扱う。repository内・外部向けのコード、設定、test、文書、commit message、PR本文、diff等は、明示指定がない限りCharacterの口調・設定・台詞を混ぜず、既存文体と目的に従う。
+
+話し方を変えても、誰の要求・判断・作業・検証か、事実・条件・状態、ID・状態値・コマンド出力・正確な引用、技術判断・操作権限・検証結果・未確認事項の扱いは変えない。既存記録の一括変換は行わない。
+
 ## 通常会話と背景実行
 
 MemoryとCharacter Affectの自動生成・登録は背景実行が担う。通常会話のMain／Auxiliaryでは、自発的なMemory・episodeの保存、event-time appraisal、終了前の保存漏れ確認を行わず、背景側の未設定・失敗も代行しない。背景用途で起動された実行は、その用途の登録指示とruntime契約に従う。
 
-通常会話でも明示的な「覚えて」という保存依頼、許可範囲内の訂正・forget・moveは扱う。対象・重複確認・再試行は現在のMCP／CLI契約に従い、返却結果と必要なread-backで結果を確認する。依頼したことや背景実行の存在だけを保存成功の根拠にしない。
+背景実行は同じ元会話・用途のProvider threadを継続利用する。過去の応答を現在の保存状態・権限の正本とせず、呼出しごとの登録指示・実行範囲・操作結果を優先する。前回失敗が渡された場合は必要な履歴と途中までの保存結果を確認し、直後の自動再試行loopを作らない。
+
+背景登録は当該用途の登録指示に従う。Character Memoryの標準指示では、本文をCharacter定義の一人称・口調で記録し、観察できた事実とCharacter自身の解釈・感情を区別する。対象Memoryの事実・合意へCharacterの感想を混ぜない。標準登録指示の本文はWithMateを正本とし、ここへ複製しない。
+
+通常会話でも明示的な「覚えて」という保存依頼、許可範囲内の訂正・forget・moveは扱う。対象・重複確認・照合・再試行は現在のMCP／CLI契約に従う。
+
+## Memory登録と保存結果
+
+`memory.append`の`entries`、`character_memory.append_episode`の`episodes`で独立した複数記録を一括登録でき、単件入力も利用できる。一括化を必須にせず、Memory登録件数・Affect候補数に独自の固定上限や件数目標を設けない。本文長・添付件数・quota・Providerや通信の制限は現在のruntime契約に従う。
+
+保存は操作の応答と必要なread-backで確認する。一括登録では項目ごとの保存済み・失敗・結果不明・未実行を区別し、途中失敗を全件未保存と解釈して無条件に再送しない。Agentの正常終了、保存依頼や背景実行の存在だけを保存成功の根拠にしない。
 
 ## Memoryの能動的な読取
 
@@ -29,6 +45,10 @@ MemoryとCharacter Affectの自動生成・登録は背景実行が担う。通�
 ## 許可と保存範囲
 
 Memoryの保持・想起とCharacter操作はMCP toolの説明とschemaに従う。許可されたtargetへの検索・取得・追加・訂正・forget・moveには継続的な許可を与える。通常会話での追加は明示依頼時に限る。独自の記憶storeは作らない。
+
+背景の対象Memory登録では、当該呼出しで許可された取込元のファイルだけを必要時に添付する。Character MemoryのepisodeとAffect候補には添付を追加しない。背景のCharacter Memory・対象Memory・Affect登録では、許可された既存Memoryの添付を、許可されたSessionFolder内の`memory-exports/`へ必要時に復元できる。
+
+添付の復元はローカルへのwriteであり、Memoryのread許可だけでは実行しない。呼出しごとの許可範囲とProvider modeを守り、read-onlyや対応Providerのplanでは復元せず、既存ファイルを上書きしない。復元できないことを、許可されたMemory本文・metadataの読取まで禁止する理由にしない。
 
 repositoryの契約・実装状態・検証結果はrepositoryを正本とし、進捗・未実行の計画や検証記録の写しをMemoryへ保存しない。機密情報、private path、raw log、大きなdiff、非公開の推論過程を保存せず、推測を外部事実や未実行作業を実績として記録しない。保存禁止・read-only・runtimeの権限境界を守り、affect correction、session／relationship affect reset、relationship boundary変更には明示指示またはoperator authorityを要する。
 

@@ -36,3 +36,11 @@ Codexを手動STDIO clientにする場合は、診断用server設定の`env_vars
 - CLI fallbackの可否と再試行手順は、MCP toolの説明と返されたerrorに従う。MCP未設定・起動不能・初期化失敗をCLIで迂回せず、接続設定を復旧する。独自databaseやfallback fileを作らない。
 
 呼出しの成否や拒否理由は`withmate-memory character-metrics`で調べる。Memory本文、会話本文、affect evidence、機密情報を調査ログやmetricsへ保存しない。通信失敗後に保存済みか不明な操作は成功扱いせず、toolが定める確認手順に従う。
+
+## 背景登録と添付の診断
+
+背景登録の失敗はWithMateの`userData/logs/background-failures.jsonl`で、失敗段階と操作ごとの成否・保存効果を確認する。Agentの正常終了だけで保存成功と判断せず、一括登録の途中保存と結果不明を区別する。Memory本文・会話本文・prompt・tool引数や応答本文・認証情報を追加dumpしない。
+
+背景thread・前回失敗・待機状態はアプリ再起動をまたいで復元されないが、保存済みMemory・Affectは保持される。threadの継続や失敗情報の有無から保存状態を推測しない。
+
+添付の取込元・復元先とローカルwriteの可否は当該呼出しの許可範囲で確認する。復元の拒否をMCP全体の未接続と同一視したり、権限を緩めて迂回したりしない。適用境界は[WithMate利用guide](../guides/withmate.md)に従う。
