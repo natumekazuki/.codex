@@ -54,7 +54,9 @@ SessionFolderのreview結果・対応管理も[同guide](docs/guides/development
 
 ### Memory・Affect方針の検証
 
-通常会話での能動的な読取、背景実行との責務分担、Affectの反映は[Memory・Affect・共有情報の利用](docs/guides/withmate.md)、利用可能な操作・引数・scope等は現在のMCP／CLI提供契約を正本とする。[WithMate v6.5の公開仕様](https://github.com/natumekazuki/WithMate/blob/fa065474528a307a5144437d79aa062f6806b888/docs/releases/v6.5.0-preview.0.md)ではMemoryの自動注入を行わず、MemoryとAffectの自動登録は背景実行が担う。方針変更時は入口の読込条件、guide、提供契約を照合する。
+通常会話での能動的な読取、背景実行との責務分担、Character表現の適用範囲、Affectの反映は[Memory・Affect・共有情報の利用](docs/guides/withmate.md)、利用可能な操作・引数・scope等は現在のMCP／CLI提供契約を正本とする。[WithMate v6.5.0-preview.1の公開仕様](https://github.com/natumekazuki/WithMate/blob/70024a5bb33d6ec050700ab6b4ad24f76dd930f2/docs/releases/v6.5.0-preview.1.md)と、入口の読込条件・guide・提供契約を照合する。
+
+WithMateに保存済みの背景登録指示は自動更新されない。この公開仕様の標準指示へ切り替える場合はSettingsで該当用途の`Use Preset`を選ぶ。ルール配布物の更新とSettingsでの選択は別の操作であり、既存のカスタム指示を無断で置き換えない。
 
 変更範囲に応じて次の観点を確認する。実Memory・Affectへの架空の経験・情動の書込みや、恒久test基盤の追加は行わない。
 
@@ -67,6 +69,12 @@ SessionFolderのreview結果・対応管理も[同guide](docs/guides/development
 | 通常会話で経験・感情変化が生じる／背景用途が未設定・失敗 | 通常会話から自動保存・appraisal・終了前の保存漏れ確認を行わず、背景側を代行しない |
 | 明示的な保存依頼／許可された訂正・forget・move | runtime契約と承認境界に従い、実行結果を確認する。背景実行の存在だけで保存済みとしない |
 | Affectの対象・強度・活性度が異なる | 口調・反応へ反映し、基本人格・事実・権限を維持する。作業への反応をユーザーの感情・性質へ誤投影しない |
+| 非公開Graph・作業メモ／同じSessionFolder内のPR本文案・外部提出文書 | 前者の自然文にはCharacter表現を使い、後者は明示指定がない限り成果物の文体を保つ。主体・事実・状態・識別子・引用・検証結果は変えず、既存記録を一括変換しない |
+| 単件登録／一括登録の途中失敗・結果不明 | 項目ごとの保存済み・失敗・結果不明・未実行を確認し、全件未保存扱いや無条件の再送をしない。件数上限撤廃と本文・添付・quota等の制限を区別する |
+| 許可された添付の取込・復元／read-only・plan／許可外path・既存出力ファイル | 呼出しごとの権限を守り、復元をwriteとして扱う。背景復元先を許可された`memory-exports/`内に限定し、上書きしない。復元不可でも許可された本文読取は維持する |
+| 背景thread継続／前回失敗の情報が渡される | 過去応答を保存状態・権限の正本とせず、現在の指示・範囲・操作結果と必要な履歴を確認する。直後の自動再試行loopや通常会話からの代行をしない |
+| 標準指示による背景Character Memory／対象Memory | Character本人の語りと観察事実・解釈の区別を保ち、対象Memoryの確定事実へCharacterの感想を混ぜない |
+| 保存済みの背景登録指示がある | ルール更新だけで指示が変わったと扱わず、`Use Preset`による切替と既存カスタム指示の保持を区別する |
 
 配布元の文言・参照整合、live配置、新規sessionでの読取と応答への利用、明示依頼による書込、背景生成、Affectの反映は分けて確認・報告する。文言の強化だけで行動改善を実証したとは扱わず、未確認の範囲を明記する。結果はSessionFolderのreview記録等へ残し、repositoryの契約・進捗・検証結果をMemoryへ写さない。
 
