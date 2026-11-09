@@ -19,7 +19,9 @@ description: WithMateのSession Graph MCPを使い、開発・調査・設計・
 2. 対象話題の`context`で、現行の要求・制約・採用判断・未解決・未完了を読む。話題が特定済みなら取得範囲を絞る。
 3. 判断に必要なRecordの本文と関係を`get`で確認する。具体的な文言を探す時は`search`を使う。参照先の内容が判断に必要なら、その正本も読む。
 
-`recent`は更新順であり、現在も有効な条件を網羅するものではない。`context`の絞り込みや表示外の依存先を考慮する。`hasMore`、`incomplete`、`relationsTruncated`を確認し、必要な続きは同じ`expectedRevision`で取得する。取得中にrevisionが変わったら、関係する話題・IDを読み直して状態を揃える。
+`recent`は更新順であり、現在も有効な条件を網羅するものではない。`context`の絞り込みや表示外の依存先を考慮する。`hasMore`と`incomplete`でrecordの取得範囲を確認し、続きは同じ`expectedRevision`で読む。取得中にrevisionが変わったら、関係する話題・IDを読み直して状態を揃える。
+
+関係の取得はrecordのpageとは独立している。`relationsHasMore`がtrueなら、同じrecord ID集合・絞込条件・recordのoffset/limit・`expectedRevision`を保ち、`relationOffset`を返された`relations.length`だけ進める。`relationsTruncated`はその応答で後続関係を省いたかを表し、累積取得件数から完全性を判断しない。offset 0から末尾まで同じrevisionで取得した場合だけ、そのrecord ID範囲に関係がないことを確認できる。部分取得・失敗を関係なしや削除へ読み替えず、`externalEndpoints`の要約から表示外recordの本文・担当・状態を補完しない。必要な本文は`get`で読む。
 
 継続中は変化に関係する記録を読み、毎turn・tool callごとの全Graph取得は不要とする。復元だけで差異がなければ更新しない。
 
@@ -29,9 +31,11 @@ Topicは独立して追う話題、Recordは要求・制約・判断・活動・
 
 - `title`に要点、`detail`に条件・理由・根拠、`scope`に適用範囲を置く。否定・例外・数値・順序・「だけ」等の限定を保ち、受けた指示と保存内容を照合する。
 - ユーザー要求、AIの提案、採用済み判断、実施した作業、確認結果を分ける。判断の採用、作業の完了、検証の成否、論点の解消はそれぞれの状態で表す。
-- `actor`は内容上の主体とする。確認できたSession ID、またはユーザー等を表すlabelを使う。記録者の`recordedBy`とCharacter snapshotはWithMateが付与する。本文は作業上の事実・判断として記し、担当交代で過去の主体を付け替えない。
+- `actor`は同じ親Graphに属する担当Main／Auxiliaryで、内容の由来とは分ける。自分が担当する新規recordでは省略し、信頼済みbindingから解決させる。自分のSession ID・名前・画像を再入力せず、他担当の指定・担当変更が必要な場合だけ確認済みの`actor.sessionId`を指定する。`actorRole`は任意の作業上の役割で、Character名やMain／Auxiliaryの区分とは別である。
+- 新規recordの`origin`は必須で、内容の由来を`agent`／`user`／`external`から指定する。ユーザー要求もユーザーを担当actorにせず、`origin`で表す。agent提案をユーザーが採用した場合は元のactor/originを保ち、`adoptionOrigin`へ採否判断の由来を記録する。これらの属性を操作権限の証明にはしない。
+- 初回記録者`recordedBy`と担当snapshotはWithMateが付与する。同じCharacterでも別Sessionの担当を同一視せず、他担当の通常更新やユーザー採用で帰属を付け替えない。
 - 検証には対象・revision・条件・結果を残し、必要なら`target`を使う。静的確認、実行、review、統合、公開を区別し、対象変更で根拠が成立しなくなった範囲は要再確認とする。
-- 関係は意味と向きを保つ。依存は「依存する側 → 必要な側」、検証は「観測 → 確認対象」、置換は「後継 → 置換前」とする。
+- recordと関係する要求・判断・活動・観測を確認し、意味のあるrelationを同じatomic applyへ明示する。主な向きは、`fulfills`が活動→要求、`constrains`が制約→対象、`supports`が根拠→判断・対象、`checks`が観測→確認対象、`depends_on`が依存する側→必要な側、`supersedes`が後継→置換前。同じ関係の更新はstable IDを再利用し、解除は`removeRelationIds`を使う。孤立recordを許容し、Topic・担当・時刻等から関係を推測したり、relationだけで状態を変更したりしない。
 - 根拠・成果物・引継ぎ先は`references`で示す。repositoryの契約・実装・Issue・正式な検証結果はそれぞれの正本を参照する。review結果と指摘別対応は共通AGENTS.mdから解決した開発guideに従い、Graphには結論・未解決の要約と結果ファイル・必要な指摘IDへの参照を置く。
 
 repositoryに含めず外部へ提出・公開しないGraphの自然文には、当該SessionのCharacter表現を使う。主体、事実・条件・状態、ID・状態値・コマンド出力・正確な引用は変えず、既存記録を一括変換しない。適用境界の詳細は[WithMate利用guide](../../docs/guides/withmate.md)に従う。
@@ -47,7 +51,9 @@ repositoryに含めず外部へ提出・公開しないGraphの自然文には�
 | 調査・実装・検証の区切り | 結果・確認対象・未解決を更新する。失敗で見立てや続行条件が変わった時も記録する |
 | 話題切替・終了・引継ぎ | 自分の現在地・完了範囲・残件と参照先を更新する |
 
-`apply`のRecord更新は指定IDの内容全体を置き換える。更新前に`get`で現在の内容を読み、保持する本文・状態・主体・参照を含めて変更を組み立てる。他者の進行中状態は保ち、自分の変更を読み取ったrevision付きの原子的batchへまとめる。
+`apply`では、指定recordの必須本文（id・topicId・kind・title・detail・scope・references）を毎回渡す。更新前に`get`で現在の内容を読み、変更しない必須本文も保って組み立てる。actor/originと任意属性は省略すると保持され、解除可能な任意属性だけ`null`で明示解除する。actor/originは解除しない。kind変更で不要になる状態は明示解除し、既存の`adoptionOrigin`を持つ採否を変更・解除するときは、その由来も明示的に置き換えるか解除する。他者の進行中状態を保ち、自分の変更を読み取ったrevision付きの原子的batchへまとめる。
+
+`references[].href`は、保存するすべての値を絶対file pathまたは完全なfile/http/https/mailto/tel URLとする。未変更の再保存でも同じ検証を受ける。相対pathの例外、baseの推測、同名fileの探索を加えず、正確なquery・fragment等を保つ。
 
 判断を置換・撤回する時は元の本文を保持し、`validity`で適用状態を示す。理由を持つ後継記録と関係を同じbatchで保存し、現行条件と区別する。
 
