@@ -9,5 +9,6 @@ This directory is synchronized by scripts/sync-natural-japanese.ps1.
 Codex adaptations: removes the unsupported argument-hint frontmatter entry,
 routes technical-document structure and Markdown formatting to japanese-tech-writing-review,
 provides a concise write/score router with local write and score workflow adjustments,
+applies purpose-based content selection to document types and writing guidance,
 and preserves explicit-only invocation through agents/openai.yaml.
 Local edits under this directory are replaced during synchronization.

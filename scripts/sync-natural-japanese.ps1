@@ -170,6 +170,8 @@ license: MIT
 
 技術文書でも、文章の自然さだけを直す依頼にはこのSkillを使う。論証、章構成、Markdown表記を扱う場合は `japanese-tech-writing-review` を使う。両方が必要なら担当を分け、同じ観点を二重にレビューしない。
 
+文書型・文体憲法・雛形の構成や掲載項目は、依頼された問いと用途から採否を決める。「必須」等の一律指定と競合する場合も、この採否方針を優先する。行動提案、記録精度の前置き、未確認事項のラベル、訂正履歴は、その文書の理解・判断・利用に必要な場合に含める。採用した主張の意味や利用条件を変える不足は、該当箇所で具体的に示す。これは掲載内容の選別であり、明示された要件・構成、事実の保持、選択したmodeの検査、権限・安全上の条件は維持する。
+
 ## workflowを選ぶ
 
 依頼を次のどちらかへ分け、選んだ参照だけを読む。
@@ -224,7 +226,7 @@ policy:
 ## 設計する
 
 1. 読者、目的、読み終えた後に起きてほしいことを特定する。不明点が結果を変える場合だけ確認する。
-2. 文書タイプが定まったら、対応する型を一つ読む。
+2. 文書タイプが定まったら、対応する型を一つ読み、[SKILL.md](../SKILL.md)の採否方針に従って用途に必要な項目を選ぶ。
    - 議事録: [doctypes/minutes.md](doctypes/minutes.md)
    - 調査・分析レポート: [doctypes/report.md](doctypes/report.md)
    - 社内ガイド・マニュアル: [doctypes/guide.md](doctypes/guide.md)
@@ -267,7 +269,7 @@ uv run <skill-root>/scripts/lint.py --reading-load <file>
 
 - 構造: 論旨、見出し、反復、濃淡、結びを確認する。
 - 読みやすさ: 語順、係り受け、主述の距離、否定、列挙、専門語の負荷を確認する。
-- doctype適合: 選んだ型の必須要素と用途への適合を確認する。
+- doctype適合: 用途に応じて採用した項目が必要な内容と明示要件を満たすかを確認する。型にあることだけを理由に項目を追加しない。
 
 すべての文書に三つのreviewerを固定しない。複数の独立した観点が必要なら、その独立性を保てる担当へ分ける。一人の独立reviewerが関連する複数観点をまとめてもよい。執筆者は所見を判断台帳へ統合し、直すか残すかを決める。明示されたreview観点は省略しない。
 
@@ -371,6 +373,7 @@ This directory is synchronized by scripts/sync-natural-japanese.ps1.
 Codex adaptations: removes the unsupported argument-hint frontmatter entry,
 routes technical-document structure and Markdown formatting to japanese-tech-writing-review,
 provides a concise write/score router with local write and score workflow adjustments,
+applies purpose-based content selection to document types and writing guidance,
 and preserves explicit-only invocation through agents/openai.yaml.
 Local edits under this directory are replaced during synchronization.
 "@
