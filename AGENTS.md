@@ -26,7 +26,7 @@
 | Python／TypeScript／C#のtestの追加・意味変更・削除・移設 | `~/.codex/docs/guides/test-changes.md`とruntimeのreview-test-value Skill |
 | UI開発環境の整備、UI設計・実装、変更後の確認・報告 | `~/.codex/docs/guides/ui.md`、runtimeのdesign-ui-information Skill、製品のUI規約 |
 | 委譲またはGit worktree作成の前 | `~/.codex/docs/architecture/subagent-workspace.md` |
-| WithMateのSessionからの依頼・相談・報告・再開、通常子Sessionとの連携 | `~/.codex/docs/guides/withmate-collaboration.md`。送信元・Role・実呼出元に応じて扱う |
+| WithMateのSessionからの依頼・相談・報告・再開、通常子の実行条件選定、Worktree配置 | `~/.codex/docs/guides/withmate-collaboration.md`。送信元・Role・実呼出元と保存方針に応じて扱う |
 | 会話開始時、最初の応答前 | `~/.codex/docs/guides/withmate.md` |
 | 過去の好み・判断・共有経験が関係し得る時。話題の切替・再開、新条件の判明を含む | 関連Memoryを判断・回答前に検索し本文を読む。必要な本文がcontextにあれば再利用する |
 | 開発・調査・設計・reviewの開始・再開・Compact後の復元、要求・制約・承認・判断・状態の変化 | runtimeのsession-graph Skill。現在の関連記録を読み、指示を記録・照合して依存作業へ進む。既存内容だけで答えられ、要求・判断等が変わらない説明・確認・雑談には起動しない |

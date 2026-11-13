@@ -6,7 +6,7 @@
 
 WithMateの子は別の参加者であり、[Session間の協同](../guides/withmate-collaboration.md)でRole・背景確認・Coordination・明示報告・Turn終了と再開を扱う。同じ担当範囲の追加依頼には継続可能な既存Sessionを使う。native子は別のWithMate参加者や独立したCharacter Memory／Affect所有者とはみなさず、製品nativeの通知・返却・待機契約を使う。
 
-どちらも既存の委譲許可、必須専門審査、操作権限とruntime制限に従う。以下のnative用model・tool制限をWithMate全Providerのallowlistへ広げず、WithMateのカタログをnativeの許可拡大にも使わない。選定時は[環境固有の方針](../runbooks/withmate-environment.md)も確認する。
+どちらも既存の委譲許可、必須専門審査、操作権限とruntime制限に従う。以下のnative用model・tool制限をWithMate全Providerのallowlistへ広げず、WithMateのカタログをnativeの許可拡大にも使わない。WithMate通常子の[実行条件の選定](../guides/withmate-collaboration.md#実行条件の選定)は協同guideに従う。
 
 ## nativeサブエージェント
 
@@ -39,16 +39,6 @@ test価値reviewの抽出、read-onlyサブエージェントへの委譲、revi
 
 worktreeやcommit固定は具体的な隔離・再現の必要に応じて使い、全reviewへ一律には要求しない。
 
-Worktree rootは環境ごとの値であり、固定の `C:/user/...` やユーザーhomeへ決め打ちしない。[環境固有ファイル](../runbooks/withmate-environment.md)の指定、今回の明示指定、対象repositoryの既存worktree・配置規約から、当該環境のrootと分類を確認する。今回の明示指定を優先し、異なる候補があって判断できない場合だけ確認する。現在のcwdや技術スタックからroot・分類を推測しない。
+WithMateでの配置先取得と結果の使い分けは、協同guideの[Worktreeの配置先](../guides/withmate-collaboration.md#worktreeの配置先)を正本とする。ここでは独自のroot・分類・layoutやpath組み立てを定義しない。
 
-新規配置は `<Worktree root>/<分類パス>/<リポジトリ名>/<ブランチ名>`。既存の表記と階層を保ち、分類なしの配置を使うrepositoryでは分類部分を省く。分類もbranch名も複数階層を取り得る。
-
-| 確認済みの条件 | 解決する配置 |
-| --- | --- |
-| rootが `R:/GitWorktree`、WithMateの分類が `Electron`、branchが `feat/issue-938` | `R:/GitWorktree/Electron/WithMate/feat/issue-938` |
-| 同じroot、分類が `.net/MAUI`、repositoryが `ExampleApp`、branchが `fix/example` | `R:/GitWorktree/.net/MAUI/ExampleApp/fix/example` |
-| 同じroot、分類なしの `.claude`、branchが `feat/example` | `R:/GitWorktree/.claude/feat/example` |
-
-親が別worktreeにいても配置基準は変えない。分岐元のbranch・commitは依頼に合わせて別に決め、子のWorkspaceには実際に準備した絶対pathを渡す。初めての配置でroot・分類が既存規約から分からない時に確認し、分類が既知なら繰り返し尋ねない。SessionFolder・Crew Folderを代替のworktree作成先にしない。
-
-新規配置の規則を、既存worktreeの移設・削除や過去資料の掃除の許可に広げない。既存branch・pathとの衝突、未コミット変更、submodule等の移動条件を確認し、他者のworktreeを再利用・上書きしない。
+親が、登録先の実体とbranch、分岐元のbranch・commit、作成先の占有、未コミット変更を確認し、必要なGit操作を行う。配置候補の取得を作成済み・利用可能の証拠とせず、準備した実体の絶対pathを子のWorkspaceへ渡す。既存worktreeの移設・削除や他者の作業領域の上書きは、この準備の許可に含めない。

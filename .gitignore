@@ -63,5 +63,5 @@ generated_images/*
 transcription-history.jsonl
 /..codex-global-state.json.bak.tmp-*
 
-# 環境固有のWithMate配置・利用経路・選定方針
+# 利用者が保持する非配布の端末固有資料
 /withmate.local.md

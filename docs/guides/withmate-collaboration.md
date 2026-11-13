@@ -22,11 +22,39 @@ Roleは社会的な上下関係ではない。Session間の依頼・相談・進
 
 [委譲の使い分け](../architecture/subagent-workspace.md)に従い、分業が不要なら自分で行う。親が担当者から直接成果を受け取るならWorker、一つの成果について配下への分担・修正依頼・受入・統合まで任せるなら個別統括を選ぶ。難しい単独調査という理由だけで個別統括にしない。作成可能なRoleはruntimeの自分の権限に従う。
 
-新しい子を作る前に[環境設定・Provider／Model／Depth選定](../runbooks/withmate-environment.md)を読む。子のWorkspaceを準備し、そのWorkspaceを指定した `session.get_catalog` の候補から実行設定を選ぶ。許可済みのapproval／sandbox条件を明示し、選定や作成を権限拡大の理由にしない。WithMateはworktreeの作成・統合を代行しない。
+子の作成前に、以下の方針取得・選定と、必要なWorkspaceの準備を行う。許可済みのapproval／sandbox条件を明示し、選定や作成を権限拡大の理由にしない。WithMateはworktreeの作成・統合を代行しない。
 
 依頼には、目的、担当範囲・編集所有、期待成果・完了条件、重要な制約、実行条件・権限、必要な参照先を含める。合意の根拠になる親とユーザーの発言・Turn、Crew Graphの決定を把握していれば参照も添える。子が親のProvider contextや既読資料を継承すると仮定しない。並行作業では他者の変更を巻き戻さないことと共有物の所有を伝える。
 
-同じ担当範囲の追加依頼・修正は、正確なidentityと継続可能な状態を確認した既存Sessionを再利用する。別の成果・担当として追う必要がある場合は分ける。Character名だけで相手を選び直したり、待ち時間・新Turnという理由だけで同じ仕事を二重に委譲したりしない。既存SessionのProvider・Model・Depthを新規作成用の選定で変更したと扱わない。
+同じ担当範囲の追加依頼・修正は、正確なidentityと継続可能な状態を確認した既存Sessionを再利用する。別の成果・担当として追う必要がある場合は分ける。Character名だけで相手を選び直したり、待ち時間・新Turnという理由だけで同じ仕事を二重に委譲したりしない。既存SessionのProviderは固定であり、次の依頼のModel・Depth等を選び直す場合は以下の方針を使う。
+
+## 実行条件の選定
+
+子の新規作成時と、既存子への次の依頼で実行条件を選び直す時に、`session.get_selection_policy` で端末の選定基準・実行設定の目安・契約経路を読む。`policy: null` は未設定であり、今回の明示指示と確認できた利用条件で決まる範囲を進め、結果を左右する不足だけ確認する。取得失敗を未設定に読み替えず、旧ローカルファイルや推測から方針を補完・登録しない。
+
+方針の `selectionCriteria`・`executionGuidelines` と `contractRoutes` の優先順・条件を、作業の性質と期待成果に照らして使う。定型処理、視覚・文章、広い調査・実装、難しい判断等に必要な能力と確認方法から選び、Role・作業の短さ・Model名だけで固定しない。同じ成果を満たす候補では消費枠や手戻りも考慮する。方針は判断材料であり、利用可能性や操作許可そのものではない。
+
+実際に準備した子のWorkspaceと宛先Providerを指定して `session.get_catalog` を読み、Model Availabilityを含む現在の候補・対応Depth・approval／sandboxの選択肢と照合する。既存子なら、そのSessionのProviderとWorkspaceを使う。候補一覧をルールへ転記せず、別Workspaceのcache、公式の発売情報、native roleの一覧を代用しない。
+
+- 契約枠とAPI従量、OpenCodeのnative配信経路を区別する。方針の `nativeProviderId`・native側の `modelId` がある場合、OpenCodeでは `<nativeProviderId>/<modelId>` をカタログの完全IDと照合する。WithMate Providerは `opencode` のままであり、variantをmodel IDへ付加しない。
+- Depthは依頼の不確実性・判断の重さ・完了条件から対応範囲内で選ぶ。対応Depthが空ならDepthなし。未指定の空文字列と、候補にある文字列 `none` を区別し、未対応の `medium` 等を補わない。同名DepthをModel間の能力・消費の等価値としない。
+- 利用枠が選択を左右する場合だけ `session.get_provider_quota` を読む。対象枠、取得状態、最終成功日時、値の新しさを確認する。未観測・古い成功値・エラー・未対応を、残量十分・無制限・無料へ読み替えない。OpenCode Goの観測を登録OpenAI API等の別経路へ流用せず、Model名のFree表記や候補への掲載を利用許可の根拠にしない。
+
+選定した実値は作成・送信時の現在の契約に従って渡す。既存子への `enqueue` で選ぶ実行条件は次のTurnにだけ適用され、`steer` は実行中の設定を保つ。未合意のProvider・課金経路へ黙って切り替えたり、認証・課金・Extra Usageを変更したりしない。nativeサブエージェントのrole・Model・tool制限は[委譲guide](../architecture/subagent-workspace.md#nativeサブエージェント)のままとする。
+
+## Worktreeの配置先
+
+Worktreeを用意する直前に、対象repositoryのWorkspaceと文字どおりのbranch名を指定して `session.resolve_worktree` を読む。別worktreeからでも同じrepositoryの登録とルールを使う。root・分類・リポジトリ名・branch名をAgent側で連結せず、カスタムlayoutや複数階層分類を含め、返された `destinationPath` を使う。
+
+| 結果 | 親が行う判断 |
+| --- | --- |
+| `existing` | 登録先の実体・対象branch・利用可能状態を確認して使う。同じbranchの既存登録が単発の作成先指定より優先される。別の場所へ作り直したり、移設したりしない |
+| `planned` | まだ候補であり、存在・空きの保証ではない。親が分岐元・branchやpathの占有・未コミット変更を確認し、許可範囲でGit worktreeを準備する |
+| `unconfigured` | `missing` が示す不足のうち、配置判断に必要なことを確認する。恒久登録を作業の前提にせず、今回だけの絶対配置先が明示された場合は単発指定で照会できる |
+
+今回だけの配置先は `destinationPath` として照会し、新規候補にだけ適用する。保存方針を変えず、既存登録を上書きしない。SessionFolder・Crew Folderを代替先にしない。Git操作、作成後の実体確認、子へ渡す絶対Workspaceは[委譲guide](../architecture/subagent-workspace.md#git-worktreeの配置)に従う。
+
+選定方針・Worktree配置の登録・更新・解除は、ユーザーが恒久設定の変更を指示した時に限る。通常の依頼、評価結果、「今回だけDepthを上げる」「このbranchだけ別の場所に作る」から設定を変更しない。旧ファイルの自動移行や、外部のProviderルールファイルの書換えも行わない。取得・設定の操作契約は[WithMateの選定方針と配置](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/docs/features/session-operating-policies.md)と現在のMCP／bound CLIのschemaを正本とする。
 
 ## 子が背景と判断範囲を確かめる
 

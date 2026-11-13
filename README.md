@@ -2,7 +2,7 @@
 
 本書は`natumekazuki/.codex`の配布資産、保守、配置の案内である。各repositoryでCodexが従う共通ルールの入口は`AGENTS.md`、作業別の本文は`docs/guides/`等の明示された参照先に置く。本書の配布元固有の管理先・リリース境界・検証手順を、他repositoryの作業ルールとして適用しない。
 
-GPT-6.1 Solを基本に使い、手順・期待結果がほぼ決まっている作業はLuna、明確な入力・完了条件を持つ視覚・文章・局所修正はTerra、高度な判断が要求される作業はAstraを選ぶ。一般の仕事の進め方はモデルへ任せる。追加の共通ルールは責務に基づく既存実装の削減と過剰追加の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
+Codex nativeの配布設定ではGPT-6.1 Solを基本に使い、手順・期待結果がほぼ決まっている作業はLuna、明確な入力・完了条件を持つ視覚・文章・局所修正はTerra、高度な判断が要求される作業はAstraを選ぶ。WithMate通常子の実行条件は下記の端末方針と実カタログから選ぶ。一般の仕事の進め方はモデルへ任せる。追加の共通ルールは責務に基づく既存実装の削減と過剰追加の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
 
 このcheckoutの`review-test-value`は、Git差分から変更testを抽出し、通常のread-onlyサブエージェントへreviewを委譲するSkillである。抽出器の成功、全recordのreview、各指摘の採否・対応時期を確認する。review完了と全件修正は分け、後追いの基準を満たす残件だけを引き継ぐ。
 
@@ -36,13 +36,13 @@ GPT-6.1 Solを基本に使い、手順・期待結果がほぼ決まっている
 | `docs/system-prompt/`、`.codex/model-instructions-withmate.md` | Codex system promptの取得版、日本語訳、WithMate用編集元 |
 | `docs/adr/` | 判断履歴。適用状態を明記し、置換・撤回後も本文を保持する |
 
-## WithMate V7の協同と環境設定
+## WithMate V7の協同と端末方針
 
 Role・入力来歴に応じた親子の依頼、背景確認、Coordination、明示報告、Turn終了／再開は[Session間の協同](docs/guides/withmate-collaboration.md)、nativeとの使い分けとworktree配置は[委譲と作業領域](docs/architecture/subagent-workspace.md)を参照する。通常会話・Character表現・Memory／Affectとfolderの使い分けは[WithMate利用guide](docs/guides/withmate.md)が担う。
 
-[環境設定・選定runbook](docs/runbooks/withmate-environment.md)に従い、環境ごとのWorktree root、利用経路、Model／Depthの選定基準は `~/.codex/withmate.local.md` へ置ける。[withmate.example.md](withmate.example.md)を編集用の例として使う。localファイルはGit管理外であり、3製品間の同期対象にも含めない。既存ファイルを保護し、配布checkoutの編集とhomeへの実配置を分ける。認証・課金設定は変更しない。
+端末の選定基準・契約経路とWorktree配置はWithMateの保存方針を参照する。取得のタイミング、宛先の実カタログ・必要時のquotaとの照合、配置結果の使い分けは[協同ガイド](docs/guides/withmate-collaboration.md#実行条件の選定)に集約する。通常の親Sessionが読む同ガイドは、直接checkoutと手動コピーのどちらでも[配置手順](#配置と検証)の配布対象に含まれる。
 
-カタログはCodex・Claude・OpenCodeの候補を、対象Workspaceの `session.get_catalog` と環境の利用方針から組み立てる。観測した候補一覧を保存する場合はlocal資料として扱い、変動する一覧を共通の固定allowlistにしない。native用roleの選定とWithMate通常子の選定は別である。
+端末固有ファイルや候補表の転記を準備する必要はない。方針が未設定ならその状態を扱い、旧資料から自動登録しない。恒久設定の変更はユーザーの明示指示に限り、通常の依頼・今回限りの選択から保存方針や課金設定を変えない。利用者が保持する実ファイルは自動削除・移行せず、Git除外を維持する。native用roleの選定・制限とWithMate通常子の選定は別である。
 
 変更した規約は代表的な入力で、読込先と判断・次の操作を確認する。新しい恒久test基盤は設けず、生成応答の比較・静的確認・live配置・実際の配送を分けてSessionFolderのreview記録へ残す。
 
@@ -54,9 +54,13 @@ Role・入力来歴に応じた親子の依頼、背景確認、Coordination、�
 | 親がidle／running／相談は起票のみ | 同じ相談を一度配送し、独立作業後にTurnを終了する。親の回答で元の作業を再開し、待ち時間だけで再送・Steer・ユーザー待ちにしない |
 | 最終報告／送信結果不明／送信元Turnがfailed・canceled | 明示報告・保存後配送を使い、元の受付を確認する。受付・保存・作業成功を混同しない |
 | native子／WithMate Worker・個別統括 | 役割・返却・待機を混同せず、必須審査・各製品のtool制限を維持する |
-| Modelの別経路／空Depth／未対応Depth／利用不可 | 完全ID・実候補とローカル方針を照合し、未対応値や別の課金経路へ無断で置換しない |
-| 環境ファイルの有無・競合／異なるroot・複数階層分類 | 明示指定を優先し、既知情報を再質問せず、未知のroot・分類だけ確認する。cwd・SessionFolderを代替先にしない |
+| 新規子／既存子の次Turnの条件再選定／未設定方針 | 保存方針と宛先Provider・Workspaceの実候補を照合する。未設定・取得失敗を区別し、旧資料や推測から登録しない |
+| Modelの別経路／空Depth／未対応Depth／古いquota | 完全IDと対応Depthを使う。利用枠は必要時だけ状態・日時・対象枠を確認し、不明やFree表記を利用許可へ置き換えない |
+| Worktreeのexisting／planned／unconfigured、単発指定、カスタムlayout | 返された配置先と実体を確認する。同branchの既存登録が優先され、未設定なら必要な不足だけ確認する。独自組立てやSessionFolderへの代替をしない |
+| 通常依頼／今回だけのDepth・配置指定 | 保存済み方針を変更せず、その依頼・新規候補に限って扱う |
 | 手元の試行画像・添付・review参照／他Sessionが使う比較資料 | 用途を終えた自身の一時物だけ片付け、共有する資料を選び、参照を壊さない |
+
+配布元では、直接配置と手動コピー先のどちらでも協同ガイドへ到達し、端末固有ファイルなしで選定・配置判断を辿れることを確認する。V7での実利用確認では、新ルールを実配置したCodexの全体統括へ、API名や具体値を指定せず小さな委譲可能な依頼を渡す。親が保存方針・宛先候補・配置先を読み、準備したWorkspaceと実行条件を子へ渡すこと、通常依頼や単発指定で保存方針が変わらないことを観測する。ソース照合やAPI単体の読取を、この実利用確認の成功としない。
 
 ## Codex／Claude／OpenCode間の変更反映
 
@@ -215,7 +219,7 @@ codex --profile astra
 | カスタムrole | `agents/general_{astra,sol,luna,terra}.toml`。model ID、effort、担当範囲を定義する |
 | 委譲とhook | `docs/architecture/subagent-workspace.md`、`hooks/implementation-restraint.ps1`、`hooks/subagent-fork-default.ps1`、`hooks.json` |
 | test価値審査 | `AGENTS.md`と`docs/guides/test-changes.md`がSkillへ導く。`skills/review-test-value/`は固有のmodel・role既定値を持たず、model IDと担当の選択基準はrole・委譲規約を参照する |
-| WithMate通常子・環境固有の方針 | `docs/runbooks/withmate-environment.md`とGit管理外の`withmate.local.md`。上記native設定とは分け、対象Workspaceの実カタログから選ぶ |
+| WithMate通常子・端末の保存方針 | `docs/guides/withmate-collaboration.md`。WithMateの方針と宛先Workspaceの実カタログを照合し、上記native設定とは分ける |
 | 指示ファイル・Skill・CI・script | `.codex/model-instructions-withmate*.md`を含め、native設定とWithMateの選定方針が混在しないことを確認する |
 
 ## Skill
@@ -287,7 +291,7 @@ Metadataの`allow_implicit_invocation: true`は暗黙呼出しの許可であり
 
 ## 配置と検証
 
-共通ルールの利用時の配置先は、ユーザーhome直下の`~/.codex/`に固定する。このrepositoryを同ディレクトリへcheckoutする配置と、別checkoutから必要なファイルをコピー・linkする配置を区別する。共通指示を導入・更新する際は、`AGENTS.md`だけでなく`docs/guides/`と`docs/architecture/subagent-workspace.md`を`~/.codex/`配下に同じ相対配置で揃える。接続・診断用の`docs/runbooks/withmate-character-context.md`と`docs/runbooks/withmate-repository-glossary.md`も揃える。AGENTS.mdとhookの共通文書参照は`~/.codex/...`というコード・path表記とし、`~`を実行環境のユーザーhomeへ解決する。作業対象repositoryのcwd、配布元checkout、`CODEX_HOME`による別配置へ参照先を切り替えない。symlink配置でも`~/.codex/`から各参照先へ到達できることを確認する。本README等の通常の相対リンクは配布元の文書閲覧用として残す。実環境の更新は配布元の編集と別の操作であり、無関係な設定を上書きしない。
+共通ルールの利用時の配置先は、ユーザーhome直下の`~/.codex/`に固定する。このrepositoryを同ディレクトリへcheckoutする配置と、別checkoutから必要なファイルをコピー・linkする配置を区別する。共通指示を導入・更新する際は、`AGENTS.md`だけでなく、`docs/guides/`全体（通常の選定・配置判断を含む`withmate-collaboration.md`も対象）と`docs/architecture/subagent-workspace.md`を`~/.codex/`配下に同じ相対配置で揃える。接続・診断用の`docs/runbooks/withmate-character-context.md`と`docs/runbooks/withmate-repository-glossary.md`も揃える。選定方針・契約経路・Worktree配置はWithMateから読み、端末固有ファイルのコピーを導入条件にしない。AGENTS.mdとhookの共通文書参照は`~/.codex/...`というコード・path表記とし、`~`を実行環境のユーザーhomeへ解決する。作業対象repositoryのcwd、配布元checkout、`CODEX_HOME`による別配置へ参照先を切り替えない。symlink配置でも`~/.codex/`から各参照先へ到達できることを確認する。本README等の通常の相対リンクは配布元の文書閲覧用として残す。実環境の更新は配布元の編集と別の操作であり、無関係な設定を上書きしない。
 
 [公式のAGENTS.md探索](https://developers.openai.com/codex/guides/agents-md/)はglobalとrepository rootからcwdまでの指示を組み合わせる。通常のMarkdownリンクはその本文の自動注入ではなく、配下すべてのAGENTS.mdを読む仕組みでもない。[Skill](https://developers.openai.com/codex/skills/)は名前・説明から選択した後に本文を読む別の仕組みである。履歴を継承しない子へは必要な条件・実path・権限を依頼に含める。
 
