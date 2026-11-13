@@ -81,7 +81,7 @@ Milestone等の予定単位は任意とする。採用時は作成単位、割�
 
 ## SessionFolderのreview記録と対応管理
 
-review結果は現在の`SessionFolder/review-results/`へMarkdownで保存する。明示保存先と記録禁止の指示を優先する。保存先が取得できなければ推測・新設せず、結果と保存できない理由を返す。
+review結果は現在の`SessionFolder/review-results/`へMarkdownで保存する。他Sessionへ参照を渡す段階では[WithMateの共有基準](withmate.md#sessionfolderとcrew-folder)に従って必要資料の配置と参照を揃える。明示保存先と記録禁止の指示を優先する。保存先が取得できなければ推測・新設せず、結果と保存できない理由を返す。
 
 - 取りまとめ担当（委譲時は親）が終了・中断時に、対象repository・commit・差分範囲、担当、結論、指摘、実施確認を保存し、保存先を伝える。未コミット範囲も識別し、指摘ゼロと未確認・中断を区別する。
 - 独立reviewは別ファイル、同じreviewへの対応は同じ文書で扱う。安定した指摘IDに対象・影響・根拠・分類理由・対応状況・修正確認の根拠・引継ぎ先を必要な分だけ記録する。固定章立てや無関係な空欄は設けない。
