@@ -62,3 +62,6 @@ generated_images/*
 /thread-writer-locks/
 transcription-history.jsonl
 /..codex-global-state.json.bak.tmp-*
+
+# 利用者が保持する非配布の端末固有資料
+/withmate.local.md

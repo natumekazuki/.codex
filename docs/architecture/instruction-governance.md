@@ -14,10 +14,11 @@
 | UI変更の必須基準と専門判断 | [UI基準](../guides/ui.md)とruntimeの`design-ui-information` Skill |
 | 文書・監査・RelayGraph操作 | 適用条件に該当する`skills/*/SKILL.md` |
 | Session Graphの共有記録・review結果 | 利用契機・権限境界は共通AGENTS.md。指示の事前記録とMCPによる読書き・復元はruntimeの`session-graph` Skill。Graphの正本・表示はWithMate、呼出契約は現在のMCP提供定義が担う。review結果・対応管理は[開発・review・統合](../guides/development.md#sessionfolderのreview記録と対応管理)、`templates/review.md`は任意の骨格。hookは入口だけを再通知する |
-| 委譲・履歴を継承しない子への入力 | [委譲](subagent-workspace.md) |
-| WithMate Memoryの能動的な読取、背景実行との責務分担、Character Affectの反映・許可・保存範囲 | [Memory・Affect・共有情報の利用](../guides/withmate.md)。AGENTS.mdは各機能の利用契機、MCP instructions・tool説明・schemaは利用可能な操作・探索例・呼出契約、runbookは接続設定・障害調査を担う |
-| Repository Glossaryの操作契約 | runtime-managed `withmate-glossary` Skill。利用契機・継続的な許可とdeleteの個別承認は[Memory・Affect・共有情報の利用](../guides/withmate.md) |
+| nativeとWithMateの委譲・履歴を継承しない子への入力・worktree配置 | [委譲](subagent-workspace.md)。WithMateのRole・背景確認・Coordination・報告は[Session間の協同](../guides/withmate-collaboration.md) |
+| 環境固有のWorktree配置・Provider／Model／Depth選定 | 保存先はWithMateの端末設定。通常作業での方針・宛先catalog・必要時のquota・配置先の取得と判断は[Session間の協同](../guides/withmate-collaboration.md)、native制限とGit操作は[委譲](subagent-workspace.md) |
+| WithMate Memoryの能動的な読取、背景実行との責務分担、Character Affectの反映・許可・保存範囲 | [WithMate利用guide](../guides/withmate.md)。AGENTS.mdは各機能の利用契機、MCP instructions・tool説明・schemaは利用可能な操作・探索例・呼出契約、runbookは接続設定・障害調査を担う |
+| Repository Glossaryの操作契約 | runtime-managed `withmate-glossary` Skill。利用契機・継続的な許可とdeleteの個別承認は[WithMate利用guide](../guides/withmate.md) |
 
-`hooks/implementation-restraint.ps1`はSessionStartのstartup・resume・compactとSubagentStartで入口と正本への参照を短く再通知する。許可modelの範囲は再提示するが、選択手順・例外・停止条件等の詳細本文を複製せず、別のworkflowを設けない。
+`hooks/implementation-restraint.ps1`はSessionStartのstartup・resume・compactとSubagentStartで入口と正本への参照を短く再通知する。Codex native子の許可modelの範囲は再提示するが、選択手順・例外・停止条件等の詳細本文を複製せず、別のworkflowを設けない。
 
 文書更新・履歴保存・リリースノートのリンクに関する共通ルールの正本は[設計判断・文書化](../guides/design-decisions.md)である。このrepository自身の判断履歴は`docs/adr/`、公開記録は`docs/releases/`に置かれている。
