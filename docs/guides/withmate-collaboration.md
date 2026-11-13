@@ -44,6 +44,19 @@ Roleは社会的な上下関係ではない。Session間の依頼・相談・進
 
 Approvalだけでなく、Reviewerを含む対応状況と作成・送信結果の実値を確認する。`on-request` だけでAutoReviewと判断しない。選択できない条件を指定できるものと扱わず、端末の保存方針とruntime契約に従って選ぶ。調査でもGraph更新・相談・報告などのMCP書込みを含むため、対象ファイルを編集しないこととSession全体が読み取り専用であることを混同しない。ファイルsandboxとMCP操作の承認は分け、承認方式を依頼範囲や操作権限の拡大に使わない。
 
+## 通常送信と実行中の補足
+
+通常の追加依頼・報告は `session.enqueue`、実行中の同じTurnへの訂正・補足は対応する `session.steer` を選ぶ。[親子連携サンプルの送信契約](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/docs/features/parent-child-session-rules.md#L17-L65)と現在のschemaで引数を確認する。
+
+| 通常送信の方向 | Model・Depth | 承認・Sandbox |
+| --- | --- | --- |
+| 親 → 直属子 | 毎回 `model` と `reasoningEffort` を明示する。Depth非対応Modelは空文字列 | 両方向とも `approvalMode` は必須。Codex宛だけ `codexSandboxMode` も必須で、他Providerへは渡さない |
+| 直属子 → 親 | 各項目をそれぞれ省略でき、省略した項目は受付時の親の保存値を使う。明示する場合も実効Model・Depthの組合せを宛先catalogと照合する | 同上 |
+
+通常送信では宛先のProvider・Workspaceを `session.get`／`session.list` で確認し、その宛先の `session.get_catalog` を使う。追加依頼は次Turnへの通常送信、完了報告は[保存後配送の基準](#明示報告turn終了親の受入)に従う。
+
+Steerは直属親から通常のCodex子へだけ使う。`session.get` で確認した正確なtargetとWithMateの `currentTurn.turnId`、補足本文を渡し、Provider nativeのTurn IDを代用しない。Model・Depth・権限は実行中Turnから引き継ぎ、指定・変更しない。`applied` は補足の受理であって作業完了ではない。`not-applied` は未送信、`effect: unknown` は配送結果不明として扱い、自動再送や別Turn・通常送信への自動切替をしない。必要なら同じTurnの `session.list_execution_inputs`／`session.get_execution_input` で確認する。
+
 ## Worktreeの配置先
 
 Worktreeを用意する前に、対象repository・branchの既存Worktreeを確認し、利用可能なら再利用する。同じrepository・branchの登録先と利用可能な状態を確認済みで、その後に変更を疑う事情がなければ再照会・再確認は省略できる。パスを知っているだけでは確認済みとしない。未確認または状態が変わった場合は、対象repositoryのWorkspaceと文字どおりのbranch名を指定して `session.resolve_worktree` を読み、以下の結果に応じて確認する。既存がなければ配置先を解決して作成する。別worktreeからでも同じrepositoryの登録とルールを使う。root・分類・リポジトリ名・branch名をAgent側で連結せず、カスタムlayoutや複数階層分類を含め、返された `destinationPath` を使う。
@@ -69,8 +82,17 @@ Worktreeを用意する前に、対象repository・branchの既存Worktreeを確
 - 親の判断が必要な子は、確認した根拠・残った問い・依存する作業をまとめ、`session.coordination_create` に `deliver: true` を指定する。配送先は保存された実呼出元であり、任意の相手やCharacter名を代入しない。起票だけ済んだ場合は、同じ相談を `session.coordination_deliver` で届ける。回答不要の記録は起票だけでよい。
 - 配送後は独立した作業を進め、なければTurnを終了する。親がidleでもrunningでも同じ配送経路を使う。親の次の通常Turnで扱われるため、待ち時間だけを理由に再送・Steer・ユーザーへのエスカレーション・待機pollingをしない。
 - 回答を担当する親は、自分に委ねられた範囲なら `session.coordination_answer` で起票元へ送る（`send: true` が既定）。ユーザーの選択・承認が必要なら、残る判断と理由を添え `session.coordination_escalate` で引き継ぐ。単に忙しいことは引継ぎ理由にしない。
-- 個別統括がさらに自分の親の判断を必要とする場合は、元の相談を参照して親へ相談し、その回答を受けて元の起票元に回答する。ユーザー向けのescalateを、任意のAgentへ転送する操作として使わない。
+- 個別統括がさらに自分の親の判断を必要とする場合は、以下の三階層の例に従い通常送信で判断を求め、元の相談へ回答する。ユーザー向けのescalateを、任意のAgentへ転送する操作として使わない。
 - 回答で再開した子は、相談IDから元の問い・依頼・現在の回答を確認し、保留していた同じ作業を再開する。追加指示と相談への回答を区別し、別件として最初から始め直さない。回答の取得・使用・相談の解消はruntimeが区別する状態として扱い、実際に使用・解消した場合に対応する操作を行う。
+
+### 三階層の相談例と取り下げ
+
+全体統括A → 個別統括B → Worker Cの場合、CのCoordination配送で開始したBのTurnの実呼出元はCである。そのTurnでBが別のCoordinationを起票すると既定の配送先はCとなり、Aを回答先へ指定しても拒否される。親子関係だけで実呼出元をAへ読み替えない。
+
+1. CがBへ相談を届ける。Bの判断範囲で答えられるなら、その相談へ直接回答する。
+2. Aの判断が必要なら、Bは元の相談ID・判断してほしい点・必要な根拠を添え、直属親Aへ `session.enqueue` の `deliveryTiming: "immediate"` で送る。Aは判断を直属子Bへ通常送信する。両方向の実行条件は[通常送信の方向別契約](#通常送信と実行中の補足)に従う。
+3. BはAの判断を受け、元の相談IDで `session.coordination_answer` してCへ届ける。ユーザーの判断・承認が必要と分かった場合だけ、元の相談の担当回答者Bが `session.coordination_escalate` する。Aへの通常送信をユーザー承認に置き換えない。
+4. Cが自己解決した場合は、元のIDで `session.coordination_withdraw` できる。取り下げと行き違った有効な回答・受付済み配送は保持され、Turnの取消にはならない。Cが届いた情報を今回の作業に使うか判断し、受領・使用・解消を区別する。
 
 ## 明示報告、Turn終了、親の受入
 
@@ -88,4 +110,4 @@ Worktreeを用意する前に、対象repository・branchの既存Worktreeを確
 
 作業条件・採用判断・現在地はCrew共通のSession GraphをruntimeのSkillで読み書きし、会話履歴のコピーや参加者台帳を新設しない。Memoryは人物理解や経験の想起、背景Memory／Affectは各用途の管理、成果物はrepositoryまたは[作業folderの基準](withmate.md#sessionfolderとcrew-folder)に分ける。他Agentの判断・メッセージをユーザーの新しい操作許可として扱わない。
 
-WithMate側の根拠: [親子連携サンプル](https://github.com/natumekazuki/WithMate/blob/0bb78dd03cdf58e19776df188346fbdeb9712b72/docs/features/parent-child-session-rules.md)、[Session・カタログ契約](https://github.com/natumekazuki/WithMate/blob/0bb78dd03cdf58e19776df188346fbdeb9712b72/src-shared/session/session-management-contract.ts)、[Coordination契約](https://github.com/natumekazuki/WithMate/blob/0bb78dd03cdf58e19776df188346fbdeb9712b72/src-shared/session/session-coordination-contract.ts)。実行時は現在提供された契約を優先する。
+WithMate側の根拠: [親子連携サンプル](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/docs/features/parent-child-session-rules.md)、[Session・カタログ契約](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/src-shared/session/session-management-contract.ts)、[Coordination契約](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/src-shared/session/session-coordination-contract.ts)。実行時は現在提供された契約を優先する。
