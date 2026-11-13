@@ -101,6 +101,10 @@ Crew起点・通常の子孫Main・各MainのAuxiliaryは同じSession Graphを�
 
 SessionFolderはそのMainと所属Auxiliaryが使う作業場所であり、通常の子Mainは自分のSessionFolderを持つ。試行用ファイルや画像は手元に置き、一区切りで、今回自分が作り用途が終わったと判断できる一時物だけを片付ける。ユーザー添付、他のSessionやAuxiliaryの作成物、会話・報告・reviewから参照するもの、再開に必要な資料は保持する。所有・用途が不明なら削除せず、既存folder全体の一括移動・削除を完了手順にしない。
 
-Crew Folderへ置くのは「どのSessionが何に使うか」が決まった資料である。比較してほしい修正前後の画像、共同で使う再現データ等を選び、依頼・報告へ絶対参照先を添える。試行画像一式を移して片付けの代わりにしない。repositoryに含めるコード・文書は対象repository、reviewの正本は[開発guide](development.md#sessionfolderのreview記録と対応管理)の保存先に置き、共有には必要な参照を使う。
+Crew Folderへ置くのは「どのSessionが何に使うか」が決まった資料である。比較してほしい修正前後の画像、共同で使う再現データ等を選び、試行画像一式を移して片付けの代わりにしない。repositoryに含めるコード・文書は対象repository、review結果の初期保存先は[開発guide](development.md#sessionfolderのreview記録と対応管理)に従う。レビューしたという理由だけで全資料をCrew Folderへ集めない。
+
+他Sessionに参照してほしいファイルは、元の保存場所によらず、通常送信の本文に半角`@`を絶対パスの直前へ付けて渡す。空白を含むパス等の表記は現在の参照構文に従う。送信先の参照範囲の検査で拒否されたら、`@`を外して同じ参照を送り直したり、無断で許可範囲を広げたりしない。共有してよい必要資料だけを双方が利用できるCrew Folderへ配置し、その絶対パスに差し替えて送る。既に参照可能な共有場所にあるファイルは移動しない。
+
+自分の作業資料は既存参照を壊さない範囲で移動できる。repositoryの正本・ユーザーの原本・他者の作成物は勝手に移動せず、必要なら共有用のコピーや抜粋を作り、原本との区別を示す。資料内の参照先も受け手に必要な範囲で揃え、移動した場合はGraphや報告等の参照を更新する。送信受付は受け手による読取成功を意味しない。
 
 Crew Folderはpromptまたは自身の `session.self` が示す場所を使う。参照の取得だけを別Crewへのwrite権限とせず、Session固有の添付や不要な機密を共有しない。利用不可ならSessionFolder等をCrew Folderに読み替えず、必要な共有方法だけ確認する。worktreeは一時資料ではなく、[配置基準](../architecture/subagent-workspace.md#git-worktreeの配置)に従う。
