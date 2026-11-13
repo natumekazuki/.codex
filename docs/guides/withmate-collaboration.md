@@ -42,9 +42,11 @@ Roleは社会的な上下関係ではない。Session間の依頼・相談・進
 
 選定した実値は作成・送信時の現在の契約に従って渡す。既存子への `enqueue` で選ぶ実行条件は次のTurnにだけ適用され、`steer` は実行中の設定を保つ。未合意のProvider・課金経路へ黙って切り替えたり、認証・課金・Extra Usageを変更したりしない。nativeサブエージェントのrole・Model・tool制限は[委譲guide](../architecture/subagent-workspace.md#nativeサブエージェント)のままとする。
 
+Approvalだけでなく、Reviewerを含む対応状況と作成・送信結果の実値を確認する。`on-request` だけでAutoReviewと判断しない。選択できない条件を指定できるものと扱わず、端末の保存方針とruntime契約に従って選ぶ。調査でもGraph更新・相談・報告などのMCP書込みを含むため、対象ファイルを編集しないこととSession全体が読み取り専用であることを混同しない。ファイルsandboxとMCP操作の承認は分け、承認方式を依頼範囲や操作権限の拡大に使わない。
+
 ## Worktreeの配置先
 
-Worktreeを用意する直前に、対象repositoryのWorkspaceと文字どおりのbranch名を指定して `session.resolve_worktree` を読む。別worktreeからでも同じrepositoryの登録とルールを使う。root・分類・リポジトリ名・branch名をAgent側で連結せず、カスタムlayoutや複数階層分類を含め、返された `destinationPath` を使う。
+Worktreeを用意する前に、対象repository・branchの既存Worktreeを確認し、利用可能なら再利用する。同じrepository・branchの登録先と利用可能な状態を確認済みで、その後に変更を疑う事情がなければ再照会・再確認は省略できる。パスを知っているだけでは確認済みとしない。未確認または状態が変わった場合は、対象repositoryのWorkspaceと文字どおりのbranch名を指定して `session.resolve_worktree` を読み、以下の結果に応じて確認する。既存がなければ配置先を解決して作成する。別worktreeからでも同じrepositoryの登録とルールを使う。root・分類・リポジトリ名・branch名をAgent側で連結せず、カスタムlayoutや複数階層分類を含め、返された `destinationPath` を使う。
 
 | 結果 | 親が行う判断 |
 | --- | --- |
