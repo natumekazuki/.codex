@@ -1,6 +1,6 @@
 # WithMate Memory / Characterの接続設定と障害調査
 
-通常操作は現在提供されているMCP instructions・tool説明・schemaと[Memory・Affect・共有情報の利用](../guides/withmate.md)に従う。このrunbookはWithMate 6.3.29の接続設定と接続障害の調査時に参照する。
+通常操作は現在提供されているMCP instructions・tool説明・schemaと[WithMate利用guide](../guides/withmate.md)に従う。このrunbookはWithMate 6.3.29の接続設定と接続障害の調査時に参照する。
 
 ## セットアップ
 

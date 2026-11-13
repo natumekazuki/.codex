@@ -1,6 +1,6 @@
 # 指示構成の小さな比較と導入
 
-本書は、本repositoryが配布する指示・model構成を比較して導入する際の検証手順である。通常作業の委譲ルールは[Subagent Review Boundary](../architecture/subagent-workspace.md)が正本である。
+本書は、本repositoryが配布する指示・model構成を比較して導入する際の検証手順である。通常作業の委譲ルールは[委譲と作業領域](../architecture/subagent-workspace.md)が正本である。
 
 同じ開始commit、親model、effort、利用toolで、代表作業を別の新規sessionから実行する。model変更と指示変更の効果を混同せず、productionへの外部副作用を発生させない。
 

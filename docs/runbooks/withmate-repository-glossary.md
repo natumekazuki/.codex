@@ -1,6 +1,6 @@
 # WithMate Repository GlossaryをCodexで利用する
 
-本書は、WithMate 6.3.29の接続設定・導入確認・障害調査の手順である。通常作業の利用方針と操作権限は[Memory・Affect・共有情報の利用](../guides/withmate.md)、呼出契約は現在のMCP instructions・tool説明・schemaとruntime-managed Skillが正本である。
+本書は、WithMate 6.3.29の接続設定・導入確認・障害調査の手順である。通常作業の利用方針と操作権限は[WithMate利用guide](../guides/withmate.md)、呼出契約は現在のMCP instructions・tool説明・schemaとruntime-managed Skillが正本である。
 
 ## 対応契約
 

@@ -62,3 +62,6 @@ generated_images/*
 /thread-writer-locks/
 transcription-history.jsonl
 /..codex-global-state.json.bak.tmp-*
+
+# 環境固有のWithMate配置・利用経路・選定方針
+/withmate.local.md

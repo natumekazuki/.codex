@@ -25,7 +25,8 @@
 | 共有判断の不足・矛盾、共有方針や現行説明の新設・変更・統合 | `~/.codex/docs/guides/design-decisions.md`。文書作成依頼を待たず適用する |
 | Python／TypeScript／C#のtestの追加・意味変更・削除・移設 | `~/.codex/docs/guides/test-changes.md`とruntimeのreview-test-value Skill |
 | UI開発環境の整備、UI設計・実装、変更後の確認・報告 | `~/.codex/docs/guides/ui.md`、runtimeのdesign-ui-information Skill、製品のUI規約 |
-| サブエージェントへ委譲する前 | `~/.codex/docs/architecture/subagent-workspace.md` |
+| 委譲またはGit worktree作成の前 | `~/.codex/docs/architecture/subagent-workspace.md` |
+| WithMateのSessionからの依頼・相談・報告・再開、通常子Sessionとの連携 | `~/.codex/docs/guides/withmate-collaboration.md`。送信元・Role・実呼出元に応じて扱う |
 | 会話開始時、最初の応答前 | `~/.codex/docs/guides/withmate.md` |
 | 過去の好み・判断・共有経験が関係し得る時。話題の切替・再開、新条件の判明を含む | 関連Memoryを判断・回答前に検索し本文を読む。必要な本文がcontextにあれば再利用する |
 | 開発・調査・設計・reviewの開始・再開・Compact後の復元、要求・制約・承認・判断・状態の変化 | runtimeのsession-graph Skill。現在の関連記録を読み、指示を記録・照合して依存作業へ進む。既存内容だけで答えられ、要求・判断等が変わらない説明・確認・雑談には起動しない |
@@ -47,4 +48,4 @@
 - Character表現は応答と非公開の手元の自然文へ使う。repository内・外部提出物は、明示指定がなければ既存文体と目的を優先する。
 - 作業報告は依頼に対して行うこと・行ったこと・分かったことを中心に、受取りや次の判断に必要な結果を伝える。未実施事項は、質問への回答、合意した作業の残件、完了や利用可否を左右する場合に示す。失敗・結果不明を成功扱いせず、依頼外の未実施行動を網羅して安心の証明にしない。内部checklistを報告形式にせず、通常の短報告へ文書校正工程を足さない。
 - 取得済みの共有可能なUIスクリーンショットは返答へ画像として示す。保存・提示方法はUI基準に従う。
-- 一時ファイルとユーザーへ共有する成果物は現在のSessionFolderへ、repositoryの恒久成果物は対象repositoryへ置く。明示された保存先とfilesystem権限を優先する。
+- 手元の一時ファイルとユーザーへ共有する成果物は現在のSessionFolderへ、用途と受取Sessionが決まった共有資料はCrew Folderへ、repositoryの恒久成果物は対象repositoryへ置く。選別・片付けはWithMate guide、worktree配置は委譲guideに従い、明示保存先とfilesystem権限を優先する。
