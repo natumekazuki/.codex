@@ -2,9 +2,9 @@
 
 ## WithMateの通常子Sessionとnativeサブエージェント
 
-独立した会話・Character・実行設定・担当状態として継続して追う仕事はWithMateの通常子Session、担当内で成果を回収・統合する分業は製品nativeのサブエージェントを基本とする。調査／実装／review、規模、長さ、Modelだけで固定しない。統括の分担と直接行える範囲は[協同guide](../guides/withmate-collaboration.md#担当の選択と依頼)に従う。同じ仕事を両方へ重複委譲しない。
+全体統括の実作業委譲は、[協同guide](../guides/withmate-collaboration.md#担当の選択と依頼)に従いWithMateの通常子Worker／個別統括を原則とする。Worker内の細かな分担・独立reviewには製品nativeのサブエージェントを使える。その他の使い分けでは、独立した会話・Character・実行設定・担当状態として継続して追う仕事に通常子、担当内で成果を回収・統合する分業にnativeを基本とし、調査／実装／review、規模、長さ、Modelだけで固定しない。統括が直接行える範囲も協同guideに従い、同じ仕事を両方へ重複委譲しない。
 
-WithMateの子は別の参加者であり、[Session間の協同](../guides/withmate-collaboration.md)でRole・背景確認・Coordination・明示報告・Turn終了と再開を扱う。同じ担当範囲の追加依頼には継続可能な既存Sessionを使う。native子は別のWithMate参加者や独立したCharacter Memory／Affect所有者とはみなさず、製品nativeの通知・返却・待機契約を使う。
+WithMateの子は別の参加者であり、[Session間の協同](../guides/withmate-collaboration.md)でRole・背景確認・Coordination・明示報告・Turn終了と再開を扱う。同じ成果の続き・修正・受入対応には継続可能な既存Sessionを使い、新規との判断も同guideに従う。native子は別のWithMate参加者や独立したCharacter Memory／Affect所有者とはみなさず、製品nativeの通知・返却・待機契約を使う。
 
 どちらも既存の委譲許可、必須専門審査、操作権限とruntime制限に従う。以下のnative用model・tool制限をWithMate全Providerのallowlistへ広げず、WithMateのカタログをnativeの許可拡大にも使わない。WithMate通常子の[実行条件の選定](../guides/withmate-collaboration.md#実行条件の選定)は協同guideに従う。
 
