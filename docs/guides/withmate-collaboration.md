@@ -79,6 +79,10 @@ Worktreeを用意する前に、対象repository・branchの既存Worktreeを確
 
 今回だけの配置先は `destinationPath` として照会し、新規候補にだけ適用する。保存方針を変えず、既存登録を上書きしない。SessionFolder・Crew Folderを代替先にしない。Git操作、作成後の実体確認、子へ渡す絶対Workspaceは[委譲guide](../architecture/subagent-workspace.md#git-worktreeの配置)に従う。
 
+作成に追加writeが必要な場合は、実行するProviderの通常の承認経路を使い、作成先を含む最小の既存親directoryへの許可を検討する。配下の既存物も書込対象となる影響と承認範囲を確認し、広い共用親より専用の狭い親を優先する。必要範囲が未承認なら先に相談する。
+
+Codex 0.166.0／Windows elevatedでは、未作成directory自身への`request_permissions`のwrite許可が返っても作成が拒否され、既存の専用親への限定許可追加で作成できる場合がある。他Providerや全環境の制約とは扱わない。許可返却と実効権限を区別し、返却後も拒否された場合は対象・実行条件・結果を残して相談する。無断で上位directoryへ広げたり、`danger-full-access`へ切り替えたりしない。
+
 選定方針・Worktree配置の登録・更新・解除は、ユーザーが恒久設定の変更を指示した時に限る。通常の依頼、評価結果、「今回だけDepthを上げる」「このbranchだけ別の場所に作る」から設定を変更しない。旧ファイルの自動移行や、外部のProviderルールファイルの書換えも行わない。取得・設定の操作契約は[WithMateの選定方針と配置](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/docs/features/session-operating-policies.md)と現在のMCP／bound CLIのschemaを正本とする。
 
 ## 子が背景と判断範囲を確かめる
