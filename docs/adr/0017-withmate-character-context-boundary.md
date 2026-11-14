@@ -11,7 +11,7 @@
 - 追加想起を「具体的に影響する場合だけ」に限定し、保存候補がないturnではsearchも行わない判断は、[WithMate利用方針](../guides/withmate.md)へ置換した。想起は新規保存候補の有無と分けて判断する。
 - WithMate v6.5では、Memoryの自動注入、通常会話での終了前reflection・自発的な保存・event-time appraisalの判断を[WithMate利用方針](../guides/withmate.md)へ置換した。自動生成・登録は背景実行が担い、通常会話は関連Memoryの検索・本文取得とAffectの反映を担う。明示的なMemory保存依頼と許可範囲内の訂正等は維持する。
 - 通常接続で各hostのSTDIO登録・`env_vars`設定を必要とする案内は、[Memory／Character runbook](../runbooks/withmate-character-context.md)と[Glossary runbook](../runbooks/withmate-repository-glossary.md)へ置換した。通常はWithMateがHTTP接続を供給し、手動STDIOは開発・診断用途とする。
-- 利用指示の配置は[指示体系の責務分担](../architecture/instruction-governance.md)を正本とする。AGENTS.mdは読込条件、guideは利用姿勢・許可・保存範囲、MCPは具体的契機・探索例・呼出契約、runbookは接続・障害調査を担う。
+- 利用指示の配置は[指示体系の責務分担](../../README.md#構成)を正本とする。AGENTS.mdは読込条件、guideは利用姿勢・許可・保存範囲、MCPは具体的契機・探索例・呼出契約、runbookは接続・障害調査を担う。
 
 WithMateを単一正本とする判断、authority・保存scope・重複防止・Affect owner・限定されたCLI fallbackの境界は維持する。以下のversion・server名・Contract Anchorsは当時の判断根拠であり、現行の接続先や設定手順には使わない。
 
