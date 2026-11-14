@@ -2,7 +2,7 @@
 
 ## WithMateの通常子Sessionとnativeサブエージェント
 
-全体統括の実作業委譲は、[協同guide](../guides/withmate-collaboration.md#担当の選択と依頼)に従いWithMateの通常子Worker／個別統括を原則とする。Worker内の細かな分担・独立reviewには製品nativeのサブエージェントを使える。その他の使い分けでは、独立した会話・Character・実行設定・担当状態として継続して追う仕事に通常子、担当内で成果を回収・統合する分業にnativeを基本とし、調査／実装／review、規模、長さ、Modelだけで固定しない。統括が直接行える範囲も協同guideに従い、同じ仕事を両方へ重複委譲しない。
+全体統括は対話・統括の時間を確保するため、実作業をWithMateの通常子Worker／個別統括へ委譲する。直接行う最小限の判断・参照等との境界は[協同guide](../guides/withmate-collaboration.md#担当の選択と依頼)に従い、短い独立確認を理由としたnative子への実作業の直接委譲は行わない。Worker内の細かな分担・独立reviewには製品nativeのサブエージェントを使える。その他のRoleの使い分けでは、独立した会話・Character・実行設定・担当状態として継続して追う仕事に通常子、担当内で成果を回収・統合する分業にnativeを基本とし、調査／実装／review、規模、長さ、Modelだけで固定しない。同じ仕事を両方へ重複委譲しない。
 
 WithMateの子は別の参加者であり、[Session間の協同](../guides/withmate-collaboration.md)でRole・背景確認・Coordination・明示報告・Turn終了と再開を扱う。同じ成果の続き・修正・受入対応には継続可能な既存Sessionを使い、新規との判断も同guideに従う。native子は別のWithMate参加者や独立したCharacter Memory／Affect所有者とはみなさず、製品nativeの通知・返却・待機契約を使う。
 
@@ -41,4 +41,4 @@ worktreeやcommit固定は具体的な隔離・再現の必要に応じて使い
 
 WithMateでの配置先取得と結果の使い分けは、協同guideの[Worktreeの配置先](../guides/withmate-collaboration.md#worktreeの配置先)を正本とする。ここでは独自のroot・分類・layoutやpath組み立てを定義しない。
 
-親が、登録先の実体とbranch、分岐元のbranch・commit、作成先の占有、未コミット変更を確認し、必要なGit操作を行う。配置候補の取得を作成済み・利用可能の証拠とせず、準備した実体の絶対pathを子のWorkspaceへ渡す。既存worktreeの移設・削除や他者の作業領域の上書きは、この準備の許可に含めない。
+親は、登録先の実体とbranch、分岐元のbranch・commit、作成先の占有、未コミット変更を確認して準備を手配する。全体統括は実際のGit操作を担当へ委譲する。配置候補の取得を作成済み・利用可能の証拠とせず、準備した実体の絶対pathを子のWorkspaceへ渡す。既存worktreeの移設・削除や他者の作業領域の上書きは、この準備の許可に含めない。
