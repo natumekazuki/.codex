@@ -110,9 +110,11 @@ Codex 0.166.0／Windows elevatedでは、未作成directory自身への`request_
 
 ## 明示報告、Turn終了、親の受入
 
+依頼が未完了なら、許可範囲で次の作業を続行するか、Roleに応じて担当への依頼・修正依頼を実行する。未合意の判断が必要なら[Coordination](#coordinationによる相談と再開)で相談し、その判断に依存する部分だけ保留する。次の作業を予定として述べるだけで終了しない。
+
 子は一区切りで、実際の直接親へSession APIの `session.enqueue` で結論、成果の参照、実施した確認と結果、未完了・必要な判断を明示報告する。自分の最終応答が自動転送されると仮定しない。
 
-親が自分のTurnの保存結果を参照する最終報告は `deliveryTiming: "after_source_turn"` を選び、受付を確認したら親の処理を待たずTurnを終了する。途中相談・進捗は `immediate` または即時のCoordination経路を使う。親も独立作業がなければTurnを終え、報告を受けた後続Turnで再開する。sleepや状態照会の反復でTurnを維持しない。
+親が自分のTurnの保存結果を参照する最終報告は `deliveryTiming: "after_source_turn"` を選び、受付を確認したら親の処理を待たずTurnを終了する。途中相談・進捗は `immediate` または即時のCoordination経路を使う。相談・依頼を配送済みで、回答・成果待ち以外の独立作業がなければ、親もTurnを終え、回答・報告を受けた後続Turnで再開する。sleepや状態照会の反復でTurnを維持しない。
 
 送信受付、相手のTurn開始・終了、結果保存、依頼達成を区別する。送信結果が不明なら元のrequestIdと正確なtargetで `session.get_receipt` を照会し、新しいIDで重複送信しない。Coordinationも現在の契約に従い、同じ操作の結果を確かめる。待機中という状態だけでは失敗ではない。
 
