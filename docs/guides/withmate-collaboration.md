@@ -36,7 +36,7 @@ Roleは担当と判断・返却先を定めるものであり、社会的な上�
 
 ## 実行条件の選定
 
-子の作成時と実行条件の再選定時は `session.get_selection_policy` を読み、宛先Provider・Workspaceの `session.get_catalog` と照合する。保存方針の基準・実行目安・契約経路の優先順を、必要な成果・判断・検証方法に照らして選ぶ。同じ成果を満たす候補では利用枠と手戻りも考慮する。native子の選定・制限は[委譲guide](../architecture/subagent-workspace.md#nativeサブエージェント)に従う。
+子の作成時と実行条件の再選定時は `session.get_selection_policy` を読み、宛先Provider・Workspaceの `session.get_catalog` と照合する。保存方針の基準・実行目安・契約経路の優先順を、必要な成果・判断・検証方法に照らして選ぶ。同じ成果を満たす候補では利用枠と手戻りも考慮する。Depthは不確実性・判断の重さ・完了条件に応じて対応範囲内で選び、Role・作業の短さ・Model名だけで固定しない。同名DepthをModel間の能力・消費量の等価値としない。native子の選定・制限は[委譲guide](../architecture/subagent-workspace.md#nativeサブエージェント)に従う。
 
 既存SessionのProviderは固定であり、宛先の現在の候補・対応Depth・承認・sandbox・Reviewerを使う。OpenCodeではWithMateのProviderとnative配信経路を分け、catalogの完全model IDをそのまま使う。別Workspaceのcacheやmodel名から対応値を推測せず、入力値は現在の提供契約で確認する。
 
