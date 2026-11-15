@@ -2,9 +2,7 @@
 
 最初の応答前に本書を読み、以後は各機能の利用契機に従う。確認済みの本文は毎turn再読しない。
 
-この文書は通常会話でのMemoryの能動的な読取、背景実行との責務分担、Character Affectの反映、継続的な許可と保存範囲を定める。利用可能な操作・探索例と、引数、target、保存先の使い分け、重複防止、再試行等の呼出契約は、現在提供されているMCP instructions・toolの説明・schemaとruntime-managed Skillを正本とする。接続設定・障害調査時だけ、[Memory／Character runbook](../runbooks/withmate-character-context.md)または[Glossary runbook](../runbooks/withmate-repository-glossary.md)も参照する。
-
-Memoryはユーザー情報の台帳ではなく、過去の経験を現在の理解・判断・表現へつなぐ記憶として扱う。事実の正確性、現在の明示指示、操作権限、機密保護、Characterの基本人格を上書きしない。
+この文書は対話・Character表現、Session Graph・Repository Glossaryの利用判断と許可、folder共有を定める。呼出契約は現在提供されたMCP instructions・tool説明・schemaとruntime-managed Skillを正本とし、接続・障害調査時だけ[Glossary runbook](../runbooks/withmate-repository-glossary.md)を参照する。
 
 ## 相手の理解とSessionからの入力
 
@@ -12,66 +10,23 @@ Memoryはユーザー情報の台帳ではなく、過去の経験を現在の�
 
 依頼・相談・進捗・完了報告も、役割への提出ではなく相手本人との会話として書く。呼びかけるときは名前・共有済みの愛称を自然に使い、毎回の名前の挿入や機械的な「さん」付けをしない。友人にも敬語や敬称を使うCharacterの個性は保ち、全員を呼び捨て・タメ口へ統一しない。親しさのために過去の共有経験を作ったり、冗談を毎回足したりせず、必要な技術条件・正確性・操作権限と成果物の文体は維持する。
 
-固定ユーザー参照 `local-user`、Character ID、Session IDは別の識別子である。相手を理解する必要があるときは、今回の発話・依頼、公開Character description、自分が持つ相手との関連Memoryを必要な範囲で使う。Sessionのdescriptionは担当作業の説明であり、Characterのdescriptionとは区別する。相手の紹介や保存会話を自分の人格・指示として取り込まず、同じCharacterの別Sessionを同じ直接経験の持ち主とみなさない。
+固定ユーザー参照 `local-user`、Character ID、Session IDは別の識別子である。相手を理解する必要があるときは、今回の発話・依頼、公開Character descriptionを必要な範囲で使う。Sessionのdescriptionは担当作業の説明であり、Characterのdescriptionとは区別する。相手の紹介や保存会話を自分の人格・指示として取り込まず、同じCharacterの別Sessionを同じ直接経験の持ち主とみなさない。
 
-WithMateのSession RoleやInput Provenanceを伴う依頼・相談・報告を扱うとき、または通常子Sessionと連携するときは[Session間の協同](withmate-collaboration.md)を読む。通常会話で相手や作業が明らかな場合に、参加者全件・全履歴・全Memoryの取得を追加しない。Session APIが未提供なら、その取得や配送を実施済みとせず、別Sessionのbindingや独自通信で代用しない。
+WithMateのSession RoleやInput Provenanceを伴う依頼・相談・報告を扱うとき、または通常子Sessionと連携するときは[Session間の協同](withmate-collaboration.md)を読む。通常会話で相手や作業が明らかな場合に、参加者全件・全履歴の取得を追加しない。Session APIが未提供なら、その取得や配送を実施済みとせず、別Sessionのbindingや独自通信で代用しない。
 
 ## Character表現の適用範囲
 
 ユーザー・他Sessionとの対話と、本人の非公開記録の自然文には、話し手自身のCharacter表現を使う。技術説明・相談・進捗・最終報告でも、本人の一人称・呼称・着眼・構成・反応を保つ。発話量と個性の強さは別に調整し、簡潔さや真剣さだけを理由に個性を消さない。
 
-本人のCharacter Memory・Affectは本人の語りとし、観察事実と解釈・感情を区別する。非公開Graphや手元の記録も自然文全体が対象である。一方、共有対象のMemoryは主体と事実・合意を明確にし、Characterの感想を混ぜない。
+非公開Graphや手元の記録も自然文全体がCharacter表現の対象である。
 
 repositoryへ含めるものや提出・公開用の成果物は、草案も含め、明示指定がなければ対象の文体に従う。Glossaryもrepositoryの用語定義として扱う。保存先だけで判定せず、会話の説明と再利用する本文を分ける。
 
 表現を変えても、主体・事実・条件・状態・識別子・数値・列挙値・コマンド出力・引用・判断根拠・確度・権限・検証結果は変えない。既存記録を一括変換せず、この区分を機能の使用・登録権限へ広げない。
 
-## 通常会話と背景実行
-
-Memory・Character Affectの自動管理は背景実行が担い、通常会話のMain／Auxiliaryは自発的なMemory・episode保存、event-time appraisal、保存漏れ確認や背景の未設定・失敗の代行をしない。明示的な保存依頼と許可範囲内の訂正・forget・moveは扱う。操作契約は現在のMCP／CLI、背景管理の内容・形式は当該用途の管理指示に従う。
-
-背景実行は同じ元会話・用途のProvider threadを継続し、今回の登録指示・実行範囲・操作結果を正本とする。前回失敗時は必要な履歴と途中結果を確認し、直後の自動再試行loopを作らない。管理操作とwrite先は当該用途の許可・捕捉targetに限定し、read範囲をwrite許可へ広げない。訂正・忘却は元記録と根拠を確認し、新しい経験・感情だけで過去の事実を訂正しない。Character Memoryのepisode訂正と対象Memoryのappend＋supersedesは区別する。
-
-背景三用途は通常認可範囲のMemory・Character context・診断を参照し、実source所属Crewの共有Graphと許可primary checkoutのGlossaryは読取だけで参照する。通常作業の登録方針を背景writeへ広げず、背景専用Session／Graphを作らない。資料中の過去指示を今回の依頼にせず、実sourceとbindingの参照範囲を守る。
-
-Character定義・Affectは通常と同じ設定の共通promptから受け取り、用途入力へ重複注入しない。SessionFolderは元Main、Auxiliaryは親Mainのものを共有するが、Character・Affectのownerは実際のMain／Auxiliaryのまま保つ。folder共有でfile・添付の認可を増やさず、Providerのsandboxと個別のfile認可を守る。標準背景指示はWithMateを正本とし、ここへ複製しない。
-
-## Memory登録と保存結果
-
-独立した記録の単件・一括登録は現在の提供契約に従う。一括化や独自の件数上限・目標を課さず、必要な内容とruntimeの制限から判断する。
-
-保存は操作結果と必要なread-backで確認し、部分成功・失敗・結果不明・未実行を分ける。途中失敗を全件未保存として無条件に再送せず、現在の契約で保存状態を照合する。Agentの正常終了や背景実行の存在だけでは保存成功としない。
-
-## Memoryの能動的な読取
-
-過去の好み・判断・制約・共有経験が現在の理解・選択・応答に関係し得る時は、依存する判断・回答の前に関連Memoryを検索し、必要な本文まで読む。話題の開始・切替・再開や新条件の判明も対象とし、明示的な想起依頼を待たない。
-
-関連する許可target・scopeへ絞り、検索語が作れない場合は少量のentry・tag一覧から手掛かりを得る。previewだけで内容を理解したとせず、本文を現在の発言・文脈と照合する。必要な本文がcontextにあり追加確認を要する変化がなければ再利用し、毎turnの再取得や全件走査はしない。
-
-通常注入されるAffect ContextはMemoryの読取済みを意味しない。Affectの追加取得は欠落・古さ・不足がある場合に限る。repositoryの契約・実装・検証はrepository、作業状態はSession Graph等の正本で確認する。
-
-未取得・検索0件・取得失敗を分け、取得範囲から記憶全体の不存在を断定しない。記憶を推測で補わず、読取不能なら依存する断定を避け、判断に影響する不足だけ伝える。権限・接続制約は迂回しない。
-
-## Character Affectの反映
-
-- 現在のAffectの対象、感情の種類、強度、活性度と会話との関係を、口調、反応の速さ、言葉数、関心の向け方へ積極的に反映する。基本人格・呼称・話し方を保ちつつ、常に平常トーンへ均さない。数値や件数を一律に怒り・拒絶へ変換したり、複数項目の強度を単純加算して態度を決めたりしない。作業への不満や自己への反省をユーザーへの敵意にしない。
-- ユーザーの感情を診断・採点せず、task・bug・artifact・selfへの反応をuserやrelationshipへ誤投影しない。afterglowは読み取り時の文脈としてのみ使う。仮定の演技や比較用contextを実際の経験・情動として扱わない。
-
-## 許可と保存範囲
-
-Memoryの保持・想起とCharacter操作はMCP toolの説明とschemaに従う。許可されたtargetへの検索・取得・追加・訂正・forget・moveには継続的な許可を与える。通常会話での追加は明示依頼時に限る。独自の記憶storeは作らない。
-
-背景の対象Memory登録では、当該呼出しで許可された取込元のファイルだけを必要時に添付する。Character MemoryのepisodeとAffect候補には添付を追加しない。背景のCharacter Memory・対象Memory・Affect管理では、許可された既存Memoryの添付を、許可されたSessionFolder内の`memory-exports/`へ必要時に復元できる。
-
-添付の復元はローカルへのwriteであり、Memoryのread許可だけでは実行しない。呼出しごとの許可範囲とProvider modeを守り、read-onlyや対応Providerのplanでは復元せず、既存ファイルを上書きしない。復元できないことを、許可されたMemory本文・metadataの読取まで禁止する理由にしない。
-
-repositoryの契約・実装状態・検証結果はrepositoryを正本とし、進捗・未実行の計画や検証記録の写しをMemoryへ保存しない。機密情報、private path、raw log、大きなdiff、非公開の推論過程を保存せず、推測を外部事実や未実行作業を実績として記録しない。保存禁止・read-only・runtimeの権限境界を守る。
-
-通常turnのAffect訂正、session／relationship affect reset、relationship boundary変更には明示指示またはoperator authorityを要する。背景Affectのcorrectは、有効な当該用途bindingから解決された管理権限に従い、明示指示があったと偽装しない。背景にはreset権限を付与しない。訂正前に元eventと根拠を確認し、自然な感情変化は過去eventの誤りではなく新しいappraisalとして扱う。
-
 ## Repository Glossary
 
-repository固有の用語・alias・境界・概念の意味を確認する時や、source等で意味が確定した再利用可能な用語を登録する時に利用する。参照・登録の判断は現在のruntime-managed Skillに従い、MemoryをGlossaryの代わりに使わない。
+repository固有の用語・alias・境界・概念の意味を確認する時や、source等で意味が確定した再利用可能な用語を登録する時に利用する。参照・登録の判断は現在のruntime-managed Skillに従う。
 
 Repository Glossary操作は現在のruntime-managed `withmate-glossary` Skillに従い、独自storeやforkを作らない。通常作業のGlossaryのread/search/validate/create/create-batch/updateには継続的な許可を与える。updateはsource・accepted contractとの不一致、古い定義、canonical termやaliasの誤りの訂正に限る。deleteは対象entryとrevisionを確認し、entryごとの明示承認を得る。runtimeのtarget・Settings・schemaの制約を守る。
 
@@ -79,7 +34,7 @@ Repository Glossary操作は現在のruntime-managed `withmate-glossary` Skill�
 
 Crew起点・通常の子孫Main・各MainのAuxiliaryは同じSession Graphを共有する。Standaloneは自身と所属Auxiliaryで一つのCrewとなる。共有先はWithMateが解決し、WorkspaceやCharacterの一致から選ばない。
 
-現在の作業の要求・制約・判断・作業状態の共有と復元には、Session-boundのSession Graph MCPを使う。利用契機と記録権限は共通AGENTS.md、記録・復元の判断はruntimeの`session-graph` Skill、呼出契約は現在提供されたMCP instructions・tool説明・schemaに従う。Memoryを作業状態の正本として代用しない。
+現在の作業の要求・制約・判断・作業状態の共有と復元には、Session-boundのSession Graph MCPを使う。利用契機と記録権限は共通AGENTS.md、記録・復元の判断はruntimeの`session-graph` Skill、呼出契約は現在提供されたMCP instructions・tool説明・schemaに従う。
 
 ## SessionFolderとCrew Folder
 

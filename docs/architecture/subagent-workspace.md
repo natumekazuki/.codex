@@ -4,7 +4,7 @@
 
 WithMateのRole・委譲責務・通常子の選定と再利用は[協同guide](../guides/withmate-collaboration.md)に従う。全体統括の実作業は通常子へ委譲し、native子への直接委譲で代替しない。Worker内の細かな分担・独立reviewには製品nativeのサブエージェントを使える。
 
-独立した会話・Character・実行設定・担当状態として継続して追う仕事には通常子、担当内で成果を回収・統合する分業にはnativeを基本とする。同じ仕事を重複委譲しない。native子を独立したWithMate参加者やMemory／Affect所有者とみなさず、nativeの通知・返却・待機契約を使う。
+独立した会話・Character・実行設定・担当状態として継続して追う仕事には通常子、担当内で成果を回収・統合する分業にはnativeを基本とする。同じ仕事を重複委譲しない。native子を独立したWithMate参加者とみなさず、nativeの通知・返却・待機契約を使う。
 
 以下のnative制限とWithMateのcatalogは互いの許可を拡張しない。どちらも既存の委譲許可・必須専門審査・操作権限に従う。
 
@@ -12,7 +12,7 @@ WithMateのRole・委譲責務・通常子の選定と再利用は[協同guide](
 
 委譲前に読む。履歴継承はhookで `none` に固定されるため、目的、対象・編集所有、必要なcontext・参照の実path、期待成果・完了条件、権限、現在のSessionFolderを渡す。並行作業では競合を避け、ユーザーと他担当の変更を保護する。調査・reviewはread-onlyと明示する。
 
-共有判断を扱う場合は採用済み判断と適用状況・未合意事項、[設計guide](../guides/design-decisions.md)も渡す。reviewには主要動作・後続の依存と[開発guide](../guides/development.md)の統合基準を含め、全規約を複製しない。子がMemory・Graph・Glossaryを利用できない場合は、親が許可範囲で必要な取得・記録を担う。bindingやtool制限は迂回しない。
+共有判断を扱う場合は採用済み判断と適用状況・未合意事項、[設計guide](../guides/design-decisions.md)も渡す。reviewには主要動作・後続の依存と[開発guide](../guides/development.md)の統合基準を含め、全規約を複製しない。子がGraph・Glossaryを利用できない場合は、親が許可範囲で必要な取得・記録を担う。bindingやtool制限は迂回しない。
 
 native子の使用modelは以下の4つのみ。設定値と採用理由は[README](../../README.md#modelとrole)に記載する。
 

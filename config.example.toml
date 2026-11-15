@@ -45,6 +45,6 @@ max_depth = 1
 default_subagent_model = "gpt-6.1-sol"
 default_subagent_reasoning_effort = "medium"
 
-# WithMate 6.3.29 supplies Memory and Glossary HTTP MCP connections per Session.
+# WithMate supplies Glossary, Session Graph, and Session HTTP MCP connections per Session.
 # Do not persist their URLs or short-lived tokens in this config.
 # Manual STDIO is for development/diagnostics only; see the WithMate runbooks.

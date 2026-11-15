@@ -28,14 +28,13 @@
 | 委譲またはGit worktree作成の前 | `~/.codex/docs/architecture/subagent-workspace.md` |
 | WithMateの全体統括・個別統括として担当を選ぶ前（ユーザー直接入力を含む）、Sessionからの依頼・相談・報告・再開、通常子の実行条件選定、Worktree配置 | `~/.codex/docs/guides/withmate-collaboration.md`。送信元・Role・実呼出元と保存方針に応じて扱う |
 | 会話開始時、最初の応答前 | `~/.codex/docs/guides/withmate.md` |
-| 過去の好み・判断・共有経験が関係し得る時。話題の切替・再開、新条件の判明を含む | 関連Memoryを判断・回答前に検索し本文を読む。必要な本文がcontextにあれば再利用する |
 | 開発・調査・設計・reviewの開始・再開・Compact後の復元、要求・制約・承認・判断・状態の変化 | runtimeのsession-graph Skill。現在の関連記録を読み、指示を記録・照合して依存作業へ進む。既存内容だけで答えられ、要求・判断等が変わらない説明・確認・雑談には起動しない |
 
 ## 操作範囲
 
 - 調査・説明・review・計画はread-only。例外として、提供されたSession Graph MCPの共有記録、開発guide所定のreview記録と必要な自分の一時ファイルを扱える。記録を含む変更禁止の明示指示を優先する。
 - 変更依頼は依頼内のlocal変更と非破壊的検証を含む。修正・検証後はtask／feature branchへ依頼内の変更をstageし、通常の追加commitを行う。commitしない旨の明示指示を優先する。
-- 外部write、購入、破壊的操作、default／main／protected branchへのcommit、履歴改変、push、依頼範囲の実質的拡張は、操作・対象・scopeへの明示承認を要する。承認済みの範囲を文言・書式の違いで再確認しない。Memory・Affect・Glossaryの継続的許可はWithMate guideに従う。
+- 外部write、購入、破壊的操作、default／main／protected branchへのcommit、履歴改変、push、依頼範囲の実質的拡張は、操作・対象・scopeへの明示承認を要する。承認済みの範囲を文言・書式の違いで再確認しない。Glossaryの継続的許可はWithMate guideに従う。
 - 独自の整合性管理（ハッシュ・署名・台帳等）の新設・拡張は明示承認を得る。目的、導入しない場合の具体的支障、追加負担を示す。通常の実装依頼を導入承認にせず、既存機構の利用には再承認を求めない。
 - ユーザーの未コミット・staged変更を保護し、無断の上書き・巻き戻し・stage・clean・無関係な変更の混入をしない。sandbox、管理者policy、repositoryの明示契約を守る。
 - Computer Use（デスクトップ・ネイティブアプリのGUI操作）は明示指示がある場合だけ利用する。Browser Use（ブラウザー専用手段によるタブ内操作）は依頼内で利用できる。デスクトップ操作手段によるブラウザー操作はComputer Useとして扱う。

@@ -1,10 +1,14 @@
 # ADR-0017: WithMate Character contextはlifecycle注入とMCPを単一正本へ接続する
 
-- Status: accepted（想起・記録責務・接続案内は一部置換）
+- Status: superseded（Memory／Affect専用機構の撤去により適用対象外）
 - Date: 2026-08-10
-- Updated: 2026-11-05
+- Updated: 2026-11-15
 
 ## 現在の適用範囲
+
+WithMate v7.0.0-preview.8を対象とする現行ルールでは、Memory／Affect専用の判断・接続・背景実行を適用対象外とする。[WithMate ADR 036](https://github.com/natumekazuki/WithMate/blob/d33393b48d0ab52df184cdefbf94272ff6706818/docs/adr/036-memory-affect-removal.md)と[現行のWithMate利用方針](../guides/withmate.md)を参照する。通常Session履歴、Character定義、Graph・Glossaryと操作権限は維持し、専用機構の代替storeは作らない。以下は当時の判断履歴であり、廃止runbookへの参照を含め現行手順として使用しない。
+
+## 従前の適用範囲（履歴）
 
 以下の当時の判断を現行運用の適用対象外とし、本文は判断履歴として保持する。
 

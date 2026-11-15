@@ -1,6 +1,6 @@
 # WithMate Repository GlossaryをCodexで利用する
 
-本書は、WithMate 6.3.29の接続設定・導入確認・障害調査の手順である。通常作業の利用方針と操作権限は[WithMate利用guide](../guides/withmate.md)、呼出契約は現在のMCP instructions・tool説明・schemaとruntime-managed Skillが正本である。
+本書は、WithMate v7.0.0-preview.8の接続設定・導入確認・障害調査の手順である。通常作業の利用方針と操作権限は[WithMate利用guide](../guides/withmate.md)、呼出契約は現在のMCP instructions・tool説明・schemaとruntime-managed Skillが正本である。
 
 ## 対応契約
 
@@ -18,7 +18,7 @@
 
 ## Setup
 
-WithMateはprovider Sessionへ、Memoryと同じ共有localhost listenerのHTTP接続設定を自動供給する。`config.toml`への手動登録は不要であり、URLや当turnの短命tokenを永続設定・設定例・ログへ保存しない。
+WithMateはprovider Sessionへ、共有localhost listenerのHTTP接続設定を自動供給する。`config.toml`への手動登録は不要であり、URLや当turnの短命tokenを永続設定・設定例・ログへ保存しない。
 
 1. WithMateを起動し、runtime-managed `skills/withmate-glossary/`が配置されていることを確認する。
 2. WithMateでCodexのSessionを開始し、そのSessionでmanaged Skillと公開されたMCP toolを確認する。
@@ -26,11 +26,11 @@ WithMateはprovider Sessionへ、Memoryと同じ共有localhost listenerのHTTP�
 
 MCP serverはWithMateのSession-bound runtimeへ接続する。Session ID、repository path、branch名をauthority入力にせず、`glossary.list_targets`が返すprimary checkoutだけを操作する。
 
-通常の`codex mcp list`による永続設定の確認だけで、一時設定の接続成否を判定しない。Memory／Characterとの共通の接続確認は[Memory／Character runbook](withmate-character-context.md)を参照する。
+通常の`codex mcp list`による永続設定の確認だけで、一時設定の接続成否を判定しない。
 
 ## 手動STDIOによる開発・診断
 
-手動clientの開発・診断では`withmate-glossary mcp-server`を使う。診断用のCodex server設定では、[Memory／Character runbookの手動STDIO](withmate-character-context.md#手動stdioによる開発診断)と同じ5変数を`env_vars`で転送する。Session bindingの実値を固定・複製せず、通常のmanaged HTTP接続との重複を避ける。接続経路を変えてもtargetや操作権限は広がらない。
+手動clientの開発・診断では`withmate-glossary mcp-server`を使う。診断用のCodex server設定では、当該Sessionに供給された`WITHMATE_AGENT_RUNTIME_BINDING_REFERENCE`、`WITHMATE_AGENT_RUNTIME_BINDING_REQUIRED`、`WITHMATE_AGENT_RUNTIME_TURN_CAPABILITY`、`WITHMATE_AGENT_RUNTIME_APPLICATION_INSTANCE_ID`、`WITHMATE_AGENT_RUNTIME_GENERATION_ID`の5変数名を`env_vars`へ列挙して転送する。Session bindingの実値を固定・複製せず、通常のmanaged HTTP接続との重複を避ける。接続経路を変えてもtargetや操作権限は広がらない。
 
 ## Integration scenarios
 
@@ -42,7 +42,7 @@ MCP serverはWithMateのSession-bound runtimeへ接続する。Session ID、repo
 6. revision conflictでは新しいrevisionを使って自動再試行せず、current valueと変更目的を再評価する。
 7. `effect: unknown`では同じ操作を自動実行しない。current valueをread-backし、新しいwriteを選ぶ前にユーザーへ確認する。
 8. structured validation、authority、revision、conflict errorをCLIで迂回しない。
-9. Glossaryの内容をMemory、Session data、prompt、別cacheへ複製しない。
+9. Glossaryの内容をSession data、prompt、別cacheへ複製しない。
 
 ## 障害時の扱い
 

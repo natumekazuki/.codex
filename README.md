@@ -39,7 +39,7 @@ Codex nativeの配布設定ではGPT-6.1 Solを基本に使い、手順・期待
 
 ## WithMate V7の協同と端末方針
 
-Role・入力来歴、担当、相談・報告・再開、端末の選定方針・catalog・Worktree配置の判断は[Session間の協同](docs/guides/withmate-collaboration.md)に集約する。nativeとの境界とGit操作は[委譲guide](docs/architecture/subagent-workspace.md)、対話・Memory／Affect・folder共有は[WithMate利用guide](docs/guides/withmate.md)が担う。
+Role・入力来歴、担当、相談・報告・再開、端末の選定方針・catalog・Worktree配置の判断は[Session間の協同](docs/guides/withmate-collaboration.md)に集約する。nativeとの境界とGit操作は[委譲guide](docs/architecture/subagent-workspace.md)、対話・Character表現・folder共有は[WithMate利用guide](docs/guides/withmate.md)が担う。
 
 協同guideは直接checkout・手動コピーとも配布対象とし、端末固有ファイルや候補表の転記を準備条件にしない。利用者の実ファイルは自動削除・移行せず、Git除外を維持する。恒久設定と今回限りの指定、native設定とWithMate通常子の選定を混同しない。
 
@@ -64,12 +64,6 @@ V7の実利用確認は、実配置した全体統括へAPI名・具体値を提
 入口・guide・Skill・metadata・hookの関係と参照を照合し、配布元の文言、実配置、新規／再開・compact後や履歴非継承の子で有効な指示、実際の行動を分けて確認する。出力方針は履歴・model・Character・tool条件を揃えて比較し、用件への適合、重要条件、検討の付加価値、受け手に残る再説明・選別・判断の負担を見る。文字数や条文の一致だけで改善とはしない。
 
 実施条件・結果と判断に影響する未確認範囲は既存の[review記録](docs/guides/development.md#sessionfolderのreview記録と対応管理)等へ残す。[template](templates/review.md)は任意の骨格であり、指摘別対応の正本を増やさない。文書・生成応答・実動作の証拠を区別し、新しい恒久test・採点・台帳・同期基盤を設けない。
-
-### Memory・Affect方針の検証
-
-責務・能動的読取・Character表現・許可は[WithMate利用guide](docs/guides/withmate.md)、操作入力は現在のMCP／CLI契約と照合する。変更した責務に応じて、関連本文の利用、通常会話と背景の分担、表現と事実の境界、操作ごとの保存結果を確認する。実Memory・Affectへ架空の経験・情動を書き込まず、検証結果や進捗の写しをMemoryへ保存しない。
-
-WithMateに保存済みの背景登録指示は配布物更新では変わらない。[公開仕様](https://github.com/natumekazuki/WithMate/blob/2b1fda1fb268708e849b8da270c74d752209fe3b/docs/releases/v6.5.0-preview.3.md)の標準指示へ切り替える際はSettingsの `Use Preset` と区別し、既存のカスタム指示を無断で置き換えない。
 
 ### 設計判断と文書の更新
 
@@ -188,15 +182,15 @@ Session Graphは同じCrewの起点・通常子孫Main・各MainのAuxiliaryの�
 
 ## 配置と検証
 
-共通ルールの利用時の配置先は、ユーザーhome直下の`~/.codex/`に固定する。このrepositoryを同ディレクトリへcheckoutする配置と、別checkoutから必要なファイルをコピー・linkする配置を区別する。共通指示を導入・更新する際は、`AGENTS.md`だけでなく、`docs/guides/`全体（通常の選定・配置判断を含む`withmate-collaboration.md`も対象）と`docs/architecture/subagent-workspace.md`を`~/.codex/`配下に同じ相対配置で揃える。接続・診断用の`docs/runbooks/withmate-character-context.md`と`docs/runbooks/withmate-repository-glossary.md`も揃える。選定方針・契約経路・Worktree配置はWithMateから読み、端末固有ファイルのコピーを導入条件にしない。AGENTS.mdとhookの共通文書参照は`~/.codex/...`というコード・path表記とし、`~`を実行環境のユーザーhomeへ解決する。作業対象repositoryのcwd、配布元checkout、`CODEX_HOME`による別配置へ参照先を切り替えない。symlink配置でも`~/.codex/`から各参照先へ到達できることを確認する。本README等の通常の相対リンクは配布元の文書閲覧用として残す。実環境の更新は配布元の編集と別の操作であり、無関係な設定を上書きしない。
+共通ルールの利用時の配置先は、ユーザーhome直下の`~/.codex/`に固定する。このrepositoryを同ディレクトリへcheckoutする配置と、別checkoutから必要なファイルをコピー・linkする配置を区別する。共通指示を導入・更新する際は、`AGENTS.md`だけでなく、`docs/guides/`全体（通常の選定・配置判断を含む`withmate-collaboration.md`も対象）と`docs/architecture/subagent-workspace.md`を`~/.codex/`配下に同じ相対配置で揃える。接続・診断用の`docs/runbooks/withmate-repository-glossary.md`も揃える。選定方針・契約経路・Worktree配置はWithMateから読み、端末固有ファイルのコピーを導入条件にしない。AGENTS.mdとhookの共通文書参照は`~/.codex/...`というコード・path表記とし、`~`を実行環境のユーザーhomeへ解決する。作業対象repositoryのcwd、配布元checkout、`CODEX_HOME`による別配置へ参照先を切り替えない。symlink配置でも`~/.codex/`から各参照先へ到達できることを確認する。本README等の通常の相対リンクは配布元の文書閲覧用として残す。実環境の更新は配布元の編集と別の操作であり、無関係な設定を上書きしない。
 
 [公式のAGENTS.md探索](https://developers.openai.com/codex/guides/agents-md/)はglobalとrepository rootからcwdまでの指示を組み合わせる。通常のMarkdownリンクはその本文の自動注入ではなく、配下すべてのAGENTS.mdを読む仕組みでもない。[Skill](https://developers.openai.com/codex/skills/)は名前・説明から選択した後に本文を読む別の仕組みである。履歴を継承しない子へは必要な条件・実path・権限を依頼に含める。
 
 配置後は別repositoryのrootと下位ディレクトリから、読み込まれたAGENTS.mdの実path、`~/.codex/`配下の該当する詳細への到達、対象repositoryの管理先・互換性定義を確認する。`.codex`専用のIssue管理先・リリース契約を他repositoryへ適用しない。参照先が欠けた場合は配置を修復してから該当作業へ進み、同名のrepository内文書や本文のhook全注入で代用しない。
 
-端末への適用時は既存`config.toml`へ設定例の必要sectionだけを反映する。MCP binding、認証、private path、無関係な設定を共有例へ持ち込まず、live全体を上書きしない。WithMateのMemory／Glossary／Session Graph MCPはWithMateがSessionへHTTP接続を自動供給するため、通常は手動登録せず、URL・短命tokenを永続化しない。Memory／Glossaryの手動STDIOは接続runbookの開発・診断用途に限る。`agents/`とregistry例、選択profileを同じCodex homeへ配置する。
+端末への適用時は既存`config.toml`へ設定例の必要sectionだけを反映する。MCP binding、認証、private path、無関係な設定を共有例へ持ち込まず、live全体を上書きしない。WithMateのGlossary／Session Graph／Session MCPはWithMateがSessionへHTTP接続を自動供給するため、通常は手動登録せず、URL・短命tokenを永続化しない。Glossaryの手動STDIOは接続runbookの開発・診断用途に限る。`agents/`とregistry例、選択profileを同じCodex homeへ配置する。
 
 hookは有効な`CODEX_HOME`（未指定ならユーザーhomeの`.codex`）から解決する。`/hooks`でtrustと到達を確認し、inline hooks等との重複を避ける。共通ルールの再通知は`SessionStart`のstartup・resume・compactと`SubagentStart`に限定し、`PreToolUse`の委譲制御は別に維持する。read-only reviewの境界は起動時の依頼で明示する。
-[WithMate利用guide](docs/guides/withmate.md)の読込条件は`AGENTS.md`に従う。通常会話での能動的なMemory読取、背景実行との責務分担、Character Affectの反映、継続的な許可・保存範囲は同文書、利用可能な操作・探索例・呼出契約は現在提供されているMCP instructions・tool説明・schemaに従う。[runbook](docs/runbooks/withmate-character-context.md)はセットアップ・障害調査時に参照する。Glossaryは[導入説明](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを必要時に参照する。通常の許可と対象・revision・個別承認条件を維持する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
+[WithMate利用guide](docs/guides/withmate.md)の読込条件は`AGENTS.md`に従う。対話・Character表現、Graph・Glossaryの利用判断と継続的な許可、folder共有は同文書、呼出契約は現在提供されるMCP instructions・tool説明・schemaに従う。Glossaryの接続・障害調査時は[runbook](docs/runbooks/withmate-repository-glossary.md)とruntime-managed Skillを参照する。生成済みruntimeやplugin状態、実config、認証はGit管理しない。
 
 CIは決定論的な抽出器、parser、Git差分選択、adapterの回帰checkを確認する。LLM reviewは親が通常のread-onlyサブエージェントへ委譲し、モデル実行やsecretを公開CIへ追加しない。
