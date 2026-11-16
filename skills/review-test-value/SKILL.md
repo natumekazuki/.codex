@@ -61,7 +61,7 @@ metadataを使う場合は、既存の`impact`に影響、`distinction`に既存
 - testで検証すべき内容か、type、schema、static、build、smoke、policyなど別のcheckが直接担うべき内容ではないか。
 - 曖昧な主張、循環した期待値、実装詳細を正当化する記述がないか。
 
-test sourceやproduction codeからmetadataに書かれていない意味を補完しない。oracleの参照先が入力されていない場合、その存在や妥当性を確認済みと扱わない。
+test sourceやproduction codeからmetadataに書かれていない意味を補完しない。oracleは[根拠参照の基準](references/comment-format-v2.md#oracleの根拠参照)に従って該当箇所を辿り、claimを裏付けるか確認する。参照先を取得できない場合は不足を示し、存在や妥当性を確認済みと扱わない。
 
 ### metadataとtest本文
 

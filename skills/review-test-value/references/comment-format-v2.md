@@ -37,6 +37,12 @@ def test_retry_preserves_charge_count():
 
 `expires_on`は`YYYY-MM-DD`形式の日付とする。未知field、不正型、未知enumを補正しない。抽出器はsourceとmetadataの構文・schema・対応付けを検証し、意味上の価値や保持方針はreviewerへ委ねる。
 
+## oracleの根拠参照
+
+`ref`は期待値を裏付ける仕様・契約・資料を、第三者が辿れる形で示す。「ユーザー依頼」「合意済み」等の会話上の説明だけで代用せず、要求ID等を使う場合も正本へ解決できるようにする。根拠が見つからない場合は不足を明示して確認し、参照先や判断理由を作らない。
+
+文書を参照する場合はpathまたはURLに加え、claimの根拠となる見出し・anchor・節番号を優先して示す。適切な見出しがなければ行番号等で箇所を特定し、見出しが広すぎる場合も補足する。例は `docs/contracts/payment.md: 「再送時の請求」`。複数箇所が必要ならそれぞれ示し、参照先の変更で位置がずれた場合は更新する。文字列の構文検証と、参照先の実在・該当記述・claimの裏付けの確認は区別する。
+
 ## v1 metadata
 
 既存sourceを読むため、抽出器はv1 markerも認識し、選択されたv1には`TEST_VALUE_V2_REQUIRED` diagnosticを返す。v1の`failure_mode`を推測でv2 fieldへ分割しない。現在のtestをreviewへ渡す前に、必要な`fault`、`observable`、`observation_boundary`を人が確認してv2へ移行する。
