@@ -9,12 +9,12 @@ description: Python、TypeScript、C#の変更testをGit差分から決定論的
 
 ## Workflow
 
-1. repository instructionとtask開始時のbase commitを確認する。
+1. repository instructionとtask開始時のbase commitを確認する。script・referenceはruntimeが通知した本Skillのroot directoryから解決し、作業対象repositoryのcwdから探さない。以下の例の`$reviewSkillRoot`には、そのdirectoryの絶対pathを設定する。`SKILL.md`のfile pathが通知された場合は、その親directoryを使う。
 2. 対象言語の宣言範囲と対応形式を[Source Adapters](references/source-adapters-v1.md)で確認する。コメント形式を追加・修正する場合は[Test Value Comment](references/comment-format-v2.md)を読む。
 3. 新規・意味変更・削除・移設されたtestは、baseから対象snapshotまでのGit差分で抽出する。対象pathやline rangeを手で選ばない。Python、TypeScript、C#は言語ごとに呼び出す。
 
 ```powershell
-python -X utf8 skills/review-test-value/scripts/extract_test_values.py `
+python -X utf8 "$reviewSkillRoot/scripts/extract_test_values.py" `
   --root <repository-root> `
   --changed-from <task-base-commit> `
   --language python
@@ -101,14 +101,13 @@ reviewerはtest sourceからproduction code、fixture、helper、mock、oracle�
 抽出器、parser、Git選択を変更した場合は、Pythonと多言語の決定論的回帰testを実行する。
 
 ```powershell
-python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values.py
-python -X utf8 -m unittest skills/review-test-value/scripts/test_extract_test_values_multilang.py
-python -X utf8 -m py_compile skills/review-test-value/scripts/extract_test_values.py
-python -X utf8 -m py_compile skills/review-test-value/scripts/git_diff_selection.py
+python -X utf8 -m unittest discover -s "$reviewSkillRoot/scripts" -p "test_extract_test_values*.py"
+python -X utf8 -m py_compile "$reviewSkillRoot/scripts/extract_test_values.py"
+python -X utf8 -m py_compile "$reviewSkillRoot/scripts/git_diff_selection.py"
 ```
 
 Skillのfrontmatter、相対参照、未完了placeholderを確認する場合は、skill-creatorが提供するvalidatorを実行する。
 
 ```powershell
-python -X utf8 <skill-creator>/scripts/quick_validate.py skills/review-test-value
+python -X utf8 <skill-creator>/scripts/quick_validate.py "$reviewSkillRoot"
 ```
