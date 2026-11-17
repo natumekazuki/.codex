@@ -45,7 +45,7 @@ Git管理下の通常子には専用Worktreeを割り当てる。同じrepositor
 
 ## Git worktreeの配置
 
-commit固定は具体的な隔離・再現の必要に応じて使い、全reviewへ一律には要求しない。Worktreeを必須としないのは、必須ルールの対象外であるAuxiliaryとnativeサブエージェントの分業に限り、通常Main Sessionの作業領域は[子の作業領域と親の準備](#子の作業領域と親の準備)の専用Worktreeを保つ。ここでは独自のroot・分類・layoutやpath組み立てを定義しない。
+commit固定は具体的な隔離・再現の必要に応じて使い、全reviewへ一律には要求しない。Git管理下の通常子Sessionには、reviewを含めて専用Worktreeを割り当てる。Auxiliaryとnativeサブエージェントでは、具体的な隔離・再現の必要に応じてWorktreeを使う。非Gitの場合は[非Gitの作業領域](#非gitの作業領域)に従う。ここでは独自のroot・分類・layoutやpath組み立てを定義しない。
 
 親が、登録先の実体とbranch、分岐元のbranch・commit、作成先の占有、未コミット変更を確認し、必要なGit操作を行う。返された既存Worktreeは他Sessionの占有を確認してから割り当て、無条件に共有しない。forceで同じbranchを複数checkoutしない。配置候補の取得を作成済み・利用可能の証拠とせず、準備した実体の絶対pathを子のWorkspaceへ渡す。既存worktreeの移設・削除や他者の作業領域の上書きは、この準備の許可に含めない。
 
