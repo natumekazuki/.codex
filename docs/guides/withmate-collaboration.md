@@ -22,78 +22,70 @@ Roleは担当と判断・返却先を定めるものであり、社会的な上�
 
 ## 担当の選択と依頼
 
-Sessionの作成・再利用、委譲、担当選定、指示・修正依頼・再開はユーザーに可否を尋ねず自律して行い、作成だけを提案して待たない。ユーザーの明示指定には従う。委譲の判断と、未合意の仕様や外部write等に必要な承認は別であり、委譲によって操作権限を広げない。
+相談には比較・推奨・次の行動案を返し、実行依頼には担当選定、Sessionの作成・再利用、配送・修正依頼・再開を行う。意図・対象・到達点と権限が揃う範囲は追加の開始合図を待たない。質問後も合意済み・権限内の独立作業を継続し、実際に未合意判断や追加承認へ依存する部分だけ保留する。相談・委譲を操作権限の拡大へ読み替えない。
 
-全体統括・個別統括は目的と制約の整理、分担、優先順位・依存関係の管理、受入判断・統合を主に担う。実装や文書・設定の編集、まとまった調査、test・build・lintの実行と失敗分析、詳細reviewは担当へ委譲する。実装Worker自身の検証を基本とし、独立・横断検証が必要な場合に検証担当を使う。コマンドごとに新しいWorkerを作る必要はない。
+全体統括はユーザーが相談できる時間を確保するため、目的・合意・優先順位・担当・受入判断を持ち、成果を作る実作業はWithMateの通常子へ委譲する。直接行うのは対話・統括、その場の判断に必要な最小限の参照・共有記録・配送と、子の作業領域の準備・回収に限る。作業の短さを理由に実作業を抱えたり、native子への直接委譲へ振り替えたりしない。
 
-統括も短い参照・差分・証拠の確認、記録、小さな統合調整、子の作業領域の準備・回収は直接行える。領域の準備・回収だけを目的にWorkerを立てない。確認を名目に全体を再調査したり、Workerの所有fileを無断で編集したり、長時間の実作業を抱え込んだりしない。分業不要な単発の応答等は直接行えるが、これを実作業全体を抱える理由にしない。
+個別統括は分担・受入・修正依頼・統合を担い、実作業は担当へ委譲する。短い参照・差分・証拠の確認、記録、小さな統合調整と子の作業領域の準備・回収は行えるが、Worker所有fileの無断編集や全体の再調査を抱えない。領域の準備・回収だけを目的にWorkerを立てない。実装Worker自身の検証を基本とし、独立・横断検証が必要な場合に検証担当を使う。
 
-[委譲の使い分け](../architecture/subagent-workspace.md)に従い、親が担当者から直接成果を受け取るならWorker、一つの成果について配下への分担・修正依頼・受入・統合まで任せるなら個別統括を選ぶ。難しい単独調査という理由だけで個別統括にしない。作成可能なRoleはruntimeの自分の権限に従う。
+親が担当から直接成果を受け取るならWorker、配下への分担・修正依頼・受入・統合まで任せるなら個別統括を選ぶ。難しい単独調査だけでは個別統括にしない。nativeとの使い分けは[委譲guide](../architecture/subagent-workspace.md)に従う。
 
 子の作成前に、以下の方針取得・選定と、子の専用作業領域の準備を行う。起動する直接の親が、起動前にその子の専用領域を作成・確認して絶対pathを渡す。全体統括は自身が起動する子の分を、個別統括は自身のWorkerの分を準備し、準備に失敗したら子の起動を保留して親のWorkspaceを代用しない。子を親のWorkspaceで起動して自己準備させない。領域の専有・配置・再利用と回収の契約は[委譲と作業領域](../architecture/subagent-workspace.md)に従う。許可済みのapproval／sandbox条件を明示し、選定や作成を権限拡大の理由にしない。WithMateはworktreeの作成・統合を代行しない。
 
-依頼・追加指示は、受け取った意図を整理し、達成したい目的、担当範囲・編集所有、期待成果と完了条件、今回固有の制約・権限を親自身の言葉で伝える。ユーザー発言の転載や言い換えだけで依頼を済ませない。必要な承認は出所と操作・対象・範囲を保って伝え、親独自の権限に置き換えない。原文を扱う作業では依頼と資料を分け、コード・ログ・指定文言など正確さが必要な資料は改変しない。共通ルールで決まる読込・審査・禁止事項・相談や報告の手順は再掲せず、受け手が辿れる入口を示す。実行設定はAPIの所定引数へ渡し、本文では作業判断に必要な差分だけを補足する。
+依頼・追加指示は共通AGENTS.mdの委譲原則に従い、受け取った意図を整理し、目的・担当範囲・必要な成果・契約・権限を親自身の言葉で伝える。ユーザー発言の転載や言い換えだけで依頼を済ませない。必要な承認は出所と操作・対象・範囲を保って伝え、親独自の権限に置き換えない。原文を扱う作業では依頼と資料を分け、コード・ログ・指定文言など正確さが必要な資料は改変しない。
 
-子が親のProvider contextや既読資料を継承すると仮定せず、必要なIssue・仕様・親とユーザーの発言・Turn・Crew Graphの決定へ参照を渡す。参照できない情報や今回誤解しやすい条件は本文で補い、短文化のために落とさない。並行作業では共有物の所有と他者の変更保護を伝える。担当内の進め方は受け手に任せ、共通手順の再説明や参照先の全項目列挙を依頼の定型にしない。
+編集所有・完了条件と今回固有の制約を補う。親のcontext継承を仮定せず、必要な仕様・発言・Turn・Graph決定へ参照を渡し、参照不能な情報や誤解しやすい条件は本文で補う。並行作業の所有と他者変更の保護を伝え、担当内の進め方は任せる。共通手順の全文再掲はせず、辿れる入口を示す。実行設定はAPIの所定引数へ渡す。
 
-同じ担当範囲の追加依頼・修正は、正確なidentityと継続可能な状態を確認した既存Sessionを再利用する。別の成果・担当として追う必要がある場合は分ける。Character名だけで相手を選び直したり、待ち時間・新Turnという理由だけで同じ仕事を二重に委譲したりしない。既存SessionのProviderは固定であり、次の依頼のModel・Depth等を選び直す場合は以下の方針を使う。
+同じ成果の続き・修正・受入対応には、正確なidentityと継続可能な状態を確認した既存Sessionを再利用する。別の目的・成果・独立した責任を持つ仕事は新規Sessionを基本とする。同じfile・Role・Characterや待ち時間だけで継続・交代・重複委譲を決めない。作成前に以下の選定とWorkspace準備を行う。
 
 ## 実行条件の選定
 
-子の新規作成時と、既存子への次の依頼で実行条件を選び直す時に、`session.get_selection_policy` で端末の選定基準・実行設定の目安・契約経路を読む。`policy: null` は未設定であり、今回の明示指示と確認できた利用条件で決まる範囲を進め、結果を左右する不足だけ確認する。取得失敗を未設定に読み替えず、旧ローカルファイルや推測から方針を補完・登録しない。
+子の作成時と実行条件の再選定時は `session.get_selection_policy` を読み、宛先Provider・Workspaceの `session.get_catalog` と照合する。保存方針の基準・実行目安・契約経路の優先順を、必要な成果・判断・検証方法に照らして選ぶ。同じ成果を満たす候補では利用枠と手戻りも考慮する。Depthは不確実性・判断の重さ・完了条件に応じて対応範囲内で選び、Role・作業の短さ・Model名だけで固定しない。同名DepthをModel間の能力・消費量の等価値としない。native子の選定・制限は[委譲guide](../architecture/subagent-workspace.md#nativeサブエージェント)に従う。
 
-方針の `selectionCriteria`・`executionGuidelines` と `contractRoutes` の優先順・条件を、作業の性質と期待成果に照らして使う。定型処理、視覚・文章、広い調査・実装、難しい判断等に必要な能力と確認方法から選び、Role・作業の短さ・Model名だけで固定しない。同じ成果を満たす候補では消費枠や手戻りも考慮する。方針は判断材料であり、利用可能性や操作許可そのものではない。
+既存SessionのProviderは固定であり、宛先の現在の候補・対応Depth・承認・sandbox・Reviewerを使う。OpenCodeではWithMateのProviderとnative配信経路を分け、catalogの完全model IDをそのまま使う。別Workspaceのcacheやmodel名から対応値を推測せず、入力値は現在の提供契約で確認する。
 
-実際に準備した子のWorkspaceと宛先Providerを指定して `session.get_catalog` を読み、Model Availabilityを含む現在の候補・対応Depth・approval／sandboxの選択肢と照合する。既存子なら、そのSessionのProviderとWorkspaceを使う。候補一覧をルールへ転記せず、別Workspaceのcache、公式の発売情報、native roleの一覧を代用しない。
+利用枠が選択を左右する場合だけ `session.get_provider_quota` を読み、契約経路、取得状態、最終成功日時を確認する。別経路の値や古い・不明な値から利用可能・無料とは判断しない。保存方針・catalogは判断材料であり、利用・課金・操作の許可ではない。
 
-- 契約枠とAPI従量、OpenCodeのnative配信経路を区別する。方針の `nativeProviderId`・native側の `modelId` がある場合、OpenCodeでは `<nativeProviderId>/<modelId>` をカタログの完全IDと照合する。WithMate Providerは `opencode` のままであり、variantをmodel IDへ付加しない。
-- Depthは依頼の不確実性・判断の重さ・完了条件から対応範囲内で選ぶ。対応Depthが空ならDepthなし。未指定の空文字列と、候補にある文字列 `none` を区別し、未対応の `medium` 等を補わない。同名DepthをModel間の能力・消費の等価値としない。
-- 利用枠が選択を左右する場合だけ `session.get_provider_quota` を読む。対象枠、取得状態、最終成功日時、値の新しさを確認する。未観測・古い成功値・エラー・未対応を、残量十分・無制限・無料へ読み替えない。OpenCode Goの観測を登録OpenAI API等の別経路へ流用せず、Model名のFree表記や候補への掲載を利用許可の根拠にしない。
+未設定と取得失敗を分け、明示指示と確認済み条件で進められる範囲は進める。選定を左右する不足だけ確認し、旧資料や推測から方針を登録しない。未合意のProvider・課金経路・権限への変更や、通常依頼・今回限りの選択を根拠にした恒久設定の変更は行わない。
 
-選定した実値は作成・送信時の現在の契約に従って渡す。既存子への `enqueue` で選ぶ実行条件は次のTurnにだけ適用され、`steer` は実行中の設定を保つ。未合意のProvider・課金経路へ黙って切り替えたり、認証・課金・Extra Usageを変更したりしない。nativeサブエージェントのrole・Model・tool制限は[委譲guide](../architecture/subagent-workspace.md#nativeサブエージェント)のままとする。
-
-Approvalだけでなく、Reviewerを含む対応状況と作成・送信結果の実値を確認する。`on-request` だけでAutoReviewと判断しない。選択できない条件を指定できるものと扱わず、端末の保存方針とruntime契約に従って選ぶ。調査でもGraph更新・相談・報告などのMCP書込みを含むため、対象ファイルを編集しないこととSession全体が読み取り専用であることを混同しない。ファイルsandboxとMCP操作の承認は分け、承認方式を依頼範囲や操作権限の拡大に使わない。
+作成・送信時の契約と結果の実値を確認する。対象ファイルのread-only、MCP操作の権限、承認方式は分けて扱い、選定を権限拡大の理由にしない。設定の適用時点・対応機能・引数は現在のMCP説明・schemaに従う。
 
 ## 通常送信と実行中の補足
 
-通常の追加依頼・報告は `session.enqueue`、実行中の同じTurnへの訂正・補足は対応する `session.steer` を選ぶ。[親子連携サンプルの送信契約](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/docs/features/parent-child-session-rules.md#L17-L65)と現在のschemaで引数を確認する。
+通常の追加依頼・報告は `session.enqueue`、実行中の同じTurnへの訂正・補足は `session.steer` を使う。宛先の正確なSession・incarnationと、実行条件を選ぶ場合は宛先Provider・Workspaceのcatalogを確認する。送信方向ごとの必須入力・省略時の設定は現在のMCP説明・schemaに従う。
 
-| 通常送信の方向 | Model・Depth | 承認・Sandbox |
-| --- | --- | --- |
-| 親 → 直属子 | 毎回 `model` と `reasoningEffort` を明示する。Depth非対応Modelは空文字列 | 両方向とも `approvalMode` は必須。Codex宛だけ `codexSandboxMode` も必須で、他Providerへは渡さない |
-| 直属子 → 親 | 各項目をそれぞれ省略でき、省略した項目は受付時の親の保存値を使う。明示する場合も実効Model・Depthの組合せを宛先catalogと照合する | 同上 |
+Steerは直属親から通常のCodex子へ使い、`session.get` のWithMate `currentTurn.turnId` で対象を固定する。Provider nativeのTurn IDを代用せず、実行中の設定・権限を変えない。補足の受理と作業完了は別であり、結果不明なら対象Turnの保存入力で確認する。無条件の再送や別Turn・通常送信への切替をしない。
 
-通常送信では宛先のProvider・Workspaceを `session.get`／`session.list` で確認し、その宛先の `session.get_catalog` を使う。追加依頼は次Turnへの通常送信、完了報告は[保存後配送の基準](#明示報告turn終了親の受入)に従う。
-
-Steerは直属親から通常のCodex子へだけ使う。`session.get` で確認した正確なtargetとWithMateの `currentTurn.turnId`、補足本文を渡し、Provider nativeのTurn IDを代用しない。Model・Depth・権限は実行中Turnから引き継ぎ、指定・変更しない。`applied` は補足の受理であって作業完了ではない。`not-applied` は未送信、`effect: unknown` は配送結果不明として扱い、自動再送や別Turn・通常送信への自動切替をしない。必要なら同じTurnの `session.list_execution_inputs`／`session.get_execution_input` で確認する。
+完了報告は[保存後配送の基準](#明示報告turn終了親の受入)に従う。
 
 ## Worktreeの配置先
 
-Worktreeを用意する前に、対象repository・branchの既存Worktreeを確認し、利用可能なら再利用する。同じrepository・branchの登録先と利用可能な状態を確認済みで、その後に変更を疑う事情がなければ再照会・再確認は省略できる。パスを知っているだけでは確認済みとしない。未確認または状態が変わった場合は、対象repositoryのWorkspaceと文字どおりのbranch名を指定して `session.resolve_worktree` を読み、以下の結果に応じて確認する。既存がなければ配置先を解決して作成する。別worktreeからでも同じrepositoryの登録とルールを使う。root・分類・リポジトリ名・branch名をAgent側で連結せず、カスタムlayoutや複数階層分類を含め、返された `destinationPath` を使う。
+Worktreeの準備では、対象repository・branchを `session.resolve_worktree` で解決し、利用可能な既存登録を優先する。返された配置先を使い、独自にpathを組み立てない。既存Worktreeは他Sessionの占有を確認してから割り当て、無条件に共有しない。確認済みの実体・branch・利用可能状態は、変化を疑う事情がなければ再利用できる。
 
-| 結果 | 親が行う判断 |
-| --- | --- |
-| `existing` | 登録先の実体・対象branch・利用可能状態を確認して使う。同じbranchの既存登録が単発の作成先指定より優先される。他Sessionの占有を確認してから割り当て、返された既存Worktreeを他Sessionと無条件に共有しない。別の場所へ作り直したり、移設したりしない |
-| `planned` | まだ候補であり、存在・空きの保証ではない。親が分岐元・branchやpathの占有・未コミット変更を確認し、許可範囲でGit worktreeを準備する |
-| `unconfigured` | `missing` が示す不足のうち、配置判断に必要なことを確認する。恒久登録を作業の前提にせず、今回だけの絶対配置先が明示された場合は単発指定で照会できる |
+配置候補は作成済み・利用可能の証拠ではない。実際のGit操作は[委譲guide](../architecture/subagent-workspace.md#git-worktreeの配置)に従い、分岐元、占有、未コミット変更と必要な権限を確認して準備する。WithMateは作成・統合を代行しない。
 
-今回だけの配置先は `destinationPath` として照会し、新規候補にだけ適用する。保存方針を変えず、既存登録を上書きしない。SessionFolder・Crew Folderを代替先にしない。Git操作、作成後の実体確認、子へ渡す絶対Workspaceは[委譲guide](../architecture/subagent-workspace.md#git-worktreeの配置)に従う。領域の再利用と回収、Git管理外の作業の専用領域は[委譲と作業領域](../architecture/subagent-workspace.md#作業領域の再利用と回収)に従う。
+未設定なら配置判断に必要な不足だけ確認し、恒久登録を前提にしない。今回限りの指定は新規候補にだけ適用し、保存方針・既存登録を変更しない。SessionFolder・Crew Folderを代替先にせず、準備の許可を既存領域の移設・削除・上書きへ広げない。領域の再利用と回収、Git管理外の作業の専用領域は[委譲と作業領域](../architecture/subagent-workspace.md#作業領域の再利用と回収)に従う。
 
-選定方針・Worktree配置の登録・更新・解除は、ユーザーが恒久設定の変更を指示した時に限る。通常の依頼、評価結果、「今回だけDepthを上げる」「このbranchだけ別の場所に作る」から設定を変更しない。旧ファイルの自動移行や、外部のProviderルールファイルの書換えも行わない。取得・設定の操作契約は[WithMateの選定方針と配置](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/docs/features/session-operating-policies.md)と現在のMCP／bound CLIのschemaを正本とする。
+追加writeが必要なら、通常の承認経路で必要最小限の範囲を求める。既存親への許可は配下への影響を確認し、共用の広い範囲より専用の狭い範囲を優先する。許可返却後も拒否された場合は対象・実行条件・結果を示して相談し、無断で権限を広げない。
+
+保存方針の登録・更新・解除はユーザーが恒久変更を指示した時に限る。旧ファイルの自動移行や外部Providerのルールファイル書換えを行わない。状態値・引数の契約は現在のMCP説明・schemaに従う。
 
 ## 子が背景と判断範囲を確かめる
 
 着手時に「ユーザーが実現したいこと」「既に合意した判断」「今回任された判断」を確認する。依頼元の正確なSession・送信Turnを手掛かりに、Crew Graphの関連決定と、必要な親・ユーザーの発言を `session.list_messages`／`session.get_message` 等で読む。依頼文の参照を起点に、目的と判断根拠を説明できるところで切り上げる。全履歴の通読や確認結果の毎回報告は要求しない。
 
-記録から決まることは担当範囲で判断する。例えば「Monitorは気づく場所、個々の操作はSession内」という合意があれば、回答ボタンをMonitorへも置くかは聞き直さない。一方、Monitorに相談本文の要旨まで出すかが成果を左右し、記録では決まらなければ、その問いだけを根拠とともに直属の親へ相談する。過去の発言は背景であり、今回の範囲・操作権限を広げない。
+記録から決まることは担当範囲で判断し、成果を左右する未決事項だけを根拠とともに直属の親へ相談する。過去の発言を今回の範囲・操作権限の拡大に使わない。
 
 ## Coordinationによる相談と再開
 
+- ユーザーの回答が必要な質問は、通常の会話本文だけで済ませず、Coordinationのユーザー回答待ちとして起票する。既存の相談でユーザーの判断が必要になった場合は、回答担当が元の相談をエスカレーションする。質問と根拠、回答まで保留する範囲を伝え、独立した作業は進める。回答待ちとなる種別は現在のruntime契約で確認し、起票・配送の結果不明を成功扱いしない。
+- Coordinationを利用できない、または操作が未実行と確定した場合は、実行環境の契約が許す範囲でProviderの質問機能（Codexの`request_user_input`、Claude Codeの`AskUserQuestion`、OpenCodeの`question`）を使う。操作結果が不明なら同じ操作の結果を確認し、重複する質問を起票しない。それも使えない場合は、その状態と質問を会話で伝える。Providerや実行環境が要求する操作承認は専用の経路に従い、質問機能で代替しない。
 - 親の判断が必要な子は、確認した根拠・残った問い・依存する作業をまとめ、`session.coordination_create` に `deliver: true` を指定する。配送先は保存された実呼出元であり、任意の相手やCharacter名を代入しない。起票だけ済んだ場合は、同じ相談を `session.coordination_deliver` で届ける。回答不要の記録は起票だけでよい。
 - 配送後は独立した作業を進め、なければTurnを終了する。親がidleでもrunningでも同じ配送経路を使う。親の次の通常Turnで扱われるため、待ち時間だけを理由に再送・Steer・ユーザーへのエスカレーション・待機pollingをしない。
-- 回答を担当する親は、自分に委ねられた範囲なら `session.coordination_answer` で起票元へ送る（`send: true` が既定）。ユーザーの選択・承認が必要なら、残る判断と理由を添え `session.coordination_escalate` で引き継ぐ。単に忙しいことは引継ぎ理由にしない。
+- 回答を担当する親は、自分に委ねられた範囲なら `session.coordination_answer` で起票元へ送る。ユーザーの選択・承認が必要なら、残る判断と理由を添え `session.coordination_escalate` で引き継ぐ。単に忙しいことは引継ぎ理由にしない。
 - 個別統括がさらに自分の親の判断を必要とする場合は、以下の三階層の例に従い通常送信で判断を求め、元の相談へ回答する。ユーザー向けのescalateを、任意のAgentへ転送する操作として使わない。
-- 回答で再開した子は、相談IDから元の問い・依頼・現在の回答を確認し、保留していた同じ作業を再開する。追加指示と相談への回答を区別し、別件として最初から始め直さない。回答の取得・使用・相談の解消はruntimeが区別する状態として扱い、実際に使用・解消した場合に対応する操作を行う。
+- 回答で再開した起票元は、相談IDから元の問い・依頼・現在の回答を確認し、保留していた同じ作業を再開する。追加指示と相談への回答を区別し、別件として最初から始め直さない。回答の取得・使用・相談の解消はruntimeが区別する状態として扱い、実際に使用した場合は対応する操作を行い、相談が解消した場合は`session.coordination_resolve`する。
+- 通常会話で回答を受けた場合も、該当する相談と内容を照合し、起票元は実際に解消した相談を`session.coordination_resolve`する。起票元以外が回答を受けた場合は、現在のSession間送信契約に従い、対象と回答の参照を起票元へ届ける。対象が不明な相談や未解決の相談は閉じず、通常メッセージをCoordinationの回答として記録・配送したことにしない。
 
 ### 三階層の相談例と取り下げ
 
@@ -106,9 +98,11 @@ Worktreeを用意する前に、対象repository・branchの既存Worktreeを確
 
 ## 明示報告、Turn終了、親の受入
 
-子は一区切りで、実際の直接親へSession APIの `session.enqueue` で結論、成果の参照、実施した確認と結果、未完了・必要な判断を明示報告する。自分の最終応答が自動転送されると仮定しない。
+依頼が未完了なら、[担当の選択と依頼](#担当の選択と依頼)に従って続行する。判断が必要な部分は[Coordination](#coordinationによる相談と再開)で相談する。
 
-親が自分のTurnの保存結果を参照する最終報告は `deliveryTiming: "after_source_turn"` を選び、受付を確認したら親の処理を待たずTurnを終了する。途中相談・進捗は `immediate` または即時のCoordination経路を使う。親も独立作業がなければTurnを終え、報告を受けた後続Turnで再開する。sleepや状態照会の反復でTurnを維持しない。
+子は一区切りで、実際の直接親へSession APIの `session.enqueue` で結論、決定・未決と必要な判断、成果・検証の根拠参照、マイルストーンへの影響を明示報告する。依頼元への返信は、指定の送信操作で届ける。送信後は同じ内容の最終報告を自分のSessionに重ねない。必要な開始・途中共有や失敗・結果不明の説明と、上位の応答契約は維持する。親への全作業ログの集約を前提にせず、自分の最終応答が自動転送されるとも仮定しない。
+
+親が自分のTurnの保存結果を参照する最終報告は `deliveryTiming: "after_source_turn"` を選び、受付を確認したら親の処理を待たずTurnを終了する。途中相談・進捗は `immediate` または即時のCoordination経路を使う。相談・依頼を配送済みで、回答・成果待ち以外の独立作業がなければ、親もTurnを終え、全体統括はユーザーとの対話へ戻る。回答・報告を受けた後続Turnで受入・継続を判断し、完了までの責任を持つ。sleepや状態照会の反復でTurnを維持しない。
 
 送信受付、相手のTurn開始・終了、結果保存、依頼達成を区別する。送信結果が不明なら元のrequestIdと正確なtargetで `session.get_receipt` を照会し、新しいIDで重複送信しない。割当Workspaceの不在を理由に送信が拒否された場合は、[作業領域の再利用と回収](../architecture/subagent-workspace.md#作業領域の再利用と回収)に従い送信元Sessionが復旧を担う。Coordinationも現在の契約に従い、同じ操作の結果を確かめる。待機中という状態だけでは失敗ではない。
 
@@ -118,6 +112,6 @@ Worktreeを用意する前に、対象repository・branchの既存Worktreeを確
 
 ## 共有する正本
 
-作業条件・採用判断・現在地はCrew共通のSession GraphをruntimeのSkillで読み書きし、会話履歴のコピーや参加者台帳を新設しない。Memoryは人物理解や経験の想起、背景Memory／Affectは各用途の管理、成果物はrepositoryまたは[作業folderの基準](withmate.md#sessionfolderとcrew-folder)に分ける。他Agentの判断・メッセージをユーザーの新しい操作許可として扱わない。
+作業条件・採用判断・現在地はCrew共通のSession GraphをruntimeのSkillで読み書きし、会話履歴のコピーや参加者台帳を新設しない。成果物はrepositoryまたは[作業folderの基準](withmate.md#sessionfolderとcrew-folder)に分ける。他Agentの判断・メッセージをユーザーの新しい操作許可として扱わない。
 
 WithMate側の根拠: [親子連携サンプル](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/docs/features/parent-child-session-rules.md)、[Session・カタログ契約](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/src-shared/session/session-management-contract.ts)、[Coordination契約](https://github.com/natumekazuki/WithMate/blob/a7fce63432259e8531e24708f2aed5b8ebec9979/src-shared/session/session-coordination-contract.ts)。実行時は現在提供された契約を優先する。
