@@ -20,10 +20,10 @@ native子の使用modelは以下の4つのみ。設定値と採用理由は[READ
 
 | model／汎用role | 選ぶ仕事 |
 | --- | --- |
-| `gpt-6.1-sol`／`general_sol` | 通常の親・一般childの既定。広い文脈や未解決の判断を含む調査・設計・実装・debug・review |
+| `gpt-6.2-sol`／`general_sol` | 通常の親・一般childの既定。広い文脈や未解決の判断を含む調査・設計・実装・debug・review |
 | `gpt-6-luna`／`general_luna` | 進め方・期待結果がほぼ決まった抽出・定型調査・設計済み実装・基準照合 |
 | `gpt-6.1-terra`／`general_terra` | 明確な入力・要求・検証方法を持つ画像・画面読解、実描画確認、素材に基づく文章、局所修正 |
-| `gpt-6-astra`／`general_astra` | 非Astra親から、高度な設計選択・契約矛盾・難しい反例を必要な問題に絞って渡す。Astra→Astraは禁止 |
+| `gpt-6.2-astra`／`general_astra` | 非Astra親から、高度な設計選択・契約矛盾・難しい反例を必要な問題に絞って渡す。Astra→Astraは禁止 |
 
 必要な成果・判断・完了条件から選び、短さや単価だけで決めない。上位modelの前に下位modelの試行や事前診断を義務化せず、定型処理へ未解決の設計・安全判断を押し込まない。専門審査は該当Skillに従う。
 

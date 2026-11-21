@@ -1,7 +1,7 @@
 # Portable Codex user config example.
 # Keep the real config.toml local. Copy only the sections you want to merge.
 
-model = "gpt-6.1-sol"
+model = "gpt-6.2-sol"
 model_reasoning_effort = "medium"
 service_tier = "default"
 personality = "pragmatic"
@@ -42,7 +42,7 @@ global = "fileManager"
 [agents]
 max_concurrent_threads_per_session = 24
 max_depth = 1
-default_subagent_model = "gpt-6.1-sol"
+default_subagent_model = "gpt-6.2-sol"
 default_subagent_reasoning_effort = "medium"
 
 # WithMate supplies Glossary, Session Graph, and Session HTTP MCP connections per Session.

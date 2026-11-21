@@ -2,7 +2,7 @@
 
 本書は`natumekazuki/.codex`の配布資産、保守、配置の案内である。各repositoryでCodexが従う共通ルールの入口は`AGENTS.md`、作業別の本文は`docs/guides/`等の明示された参照先に置く。本書の配布元固有の管理先・リリース境界・検証手順を、他repositoryの作業ルールとして適用しない。
 
-Codex nativeの配布設定ではGPT-6.1 Solを基本に使い、手順・期待結果がほぼ決まっている作業はLuna、明確な入力・完了条件を持つ視覚・文章・局所修正はTerra、高度な判断が要求される作業はAstraを選ぶ。WithMate通常子の実行条件は下記の端末方針と実カタログから選ぶ。一般の仕事の進め方はモデルへ任せる。追加の共通ルールは責務に基づく既存実装の削減と過剰追加の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
+Codex nativeの配布設定ではGPT-6.2 Solを基本に使い、手順・期待結果がほぼ決まっている作業はLuna、明確な入力・完了条件を持つ視覚・文章・局所修正はTerra、高度な判断が要求される作業はAstraを選ぶ。WithMate通常子の実行条件は下記の端末方針と実カタログから選ぶ。一般の仕事の進め方はモデルへ任せる。追加の共通ルールは責務に基づく既存実装の削減と過剰追加の抑制、統合優先・修正分離、変更testの価値確認、ユーザー向けUIの設計品質を中心にする。ユーザー変更の保護、操作範囲、承認条件、必要な安全動作は維持する。
 
 このcheckoutの`review-test-value`は、Git差分から変更testを抽出し、通常のread-onlyサブエージェントへreviewを委譲するSkillである。抽出器の成功、全recordのreview、各指摘の採否・対応時期を確認する。review完了と全件修正は分け、後追いの基準を満たす残件だけを引き継ぐ。
 
@@ -79,20 +79,20 @@ V7の実利用確認は、実配置した全体統括へAPI名・具体値を提
 
 ## modelとrole
 
-本repositoryのCodex native設定例・role定義は`gpt-6.1-sol`、`gpt-6-luna`、`gpt-6.1-terra`、`gpt-6-astra`で構成する。この節は配布設定と採用理由の説明であり、作業時の委譲基準は[委譲と作業領域](docs/architecture/subagent-workspace.md)が正本である。
+本repositoryのCodex native設定例・role定義は`gpt-6.2-sol`、`gpt-6-luna`、`gpt-6.1-terra`、`gpt-6.2-astra`で構成する。この節は配布設定と採用理由の説明であり、作業時の委譲基準は[委譲と作業領域](docs/architecture/subagent-workspace.md)が正本である。
 
 ### 公式情報と運用判断
 
-OpenAI公式の[model選択](https://learn.chatgpt.com/docs/models#recommended-models)では、Solを複雑で長い作業、Lunaを明確で反復可能な作業、Terraを文章・視覚・computer use、Astraを最難関の作業に位置づける。[Terraの選択案内](https://learn.chatgpt.com/docs/model-selection#when-to-consider-gpt-61-terra)は、明確な入力・要求・検証方法を持つ局所的なcode修正も候補に含める。以下はこのrepositoryでの運用判断であり、各用途での優位を実測したものではない。
+OpenAI公式の[model選択](https://learn.chatgpt.com/docs/models#recommended-models)では、GPT-6.2 Solを日常的な開発・文章作成・複数の情報源を扱う作業、GPT-6.2 Astraをコード・アプリ・調査にわたる難度の高い作業に推奨する。Lunaは焦点の定まった反復作業、Terraは文章・視覚・computer useに位置づけられる。[Terraの選択案内](https://learn.chatgpt.com/docs/model-selection#when-to-consider-gpt-61-terra)は、明確な入力・要求・検証方法を持つ局所的なcode修正も候補に含める。
 
-本repositoryは次の担当分けを採用する。taskの短さやtoken単価だけで決めず、必要な成果・判断と完了条件から直接選ぶ。
+次の担当分けは本repositoryの運用判断であり、各用途での優位を実測したものではない。taskの短さやtoken単価だけで決めず、必要な成果・判断と完了条件から直接選ぶ。
 
 | model | このrepositoryでの担当 |
 | --- | --- |
-| GPT-6.1 Sol | 通常の親・一般childの既定。調査、設計、実装、debug、review。広い文脈や未解決の判断を含む一般作業 |
+| GPT-6.2 Sol | 通常の親・一般childの既定。調査、設計、実装、debug、review。広い文脈や未解決の判断を含む一般作業 |
 | GPT-6 Luna | 手順・期待結果がほぼ決まっている抽出、変換、照合、設計済みの実装 |
 | GPT-6.1 Terra | 明確な入力・完了条件を持つ画像・画面の読解、描画確認、素材に基づく文章作成、検証方法が明確な局所修正 |
-| GPT-6 Astra | 難しいtradeoff、契約間の矛盾、反例等の高度な判断。非Astra親から必要な問題を絞って委譲する |
+| GPT-6.2 Astra | 難しいtradeoff、契約間の矛盾、反例等の高度な判断。非Astra親から必要な問題を絞って委譲する |
 
 Lunaで手順化できる作業をTerraへ一律に置き換えず、局所修正を必ずTerraへ渡す工程にもせず、一般既定のSolと必要に応じて使い分ける。上位modelを選ぶ前に下位modelを試す必要はない。Computer Use等の操作権限や、test価値審査・実描画等の必須確認はmodel選択で変わらない。
 
@@ -102,14 +102,14 @@ Lunaで手順化できる作業をTerraへ一律に置き換えず、局所修�
 
 | 用途 | model | effort |
 | --- | --- | --- |
-| 通常の親／`sol` profile | `gpt-6.1-sol` | medium、Standard速度 |
-| 手動切替の`astra` profile | `gpt-6-astra` | low、Standard速度 |
-| 一般childの既定／`general_sol` | `gpt-6.1-sol` | medium |
+| 通常の親／`sol` profile | `gpt-6.2-sol` | medium、Standard速度 |
+| 手動切替の`astra` profile | `gpt-6.2-astra` | low、Standard速度 |
+| 一般childの既定／`general_sol` | `gpt-6.2-sol` | medium |
 | `general_luna` | `gpt-6-luna` | high |
 | `general_terra` | `gpt-6.1-terra` | medium |
-| `general_astra` | `gpt-6-astra` | medium |
+| `general_astra` | `gpt-6.2-astra` | medium |
 
-上記のeffortは配布設定の開始値であり、最適値を実証したものではない。Luna highと手動Astra lowは[Codexの開始推奨](https://learn.chatgpt.com/docs/models#pick-a-reasoning-effort)、Terra mediumは[公式guide](https://developers.openai.com/api/docs/guides/latest-model#gpt-61-terra)を参照する。Astra子は高度な判断を限定して渡すためmediumとする。taskの要求と確認結果に応じて、対応modelで利用可能なeffortを調整する。端末の実configやsessionで選択したeffortは配布設定とは区別する。
+上記のeffortは配布設定の開始値であり、最適値を実証したものではない。[Codexの公式案内](https://learn.chatgpt.com/docs/models#pick-a-reasoning-effort)は、GPT-6.2 Astra・Solではclientが選ぶeffortから始め、Lunaではhighから始めることを推奨する。Terra mediumは[公式guide](https://developers.openai.com/api/docs/guides/latest-model#gpt-61-terra)を参照する。本配布設定では手動Astra profileのlowを維持し、高度な判断を限定して渡すAstra子はmediumとする。taskの要求と確認結果に応じて、対応modelで利用可能なeffortを調整する。端末の実configやsessionで選択したeffortは配布設定とは区別する。
 
 Terraの利用にはCodex CLI 0.159.0以降が必要であり、提供状態はplan・client・workspace設定等にも依存する。model一覧への掲載と、その環境での実起動成功は分けて確認する。
 

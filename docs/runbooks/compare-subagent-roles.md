@@ -16,8 +16,8 @@
 
 配布元の編集とlive配置を分ける。配置時は`config.example.toml`の必要section、`config/agents.example.toml`の4 role、`agents/`、使用する`astra.config.toml`／`sol.config.toml`、hookと関連文書を同じ有効なCodex homeへ揃える。認証・MCP binding・無関係な設定は上書きしない。
 
-1. TOMLの構文、role参照先、親・一般child・roleのmodelとeffortをREADMEの表と照合する。hookの出力、4モデル以外の明示指定の拒否、Astra→Astraの拒否、Terraへの再通知matcher、`fork_turns = none`と他引数の保持を確認する。
-2. TerraではCodex CLI 0.159.0以降を使う。配置後の新規sessionで、`gpt-6.1-sol`、`gpt-6-luna`、`gpt-6.1-terra`、`gpt-6-astra`の提供状態、4 roleの実model・effort、hookのtrust・到達を確認する。API公開やmodel cacheへの掲載だけを、当該環境での実起動成功の証拠にしない。
+1. TOMLの構文、role参照先、親・一般child・roleのmodelとeffort、親の速度をREADMEの表と照合する。hookの出力、旧Sol・旧Astraを含む4モデル以外の明示指定の拒否、Astra→Astraの拒否、Terraへの再通知matcher、`fork_turns = none`と他引数の保持を確認する。
+2. TerraではCodex CLI 0.159.0以降を使う。配置後の新規sessionで、`gpt-6.2-sol`、`gpt-6-luna`、`gpt-6.1-terra`、`gpt-6.2-astra`の提供状態、4 roleの実model・effort、hookのtrust・到達を確認する。API公開やmodel cacheへの掲載だけを、当該環境での実起動成功の証拠にしない。
 3. 許可された代表作業で、通常作業と一般childの既定がSol、手順・期待結果がほぼ決まっている作業がLuna、明確な入力・完了条件を持つ視覚・文章・局所修正がTerraの候補、高度な判断が必要な作業が非Astra親からAstraへの限定委譲になることを確認する。taskの短さ・単価や下位modelの形式的な試行を選択基準にしない。必須のtest価値reviewや実描画の確認は既存の契約どおり実施する。
 
 TerraとSolの比較は同じ入力・effort・tool・完了条件で始め、正しさ・見落とし・手直し・全体時間・観測できる使用量を確認する。effortを変える比較は同一modelで分け、maxを初期設定にしない。旧modelを比較対象やfallbackとして復帰させない。

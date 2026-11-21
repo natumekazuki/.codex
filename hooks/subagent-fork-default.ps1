@@ -9,19 +9,20 @@ $arguments = $event.tool_input
 if ($arguments -isnot [System.Collections.IDictionary]) {
     throw 'Expected spawn_agent arguments to be a JSON object.'
 }
-$allowedModels = @('gpt-6.1-sol', 'gpt-6-luna', 'gpt-6.1-terra', 'gpt-6-astra')
+$allowedModels = @('gpt-6.2-sol', 'gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.2-astra')
 if ($arguments.Contains('model') -and $arguments.model -notin $allowedModels) {
     @{
         hookSpecificOutput = @{
             hookEventName = 'PreToolUse'
             permissionDecision = 'deny'
-            permissionDecisionReason = 'Only gpt-6.1-sol, gpt-6-luna, gpt-6.1-terra, and gpt-6-astra are allowed. Do not fall back to an older model.'
+            permissionDecisionReason = 'Only gpt-6.2-sol, gpt-6-luna, gpt-6.1-terra, and gpt-6.2-astra are allowed. Do not fall back to an older model.'
         }
     } | ConvertTo-Json -Depth 100 -Compress
     exit 0
 }
-$isAstraParent = $event.model -match '^gpt-6-astra(?:-|$)'
-$isAstraTarget = $arguments.agent_type -eq 'general_astra' -or $arguments.model -match '^gpt-6-astra(?:-|$)'
+# Keep the Astra-to-Astra restriction for parents started before the model switch.
+$isAstraParent = $event.model -match '^gpt-6(?:\.2)?-astra(?:-|$)'
+$isAstraTarget = $arguments.agent_type -eq 'general_astra' -or $arguments.model -eq 'gpt-6.2-astra'
 if ($isAstraParent -and $isAstraTarget) {
     @{
         hookSpecificOutput = @{

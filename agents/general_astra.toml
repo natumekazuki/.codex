@@ -1,6 +1,6 @@
 name = "general_astra"
-description = "GPT-6 Astra for advanced judgment on difficult tradeoffs, conflicting contracts, and counterexamples, delegated by a non-Astra parent."
-model = "gpt-6-astra"
+description = "GPT-6.2 Astra for advanced judgment on difficult tradeoffs, conflicting contracts, and counterexamples, delegated by a non-Astra parent."
+model = "gpt-6.2-astra"
 model_reasoning_effort = "medium"
 developer_instructions = '''
 Complete the task assigned by the parent within its specified scope and authority.
