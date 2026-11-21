@@ -1,6 +1,6 @@
 name = "general_sol"
-description = "GPT-6.1 Sol as the general default for research, design, implementation, debugging, and review, including work requiring broad context."
-model = "gpt-6.1-sol"
+description = "GPT-6.2 Sol as the general default for research, design, implementation, debugging, and review, including work requiring broad context."
+model = "gpt-6.2-sol"
 model_reasoning_effort = "medium"
 developer_instructions = '''
 Complete the task assigned by the parent within its specified scope and authority.
