@@ -316,7 +316,7 @@ uv run <skill-root>/scripts/lint.py --reading-load <file>
         [pscustomobject]@{
             Path = "references/revision-guide.md"
             From = '打ち手は単純で、SKILL.md の§4のとおり、その周でヒットしたカテゴリに対応する節をそのつど読み直す。内面化は一度の理解では終わらない。同じ場所に何度も戻ることで少しずつ進む。参考記事（[note.com/art_reflection](https://note.com/art_reflection/n/ncdb00d92bbde)）も同じ点を指摘している。基準を読んだと申告しながら出力で基準を破る現象は、要約記憶だけで作業しているときによく起きる。'
-            To = '打ち手は単純で、[write.md](write.md) の検査工程のとおり、その周でヒットしたカテゴリに対応する節をそのつど読み直す。内面化は一度の理解では終わらない。同じ場所に何度も戻ることで少しずつ進む。参考記事（[note.com/art_reflection](https://note.com/art_reflection/n/ncdb00d92bbde)）も同じ点を指摘している。基準を読んだと申告しながら出力で基準を破る現象は、要約記憶だけで作業しているときによく起きる。'
+            To = '打ち手は単純で、[write.md](write.md) の検査工程のとおり、その周でヒットしたカテゴリに対応する節をそのつど読み直す。内面化は一度の理解では終わらない。同じ場所に何度も戻ることで少しずつ進む。基準を読んだと申告しながら出力で基準を破る現象は、要約記憶だけで作業しているときによく起きる。'
         },
         [pscustomobject]@{
             Path = "references/revision-guide.md"
