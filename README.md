@@ -96,7 +96,7 @@ OpenAI公式の[model選択](https://learn.chatgpt.com/docs/models#recommended-m
 
 Lunaで手順化できる作業をTerraへ一律に置き換えず、局所修正を必ずTerraへ渡す工程にもせず、一般既定のSolと必要に応じて使い分ける。上位modelを選ぶ前に下位modelを試す必要はない。Computer Use等の操作権限や、test価値審査・実描画等の必須確認はmodel選択で変わらない。
 
-[API価格](https://developers.openai.com/api/docs/pricing)のtoken単価を、Codexの実消費枠や1タスクの費用比とは扱わない。担当分けの効果は実測済みではなく、再作業、推論token、cache、実行時間を含めて[比較手順](docs/runbooks/compare-subagent-roles.md)で確認する。
+APIのtoken単価を、Codexの実消費枠や1タスクの費用比とは扱わない。担当分けの効果は実測済みではなく、再作業、推論token、cache、実行時間を含めて[比較手順](docs/runbooks/compare-subagent-roles.md)で確認する。
 
 ### 設定と委譲
 
@@ -113,7 +113,7 @@ Lunaで手順化できる作業をTerraへ一律に置き換えず、局所修�
 
 Terraの利用にはCodex CLI 0.159.0以降が必要であり、提供状態はplan・client・workspace設定等にも依存する。model一覧への掲載と、その環境での実起動成功は分けて確認する。
 
-委譲基準の正本は[委譲と作業領域](docs/architecture/subagent-workspace.md)。hookはその要点を再通知する。標準`default`／`worker`／`explorer`はカスタムroleとは別であり、model省略時は設定例の一般child既定値を使う。汎用roleの権限は親から継承し、read-only依頼は起動時に明示し、利用可能なruntimeの制限も適用する。`review-test-value`も同じ委譲基準で担当を選び、抽出契約・全recordの審査・統合基準を維持する。
+hookは委譲基準の要点を再通知する。標準`default`／`worker`／`explorer`はカスタムroleとは別であり、model省略時は設定例の一般child既定値を使う。汎用roleの権限は親から継承し、read-only依頼は起動時に明示し、利用可能なruntimeの制限も適用する。`review-test-value`も同じ委譲基準で担当を選び、抽出契約・全recordの審査・統合基準を維持する。
 
 `PreToolUse` hookは上記4モデル以外の明示的な`model`指定を拒否する。Astra親からの`general_astra`とAstraの直接指定も拒否する。許可された`spawn_agent`／`Agent`の`fork_turns`は常に`none`へ置き換え、他の引数は保持する。roleの実modelやmodel未指定時の既定値はconfigと新規sessionで確認し、hookが任意の外部role定義まで検証すると扱わない。設定例の待機timeoutの最小値と既定値は120000 msを維持する。
 

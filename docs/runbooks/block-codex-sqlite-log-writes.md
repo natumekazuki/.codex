@@ -185,7 +185,5 @@ finally:
 
 ## 参考
 
-- [Persistent trace logs written to SQLite](https://github.com/openai/codex/issues/17320)
-- [High SQLite insert and prune rate after mitigations](https://github.com/openai/codex/issues/29532)
 - [SQLite logging mitigation tracking](https://github.com/openai/codex/issues/28224)
 - [Codex SQLite log insertion and maintenance implementation](https://github.com/openai/codex/blob/main/codex-rs/state/src/runtime/logs.rs)
