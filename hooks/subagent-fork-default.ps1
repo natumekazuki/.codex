@@ -15,7 +15,7 @@ if ($arguments.Contains('model') -and $arguments.model -notin $allowedModels) {
         hookSpecificOutput = @{
             hookEventName = 'PreToolUse'
             permissionDecision = 'deny'
-            permissionDecisionReason = 'Only gpt-6.2-sol, gpt-6-luna, gpt-6.1-terra, and gpt-6.2-astra are allowed. Do not fall back to an older model.'
+            permissionDecisionReason = 'Allowed child models: ' + ($allowedModels -join ', ') + '. Do not fall back to an older model.'
         }
     } | ConvertTo-Json -Depth 100 -Compress
     exit 0

@@ -1,28 +1,9 @@
-# ADR-NNNN: <Decision Title>
+# ADRの記入例
 
-- Status: proposed | accepted | superseded | deprecated
-- Date: YYYY-MM-DD
-- Supersedes: <ADR or none>
+判断理由を後から参照するための任意の例。以下は架空の設計であり、現行の仕様や入力欄ではない。[設計guide](../docs/guides/design-decisions.md)に従い、実際に共有したい判断だけを書く。
 
-## Context
+> **伝票の送付先は確定時の住所を使用する**
+>
+> 伝票の再発行では、後日住所録が変わっても確定時と同じ送付先を示す必要がある。そこで確定時の住所を伝票に保存し、再発行は住所録でなく伝票を読む。住所を二か所に持つが、現在の連絡先と過去の送付先は別の事実であり、同期はしない。
 
-- <Decision pressure, external constraints, and why a choice is required>
-
-## Decision
-
-- <Chosen direction>
-
-## Alternatives
-
-- <Alternative>: <why it was not chosen>
-
-## Consequences
-
-- Positive: <benefit>
-- Negative: <cost or limitation>
-- Follow-up: <required action or none>
-
-## Executable Anchors
-
-- Source: <path or none>
-- Tests / types / schemas / static checks: <path or none>
+後にこの決定の一部を置き換えた場合だけ、元の本文を保ったまま適用されなくなった部分と後継先を示す。

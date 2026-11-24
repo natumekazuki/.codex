@@ -9,7 +9,7 @@
 5. PRと成果物の比例性
 6. Root-cause analysis
 7. 介入提案のgate
-8. 報告テンプレート
+8. 監査結果の伝え方
 
 ## 1. 評価単位
 
@@ -182,10 +182,7 @@ materialなfinding familyは次のchainで分析する。すべての層が存�
 
 materialな結論ごとに少なくとも二つの妥当な仮説を比較する。
 
-| Hypothesis | Supporting evidence | Disconfirming evidence | Unexplained facts | Confidence |
-| --- | --- | --- | --- | --- |
-
-confidenceは`high / medium / low`とし、根拠を一文で付ける。仮説が観測事実を説明できるだけで採用せず、成功例との差、時間順序、反例、既存防御が機能したcaseを使って識別する。
+仮説を支持する事実、反証、説明できない点を比較する。confidenceは`high / medium / low`とし、根拠を一文で付ける。仮説が観測事実を説明できるだけで採用せず、成功例との差、時間順序、反例、既存防御が機能したcaseを使って識別する。
 
 ### 6.4 Existing defenses and feedback
 
@@ -209,41 +206,6 @@ confidenceは`high / medium / low`とし、根拠を一文で付ける。仮説�
 
 局所・構造・policyの候補を因果層ごとに分ける。`minimality`は同じ因果linkへ同等に作用する案の比較条件として使い、上流の構造原因が確認されたときに局所案だけを選ぶ理由にしない。
 
-## 8. 報告テンプレート
+## 8. 監査結果の伝え方
 
-```text
-対象: Local [start, end) / Timezone / UTC [start, end) / complete|partial
-
-論理変更と成果:
-- Goal / Artifact / Outcome
-
-PR / outcome evidence:
-- Association basis / PR state / Final artifact / Outcome context
-
-Proportionality:
-- Direct behavior / Necessary contract / Realistic hardening / Hypothetical hardening / Incidental churn
-- Reachability / Retained, added and reduced mechanisms / Judgment and confidence
-
-良かった判断:
-- Evidence / Why it mattered
-
-Findings:
-- Family / Evidence / Impact / Discovery stage / Cause classification / Earliest evidence-based catch point / Post-discovery response
-
-Causal timeline:
-- Observation / Mechanism / Decision point
-
-Causal model:
-- Symptom -> proximate mechanism -> enabling condition -> systemic cause -> origin decision
-- Existing defenses and why they failed
-- Reinforcing and balancing feedback
-
-Competing hypotheses:
-- Hypothesis / Evidence for and against / Unexplained facts / Confidence
-
-Data gaps and residual risk:
-- Missing or truncated evidence / Effect on confidence
-
-Interventions (only when requested or causally justified):
-- Causal link / Local, structural, or policy change / Counterfactual / Side effects / Success signal
-```
+論理変更ごとに、求められた結果と実際の成果、差を生んだ判断を根拠に結び付ける。指摘があるときは、同じ原因の反復と別の失敗を分け、どの証拠が競合仮説を識別したかを書く。成功例は何が効いたかを示す対照として使う。区間後に分かった結果や証拠不足は、影響する結論のそばに置く。履歴DBの必須fieldやrubricの見出しは、読者向けの報告様式ではない。

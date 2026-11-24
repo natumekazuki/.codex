@@ -88,9 +88,8 @@ try {
     }
     foreach ($shell in @('cmd', 'pwsh')) {
         $expectedContext = Invoke-HookCommand $directHook $shell '{}' $profilePath $configuredCodexPath
-        if (-not $expectedContext.StartsWith('Implementation restraint / delegation:') -or
-            $expectedContext -notmatch 'gpt-6\.2-sol.*gpt-6-luna.*gpt-6\.1-terra.*gpt-6\.2-astra') {
-            throw "Direct script invocation did not return the expected model reminder through $shell."
+        if (-not $expectedContext.Contains('~/.codex/AGENTS.md')) {
+            throw "Direct reminder did not point to the shared entry point through $shell."
         }
         foreach ($codexPath in @($null, '', ' ', $configuredCodexPath)) {
             foreach ($eventName in @('SubagentStart', 'SessionStart', 'PreToolUse')) {

@@ -1,128 +1,32 @@
 # Codex system promptの保守
 
-このrunbookは、本repositoryのCodex組み込み指示の英語原文、日本語訳、WithMate統合用コピーを保守・配置する手順です。他repositoryの日常作業へ適用する共通ルール本文ではありません。
+この配布物は `model_instructions_file` を設定する場合の**完全な置換本文**です。Characterの差分や共通AGENTS.mdへのリンクだけに取り替えると、元の作業・安全・tool・Skill契約も失われます。共通規約の改訂とベースラインの更新を分けて扱います。[資産の所在](../system-prompt/README.md)・[Codex設定リファレンス](https://learn.chatgpt.com/docs/config-file/config-reference)
 
-## 取得元と範囲
+## 配布する英語版・日本語版を変える時
 
-取得元は、Codex rollout JSONLの最初の `session_meta` レコードです。取得対象の本文は `payload.base_instructions.text` です。
+[英語版](../../.codex/model-instructions-withmate.md)と[日本語版](../../.codex/model-instructions-withmate.ja.md)に同じ判断を反映し、変更前後で要件と機械向け文字列を照合します。特に、依頼・訂正・Compact後の継続、read-onlyと変更の違い、他者差分・破壊操作の保護、tool・Skillの読み方、進捗と最終回答が両方で機能する範囲を確認します。Characterと成果物の区別は[WithMate利用guide](../guides/withmate.md#character表現の適用範囲)で定めます。
 
-これは、完全なセッションコンテキストより意図的に狭い範囲です。`AGENTS.md`、runtimeのdeveloper instructions、権限、MCP設定、ユーザープロンプト、WithMateのCharacter contextは別の入力として扱います。これらをシステムプロンプトのスナップショットへ混ぜたり、セッション固有の環境値をGitへ保存したりしないでください。
+組み込み由来の変更と意図したカスタマイズは、理由と差分がGit履歴で区別できるようにします。配布本文の編集だけなら新しい取得版を作らず、以前のsnapshotを現行説明に合わせて改稿しません。
 
-`model_instructions_file` は組み込み指示本文を置き換える設定であり、Character層を追記するだけの設定ではありません。意図した差分をレビューするまでは、WithMate用ファイルに運用上必要なベースライン全体を保持してください。詳細は[OpenAI公式のCodex設定リファレンス](https://learn.chatgpt.com/docs/config-file/config-reference)を参照してください。
+## ベースラインの取得・更新
 
-## 新しいスナップショットの取得
+月次、またはCodex CLI・モデル・WithMate統合の更新時に、使用中のベースラインとの差を確認します。上流本文を取り直す場合は、置換設定のない新規Sessionを使い、対象モデル・CLI版とrolloutを特定します。最新日時だけで目的のSessionとみなしません。
 
-1. Codexまたはモデルを更新した後に、新しいCodexセッションを開始します。セッションメタデータから、使用中のモデルとCLIバージョンを記録します。
-2. rollout JSONLを特定します。次のコマンドは内容を開かずに、候補のうち最も新しいファイルを表示します。
-
-   ```powershell
-   $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
-   Get-ChildItem -LiteralPath (Join-Path $codexRoot 'sessions') -Recurse -Filter 'rollout-*.jsonl' -File |
-       Sort-Object LastWriteTime -Descending |
-       Select-Object -First 1 -ExpandProperty FullName
-   ```
-
-3. 新しい日付付きファイルへ取得します。同じ作業用ファイルを意図的に再生成する場合だけ、`-Force` を使います。
-
-   ```powershell
-   pwsh ./scripts/capture-codex-system-prompt.ps1 `
-       -RolloutPath 'C:\path\to\rollout.jsonl' `
-       -OutputPath 'docs/system-prompt/snapshots/YYYY-MM-DD-model.en.md'
-   ```
-
-4. 表示された文字数を確認します。rolloutが `session_meta` で始まっていない場合、または `base_instructions.text` を含まない場合、スクリプトは失敗します。
-5. 取得後の英語スナップショットの内容は改変しません。取得元が変わった場合は、新しい日付のスナップショットを作成し、更新の完了時に役割を終えた原文と訳を削除します。
-
-## 改善レビュー
-
-少なくとも月1回、またはCodex CLI、モデル、WithMate統合を更新した後に、このレビューを実施します。
-
-1. 新しい英語スナップショットを更新前の記録と比較します。削除済みの記録が必要な場合はGit履歴から許可された作業領域へ取得し、repositoryへ復元・保存しません。
-
-   ```powershell
-   git diff --no-index `
-       docs/system-prompt/snapshots/previous.en.md `
-       docs/system-prompt/snapshots/current.en.md
-   ```
-
-2. 次の領域について、指示の追加、削除、並び替えを確認します。
-
-   - 応答スタイルとユーザー向けの進捗報告
-   - ファイル編集、破壊的操作、承認範囲
-   - tool、skill、browser、appの扱い
-   - 委譲、継続実行、コンテキスト圧縮の挙動
-   - 失敗や未確認事項を報告する際の信頼性要件
-
-3. 変更が上流のベースライン変更なのか、WithMate固有の意図したカスタマイズなのかを判断します。両者の判断はGit履歴でも分けて記録します。
-4. 新しい英語スナップショットに対応するよう、日本語訳の見出しと規範的な要件を更新します。コード、キー名、パス、コマンドなどの機械可読な文字列は完全に維持します。
-5. WithMate用ファイルを独立してレビューします。後から意図的に差分を持たせても構いませんが、各差分にはユーザー向けまたは運用上の具体的な理由を持たせます。
-6. モデルまたは取得規約が変わった場合は、`docs/system-prompt/README.md` を現行の構成に合わせます。役割を終えたスナップショットと訳を削除し、参照・文書の更新とまとめてコミットします。本repositoryの公開手順は[README](../../README.md#本repositoryの開発リリース境界)を参照します。
-
-## WithMate用ファイルの準備
-
-WithMate用の統合ファイルは `.codex/model-instructions-withmate.md`（英語版）と `.codex/model-instructions-withmate.ja.md`（日本語版）です。現時点では取得した英語ベースラインを基に、重複する人格説明、60秒単位の進捗・待機制約、Skill利用時の宣言要件を取り除き、技術者前提の技術コミュニケーションとMermaid利用を反映しています。Character向けの文言調整はまだ行っていません。
-
-今後WithMate用の文言を調整する場合は、次の手順に従います。
-
-1. 現在の英語スナップショットを出発点にします。
-2. タスク実行、ファイル安全性、報告、tool利用の要件を維持します。
-3. Character表現はユーザー向け応答と非公開の手元の自然文へ適用し、境界の詳細は[WithMate利用guide](../guides/withmate.md#character表現の適用範囲)に従います。repository内・外部向け成果物や機械可読metadataには、明示指定がない限りCharacterの口調・設定・台詞を混ぜないでください。技術判断、操作権限、事実・状態・検証結果は変えません。
-4. 英語版と日本語版を同じカスタマイズ内容として更新し、機械可読な文字列と要件の対応を確認します。
-5. 両方のWithMate用ファイルとスナップショットを比較し、適用前にdiffをレビューします。
-6. 設定変更後は新しいCodexセッションを開始します。既存セッションでファイルが読み込まれた証拠とはみなしません。
-
-## `config.toml` による適用
-
-WithMate用ファイルをレビューしてから適用します。実際に使うユーザー設定はローカルに置き、認証情報やマシン固有の値とともにコミットしないでください。
-
-### プロジェクト単位の設定
-
-信頼済みのリポジトリで、リポジトリローカルの `.codex/config.toml` を作成または編集します。
-
-```toml
-model_instructions_file = "model-instructions-withmate.md"
+```powershell
+pwsh ./scripts/capture-codex-system-prompt.ps1 `
+    -RolloutPath 'C:\path\to\rollout.jsonl' `
+    -OutputPath 'docs/system-prompt/snapshots/YYYY-MM-DD-model.en.md'
 ```
 
-日本語版を使う場合は、上の設定行を次の行に置き換えます。
+[取得script](../../scripts/capture-codex-system-prompt.ps1)は先頭の `session_meta.payload.base_instructions.text` を抽出します。本文のないrolloutや別種のレコードを代用しません。出力と取得元のモデル・CLI版を確認し、rolloutそのものや非公開の環境情報を保存しません。
 
-```toml
-model_instructions_file = "model-instructions-withmate.ja.md"
-```
+取得した原文は変更せず、前版と比較して対応する訳を作ります。置換本文に反映すべき変更と独自差分を見極め、参照も揃えます。ベースラインが交代した時だけ、役割を終えた原文と訳を現行配布から外します。
 
-このファイルを `.codex/config.toml` と同じディレクトリに置きます。プロジェクト設定内の相対パスは、設定ファイルを含む `.codex/` ディレクトリを基準に解決されます。プロジェクト単位の設定は、プロジェクトが信頼済みの場合だけ読み込まれます。詳細は[OpenAI公式の高度な設定ガイド](https://learn.chatgpt.com/docs/config-file/config-advanced)を参照してください。
+## 任意の適用と確認
 
-### ユーザー単位の設定
+[設定例](../../config.example.toml)の指定先は英語版です。日本語版を選ぶ時は `model-instructions-withmate.ja.md` に差し替え、二つを連結しません。端末への適用は配布元の編集と別です。
 
-同じファイルを複数セッションへ適用する場合は、ローカルの `~/.codex/config.toml` にトップレベルのキーを追加します。Windowsでは、アクティブな `CODEX_HOME` は通常ユーザープロファイル配下です。ファイルがユーザー設定ディレクトリの外にある場合は、checkout済みのWithMate用ファイルを絶対パスで指定します。
+- 信頼済みプロジェクトの `.codex/config.toml` では、その設定ファイルと同じディレクトリに置いた本文をトップレベルの `model_instructions_file = "model-instructions-withmate.md"` で選べます。相対pathとtrustの条件は[高度な設定ガイド](https://learn.chatgpt.com/docs/config-file/config-advanced)を参照します。
+- ユーザー単位では、その端末が使う設定に対象ファイルの絶対pathを指定します。この設定を読む全Sessionに影響するため、範囲と既存値を確認し、必要なキーだけ扱います。認証・MCP・個人設定を配布元へ取り込みません。
 
-```toml
-model_instructions_file = "C:\\path\\to\\repository\\.codex\\model-instructions-withmate.md"
-```
-
-日本語版を使う場合は、上の設定行を次の行に置き換えます。
-
-```toml
-model_instructions_file = "C:\\path\\to\\repository\\.codex\\model-instructions-withmate.ja.md"
-```
-
-この設定を読むすべてのセッションで組み込み指示の取得元が変わるため、全体へ有効化する前に適用範囲を確認します。
-
-### 有効化と確認
-
-1. 編集前に、現在のローカル `config.toml` のコピーを保管します。
-2. `model_instructions_file` キーだけを追加します。認証情報、MCPのruntime値、無関係な設定をリポジトリへコピーしないでください。
-3. 適用対象の信頼済みリポジトリで新しいセッションを開始します。
-4. 新しいrolloutの `session_meta.payload.base_instructions.text` を確認し、内容を設定したファイルと比較します。
-5. セッションが期待した `AGENTS.md`、権限、WithMate MCPコンテキストを別レイヤーとして引き続き受け取っていることを確認します。
-6. 新しいセッションでファイルが読み込まれなければ、overrideを削除し、取得した証拠を保持したうえで、trust、パス解決、profile選択、セッション再起動を調査してから再試行します。
-
-## Gitレビューのチェックリスト
-
-保守更新をコミットする前に、次を確認します。
-
-- 新しい日付付きの英語スナップショットが存在する
-- 取得元のモデルとCLIバージョンが記録されている
-- 日本語訳の構成が英語原文と対応している
-- WithMate用ファイルの差分が意図したもので、diffで確認できる
-- rollout履歴、認証情報、runtime環境値、非公開のセッションデータをリポジトリへコピーしていない
-- 実際に使う `config.toml` を誤ってstageしていない
+適用後は新しいSessionのrolloutで `base_instructions.text` を指定ファイルと比較します。AGENTS.md・Character・権限・MCPは別レイヤーとして確認します。設定例・ファイル一致だけで既存Turnへの適用や挙動の改善とは判断しません。不一致ならtrust・path・profileと起動したSessionを切り分け、意図しない置換は元の設定へ戻します。

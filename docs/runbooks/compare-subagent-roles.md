@@ -1,25 +1,19 @@
-# 指示構成の小さな比較と導入
+# native子の設定を導入・比較する
 
-本書は、本repositoryが配布する指示・model構成を比較して導入する際の検証手順である。通常作業の委譲ルールは[委譲と作業領域](../architecture/subagent-workspace.md)が正本である。
+これは配布設定を変える時の確認手順であり、通常の委譲の前提ではない。仕事の選び方と通常Sessionとの境界は[委譲ガイド](../architecture/subagent-workspace.md#nativeサブエージェント)に従う。
 
-同じ開始commit、親model、effort、利用toolで、代表作業を別の新規sessionから実行する。model変更と指示変更の効果を混同せず、productionへの外部副作用を発生させない。
+## 配布元と端末で確認するもの
 
-小さな通常修正、testの新規・意味変更、独立した調査と小実装から代表例を選ぶ。成果の正しさ、重要な見落とし、人の手直し、不要なcode・test・document、経過時間、観測できる実使用量を見る。文字数やtool call数だけで優劣を決めない。
+| 確認先 | 確認できること |
+| --- | --- |
+| [共有設定例](../../config.example.toml)・[registryとprofile](../../config/)・[role定義](../../agents/) | TOMLが読め、registryの参照が解決する。親profile、一般子の既定、明示roleのmodel・effortを別々に確認する |
+| [hookの登録](../../hooks.json)・[Windows起動検査](../../hooks/test-windows-launch.ps1) | startup/resume/compactと対象役のSubagentStartは共通入口を再通知する。PreToolUseは別に、明示modelの許可／拒否、Astra→Astra拒否、履歴なしへの置換と他引数の保持を行う |
+| 適用後の新規Session | 配置したroleと既定の**実model・effort**、hookのtrust・該当イベントでの到達。APIの掲載やscriptの単体成功だけでは実起動の証拠にならない |
 
-結果は開始commit、比較対象、OS／CLI／model、実施内容、集計を短く記録する。少数例から普遍的な優位や週枠の保証を断定せず、secret、private path、生transcriptを公開しない。新たなbenchmark frameworkや常設DBは作らない。
+端末への配置が依頼された時だけ、使う設定欄・role・profile・hookを有効なCodex homeへ揃える。共通文書の参照先はOSのユーザーhome直下の `~/.codex/`。認証・MCP binding・無関係な設定は上書きしない。Terra利用の配布条件はCodex CLI 0.159.0以降。省略modelや任意の外部roleの実modelをPreToolUseが検証するとはみなさない。
 
-通常のtest変更では、`review-test-value`の決定論的な抽出結果と、親から選択したサブエージェントへ渡したread-only reviewの結果を確認する。抽出、review、修正の結果を同じtaskの変更状態へ結び付け、モデル実行の成功だけで完了扱いにしない。
+## 役割・指示を比較する時
 
-これは導入確認であり、全taskに毎回要求する一覧ではない。offline checkとreview結果を区別し、既知の差分だけをレビュー可能な形で戻す。ユーザーworktreeをresetしない。
+変更が効く代表入力と、同じ制限を課すべきでない対照を選ぶ。新規Sessionで開始commit・作業・使えるtool・完了条件を揃え、指示の比較ではmodel・effortも固定する。model比較と同じmodel内のeffort比較を混ぜない。旧modelをfallbackへ戻さず、本番への外部副作用を生じさせない。
 
-## 4 model構成の適用確認
-
-配布元の編集とlive配置を分ける。配置時は`config.example.toml`の必要section、`config/agents.example.toml`の4 role、`agents/`、使用する`astra.config.toml`／`sol.config.toml`、hookと関連文書を同じ有効なCodex homeへ揃える。認証・MCP binding・無関係な設定は上書きしない。
-
-1. TOMLの構文、role参照先、親・一般child・roleのmodelとeffort、親の速度をREADMEの表と照合する。hookの出力、旧Sol・旧Astraを含む4モデル以外の明示指定の拒否、Astra→Astraの拒否、Terraへの再通知matcher、`fork_turns = none`と他引数の保持を確認する。
-2. TerraではCodex CLI 0.159.0以降を使う。配置後の新規sessionで、`gpt-6.2-sol`、`gpt-6-luna`、`gpt-6.1-terra`、`gpt-6.2-astra`の提供状態、4 roleの実model・effort、hookのtrust・到達を確認する。API公開やmodel cacheへの掲載だけを、当該環境での実起動成功の証拠にしない。
-3. 許可された代表作業で、通常作業と一般childの既定がSol、手順・期待結果がほぼ決まっている作業がLuna、明確な入力・完了条件を持つ視覚・文章・局所修正がTerraの候補、高度な判断が必要な作業が非Astra親からAstraへの限定委譲になることを確認する。taskの短さ・単価や下位modelの形式的な試行を選択基準にしない。必須のtest価値reviewや実描画の確認は既存の契約どおり実施する。
-
-TerraとSolの比較は同じ入力・effort・tool・完了条件で始め、正しさ・見落とし・手直し・全体時間・観測できる使用量を確認する。effortを変える比較は同一modelで分け、maxを初期設定にしない。旧modelを比較対象やfallbackとして復帰させない。
-
-上記は手順であり、適用・実測の完了記録ではない。API単価や公式評価だけで、実作業の速度、再作業量、Codex消費枠の改善を実証したとは扱わない。
+成果の正しさ、判断に響く見落とし、人の手直し、不要な追加、所要時間・観測できた使用量を比較する。対象・実行条件を結果とともに残し、少数例やAPI単価から実利用枠や普遍的な優位を断定しない。専門reviewや実描画が必要な入力ではその成果も確認する。新しい常設の採点・保存基盤は要らない。
