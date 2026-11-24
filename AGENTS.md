@@ -26,8 +26,8 @@
 | 実装着手・完了判断、課題・予定管理、reviewの開始・結果確認・対応・再開・完了、互換性変更・統合・公開範囲の判断 | `~/.codex/docs/guides/development.md` と対象repositoryのREADMEまたはAGENTS.mdが指定する運用文書。実装前に維持対象と残件の管理先を確認し、アプリ開発には同guideの「実装規約の基本セット」を適用する |
 | Python／TypeScript／C#のtestを追加・意味変更・削除・移設する前 | `~/.codex/docs/guides/test-changes.md` とruntimeの `review-test-value` Skill |
 | UI開発環境の整備、ユーザー向けUIの新設・変更（文言を含む）・設計見直し、描画確認・報告 | `~/.codex/docs/guides/ui.md`、runtimeの `design-ui-information` Skill、対象製品のUI規約 |
-| 委譲またはGit worktree作成の前 | `~/.codex/docs/architecture/subagent-workspace.md` |
-| WithMate統括が担当を選ぶ前（ユーザー直接入力を含む）、Session間の依頼・相談・報告・再開、通常子の実行条件選定・Worktree配置 | `~/.codex/docs/guides/withmate-collaboration.md` |
+| 委譲前、Git worktreeの配置先決定・作成・回収時 | `~/.codex/docs/architecture/subagent-workspace.md` |
+| WithMate統括が担当を選ぶ前（ユーザー直接入力を含む）、Session間の依頼・相談・報告・再開、通常子の実行条件選定 | `~/.codex/docs/guides/withmate-collaboration.md` |
 
 対象repositoryのAGENTS.mdからは、固有の管理先・維持境界・リリース運用と、それらを読む条件を辿れるようにする。共通の判断基準や個別課題の進捗は入口へ写さない。
 

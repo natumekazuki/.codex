@@ -37,7 +37,7 @@ model・tool・設定形式など製品固有の機構は各製品に合わせ�
 - `config.toml` は既存設定へ[設定例](config.example.toml)の必要なsectionだけを取り込む。実config・認証・私有path・生成済みruntimeはGit管理しない。`model_instructions_file` は追記でなく組込み指示の置換なので、採用する場合だけ配置した本文を指定する。
 - native設定・hookは有効な `CODEX_HOME`（未指定なら `~/.codex`）に配置する。roleを使う場合は `agents/`、registry、使うprofileを同じhomeへ揃える。`/hooks` でtrustと到達を確認し、inline hookとの二重実行を避ける。
 - Skillは対象ホストの探索先へ配置し、新規Sessionでの発見・重複とruntimeが通知する実pathを確認する。[共通指示の探索](https://developers.openai.com/codex/guides/agents-md/)と[Skillの発見](https://developers.openai.com/codex/skills/)は別経路であり、READMEの一覧やMarkdownリンクから本文が注入されるわけではない。
-- WithMateのGlossary／Session Graph／SessionのHTTP接続とmanaged `withmate-glossary` SkillはWithMateが供給する。通常の導入で手動登録・forkや短命tokenの永続化はしない。Glossaryの手動STDIOはrunbookの開発・診断用途に限る。通常子の選定・Worktree配置は[協同guide](docs/guides/withmate-collaboration.md)から辿り、端末固有の方針ファイルを配布・自動移行しない。
+- WithMateのGlossary／Session Graph／SessionのHTTP接続とmanaged `withmate-glossary` SkillはWithMateが供給する。通常の導入で手動登録・forkや短命tokenの永続化はしない。Glossaryの手動STDIOはrunbookの開発・診断用途に限る。通常子の選定・配送は[協同guide](docs/guides/withmate-collaboration.md)、Worktreeの配置先決定と実体の確認は[作業領域guide](docs/architecture/subagent-workspace.md#git-worktreeの配置)に従う。端末固有の方針ファイルは配布・自動移行しない。
 
 ## modelとrole
 
@@ -64,7 +64,7 @@ profileは `codex --profile sol` または `codex --profile astra` で選ぶ。T
 
 変えた判断が必要な入力と、その判断を適用してはいけない入力を一組選ぶ。入口・guide・Skill・metadata・hookの参照を照合し、対象の変更に応じて「配布元にある」「端末へ配置された」「そのSessionが読んだ」「期待した行動が観測できた」を別々に確かめる。毎回すべての経路を検査するものではない。
 
-- **入口・通知・role**：startup／resume／compact・履歴非継承の子で、必要な指示を実際に辿れるかを見る。再通知と `PreToolUse` の拒否・引数制御は別に確かめる。モデルや指示の出力を比べるときは履歴・model・Character・tool条件を揃え、答えの正しさと、受け手に残った選別・再説明の負担を見る。
+- **入口・通知・role**：startup／resume／compactや子の起動時には、通知から共通入口を辿れるかを確かめる。これとは別に、native委譲の `PreToolUse` が許可リスト外の明示modelとAstra親からAstra子への指定を拒否し、許可時に `fork_turns=none` を設定することを確かめる。モデルや指示の出力を比べるときは履歴・model・Character・tool条件を揃え、答えの正しさと、受け手に残った選別・再説明の負担を見る。
 - **専門Skill**：変更testは決定論的抽出の対象・結果と、抽出record全件のread-only審査を別に見る。UIはSkill名を指定しない変更依頼とUIに関係しない対照で、実際の参照・情報の採否・描画・必要な操作・画像提示を確かめる。暗黙呼出しを許すmetadataやbuild成功だけを適用証拠にしない。Graphは実配置・発見と指示の先行記録／復元を分け、変更した場合は競合・結果不明時の照合も対象にする。
 - **WithMate V7の協同**：実配置した全体統括にAPI名や具体値を指定せず委譲可能な目的を渡し、方針・宛先候補・配置先の取得と通常子への配送を観測する。通常依頼・単発指定で保存方針を変えないことも見る。静的照合やAPIの読取だけでは実配送の確認にならない。
 
