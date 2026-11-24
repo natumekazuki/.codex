@@ -1,32 +1,11 @@
-# Review
+# review記録の記入例
 
-必要な内容だけを使う任意の骨格。判断・保存・対応管理は共通`AGENTS.md`の「条件付き参照」から解決した`~/.codex/docs/guides/development.md`に従う。必要な判断材料は保ち、全欄の記入や固定の応答形式は要求しない。
+[開発guide](../docs/guides/development.md#sessionfolderのreview記録と対応管理)で扱う記録の一例。次は架空のrepository・revision・指摘であり、固定の書式ではない。
 
-## Review Scope
-
-- Target: <repository、対象commit・差分範囲や文書。未コミット変更を含む場合はその範囲>
-- Reviewer: <review担当。自己確認・独立review等を区別する>
-- Focus: <今回の確認対象・観点>
-
-## Overall Judgment
-
-- <reviewの結論、完了・中断、統合可否と根拠。指摘ゼロと未確認、公開可否や操作権限を区別する>
-
-## Findings
-
-<具体的な問題がある場合だけ記載する。問題や未確認事項のない欄は省く。>
-
-### <finding-id>: <title>
-
-- Location: <file and line, symbol, or other precise anchor>
-- Impact: <observable consumer or system impact>
-- Evidence: <source, executable contract, or observed behavior>
-- Disposition: <今回の仕上げ／後追い先／重複／不採用／未確認と根拠。採否・対応時期、統合への影響、優先度を分ける>
-- Remediation: <minimal direction>
-- Status: <現在の対応状況。未対応／修正済み・未検証／確認済み等>
-- Resolution: <対応内容と対象commit・差分等、実施した確認と結果>
-- Handoff: <必要な場合だけ、登録済みの引継ぎ先>
-
-## Residual Risks
-
-- <残る問題と扱い>
+> **住所録の検索結果：修正後の確認まで完了**
+>
+> 住所録アプリの `a4b2c61..c81d20e` を検索担当とは別の保守者がreviewした。検索成功・0件・接続失敗の3条件を確認した。
+>
+> **R1 — 接続失敗を0件として表示する。** `searchAddress` が通信失敗時に空配列を返すため、利用者は住所が未登録なのか検索できなかったのかを区別できない。接続を切って検索すると再現した。失敗時の再試行は今回の要求なので、この変更内で修正する。
+>
+> R1の再確認：`e7f302b` で同じ条件を再現し、失敗時だけ再試行でき、正常な0件では該当なしと表示されることを確認した。
