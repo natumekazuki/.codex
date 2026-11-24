@@ -1,51 +1,27 @@
-# WithMate Repository GlossaryをCodexで利用する
+# WithMate Repository Glossaryの接続と診断
 
-本書は、WithMate v7.0.0-preview.8の接続設定・導入確認・障害調査の手順である。通常作業の利用方針と操作権限は[WithMate利用guide](../guides/withmate.md)、呼出契約は現在のMCP instructions・tool説明・schemaとruntime-managed Skillが正本である。
+WithMateで起動したCodex Sessionのmanaged HTTP接続を扱う。用語をいつ登録してよいかは[WithMate利用guide](../guides/withmate.md)、操作方法は現在のruntime-managed `withmate-glossary` SkillとMCP契約が正本である。この配布元でSkill・store・権限表を複製しない。
 
-## 対応契約
+## 読み取りだけで接続を確かめる
 
-このrunbookは次のinterfaceを対象とする。
+WithMateは `withmate-glossary-http`（`/mcp/glossary`）をSessionへ供給する。通常の `config.toml` への手動登録は不要。URL・短命tokenを設定・ログへ残さない。永続設定の `codex mcp list` だけではSessionの一時接続は確認できない。
 
-| Contract | Value |
-| --- | --- |
-| Codex managed HTTP登録名 | `withmate-glossary-http` |
-| HTTP endpoint | `/mcp/glossary` |
-| Glossary schema | `withmate-glossary-v1` |
-| Repository file | `.withmate/glossary.yaml` schema v1 |
-| 開発・診断用STDIO command | `withmate-glossary mcp-server` |
+起動したSessionでmanaged SkillとMCP toolの公開を確認し、`glossary.list_targets` で許可されたprimary checkoutを読む。Session ID・任意のpath・Additional Directories・別worktreeを対象にすり替えない。`withmate-glossary-v1` のrepository側の正本は `.withmate/glossary.yaml`（schema v1）。ファイルがなくても読取確認で作成しない。schemaやauthorityの差異が問題なら、配置されたSkillの `.withmate-managed-skill.json` の `bundleVersion`、本文、該当releaseの契約を照合する。
 
-実行時の正本は、WithMateが配置した`skills/withmate-glossary/.withmate-managed-skill.json`の`bundleVersion`と同Skillの`SKILL.md`である。schemaやauthorityが変わった場合は、固定値を推測で読み替えず、配布SkillとWithMateのrelease contractを再確認する。
+## 障害を切り分ける
 
-## Setup
-
-WithMateはprovider Sessionへ、共有localhost listenerのHTTP接続設定を自動供給する。`config.toml`への手動登録は不要であり、URLや当turnの短命tokenを永続設定・設定例・ログへ保存しない。
-
-1. WithMateを起動し、runtime-managed `skills/withmate-glossary/`が配置されていることを確認する。
-2. WithMateでCodexのSessionを開始し、そのSessionでmanaged Skillと公開されたMCP toolを確認する。
-3. `tools/list`で`glossary.list_targets`等のGlossary用toolが公開されていることを確認し、`glossary.list_targets`で許可されたtargetを取得する。接続確認だけを目的にGlossaryを作成・変更しない。
-
-MCP serverはWithMateのSession-bound runtimeへ接続する。Session ID、repository path、branch名をauthority入力にせず、`glossary.list_targets`が返すprimary checkoutだけを操作する。
-
-通常の`codex mcp list`による永続設定の確認だけで、一時設定の接続成否を判定しない。
+- toolが見えない、またはtransportに接続できない：起動元WithMateと対象Sessionへの供給を確認する。利用不能な場合に限り、managed Skillが許すCLI fallbackを検討する。Sessionのbindingとprimary checkoutを確認できないままwriteしない。
+- structuredなauthority・Settings・validationエラー：接続は別経路に変えず、対象・入力を確認する。無効なproactive createや上限超過をexplicit createへ読み替えない。
+- revision競合：現在値を読み直して変更目的を再評価する。同じ更新のrevisionだけ差し替えない。結果不明（`effect: unknown`）ならread-backし、新たなwriteを選ぶ前にユーザーへ確認する。
 
 ## 手動STDIOによる開発・診断
 
-手動clientの開発・診断では`withmate-glossary mcp-server`を使う。診断用のCodex server設定では、当該Sessionに供給された`WITHMATE_AGENT_RUNTIME_BINDING_REFERENCE`、`WITHMATE_AGENT_RUNTIME_BINDING_REQUIRED`、`WITHMATE_AGENT_RUNTIME_TURN_CAPABILITY`、`WITHMATE_AGENT_RUNTIME_APPLICATION_INSTANCE_ID`、`WITHMATE_AGENT_RUNTIME_GENERATION_ID`の5変数名を`env_vars`へ列挙して転送する。Session bindingの実値を固定・複製せず、通常のmanaged HTTP接続との重複を避ける。接続経路を変えてもtargetや操作権限は広がらない。
+手動clientで `withmate-glossary mcp-server` を試す場合は、当該Sessionが供給した次の**変数名**をCodex server設定の `env_vars` に列挙して転送する。実値を固定・複製しない。
 
-## Integration scenarios
+- `WITHMATE_AGENT_RUNTIME_BINDING_REFERENCE`
+- `WITHMATE_AGENT_RUNTIME_BINDING_REQUIRED`
+- `WITHMATE_AGENT_RUNTIME_TURN_CAPABILITY`
+- `WITHMATE_AGENT_RUNTIME_APPLICATION_INSTANCE_ID`
+- `WITHMATE_AGENT_RUNTIME_GENERATION_ID`
 
-1. `glossary.list_targets`が現在のSessionのprimary checkoutを1件だけ返す。
-2. Additional Directories、別worktree、callerが指定したpathへauthorityが広がらない。
-3. missingなGlossaryをreadしても`.withmate/`や`glossary.yaml`を作らない。
-4. proactive createが無効または上限超過の場合、explicit createへ読み替えず拒否する。
-5. updateはreadで得たcurrent revisionを使い、適用後のentryをread-backする。
-6. revision conflictでは新しいrevisionを使って自動再試行せず、current valueと変更目的を再評価する。
-7. `effect: unknown`では同じ操作を自動実行しない。current valueをread-backし、新しいwriteを選ぶ前にユーザーへ確認する。
-8. structured validation、authority、revision、conflict errorをCLIで迂回しない。
-9. Glossaryの内容をSession data、prompt、別cacheへ複製しない。
-
-## 障害時の扱い
-
-MCPが未設定、起動不能、またはtransport-levelで利用不能な場合だけ、managed Skillの手順に従ってCLI fallbackを使用できる。CLIも同じactive provider Session bindingを必要とする。bindingとprimary checkoutを確認できない場合はwriteしない。
-
-managed HTTPでtoolが公開されない場合は、起動元WithMateと当該Sessionへの接続設定の供給を確認する。`GLOSSARY_SESSION_BINDING_REQUIRED`ではprovider Sessionのbindingを確認し、手動STDIOの場合だけ5変数の転送設定も確認する。別Sessionの値や推測したURL・tokenで補わない。structuredなauthority、validation、revision、conflict errorはavailability failureへ読み替えず、CLIで迂回しない。
+`GLOSSARY_SESSION_BINDING_REQUIRED` では当該Sessionのbindingと、この経路を使う時だけ5変数の転送を確認する。別Sessionの値で補わない。managed HTTPと重複して登録せず、接続経路の変更で操作対象・承認範囲を広げない。

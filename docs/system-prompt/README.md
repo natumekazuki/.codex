@@ -1,26 +1,7 @@
 # Codex system promptの記録
 
-このディレクトリでは、WithMate用指示の現行ベースラインとなるCodex組み込み指示と日本語訳を管理します。
+ここには、組み込み指示を比較するための[取得時の英語本文と対応訳](snapshots/)を置きます。収録範囲はrolloutの先頭にある `session_meta.payload.base_instructions.text` だけです。Character、AGENTS.md、runtimeの権限・MCP、会話・認証は含めません。取得した原文は編集しません。
 
-## 範囲
+実際に選択できるWithMate用の配布物は、編集可能な[英語版](../../.codex/model-instructions-withmate.md)と[日本語版](../../.codex/model-instructions-withmate.ja.md)です。設定例は英語版を指定します。どちらも `model_instructions_file` に設定した場合だけ組み込み本文を**置換**します。取得版や訳を保存しただけで、Sessionへの指示やCharacter設定は変わりません。
 
-英語スナップショットには、Codex rolloutの最初の `session_meta.payload.base_instructions.text` だけを収録します。ユーザープロンプト、Character context、`AGENTS.md`、runtimeの権限、MCP環境値、認証、セッション状態は含めません。
-
-日本語版は翻訳参照用です。設定で明示的に選択しない限り、Codexへ渡すファイルではありません。
-
-WithMate用ファイルは編集可能な統合用コピーです。英語版と日本語版を用意し、取得した英語ベースラインを基に、重複する人格説明、60秒単位の進捗・待機制約、Skill利用時の宣言要件を取り除き、技術者前提の技術コミュニケーションとMermaid利用を反映しています。Character固有の文言は後続変更で調整します。
-
-## 構成
-
-| パス | 目的 |
-| --- | --- |
-| `snapshots/YYYY-MM-DD-<model>.en.md` | 現行ベースラインの英語原文。取得内容は改変しない |
-| `snapshots/YYYY-MM-DD-<model>.ja.md` | 対応する英語スナップショットの日本語訳 |
-| `.codex/model-instructions-withmate.md` | 編集可能なWithMate用指示ファイル（英語版） |
-| `.codex/model-instructions-withmate.ja.md` | 編集可能なWithMate用指示ファイル（日本語版） |
-| `scripts/capture-codex-system-prompt.ps1` | rolloutから組み込み指示を抽出するスクリプト |
-| `docs/runbooks/system-prompt-maintenance.md` | 取得、レビュー、翻訳、設定の手順 |
-
-## 更新と保存
-
-現行ベースラインとして必要な原文と訳だけを置きます。ベースラインの更新時は参照とWithMate用ファイルを揃え、役割を終えたスナップショットと訳を削除します。過去の内容はGit履歴で参照し、履歴保存を目的としたファイルの併存は行いません。
+[取得・比較・適用手順](../runbooks/system-prompt-maintenance.md)はベースライン更新と配布ファイルだけの編集を区別します。更新で役割を終えた原文・訳はGit履歴を参照し、現行指示として併置しません。

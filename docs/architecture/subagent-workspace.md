@@ -1,58 +1,46 @@
 # 委譲と作業領域
 
-## WithMateの通常子Sessionとnativeサブエージェント
-
-WithMateのRole・委譲責務・通常子の選定と再利用は[協同guide](../guides/withmate-collaboration.md)に従う。全体統括の実作業は通常子へ委譲し、native子への直接委譲で代替しない。Worker内の細かな分担・独立reviewには製品nativeのサブエージェントを使える。
-
-独立した会話・Character・実行設定・担当状態として継続して追う仕事には通常子、担当内で成果を回収・統合する分業にはnativeを基本とする。同じ仕事を重複委譲しない。native子を独立したWithMate参加者とみなさず、nativeの通知・返却・待機契約を使う。
-
-通常のMain Sessionは役割を問わず、全体統括・個別統括・Workerを含めて1 Session・1専有Workspaceとし、同じ作業directoryを複数のSessionへ重複割当しない。他SessionのWorkspaceを追加directory等で直接編集して分離を迂回せず、許可されたread-only参照と共同編集は区別する。Auxiliaryとnativeサブエージェントはこの必須ルールの対象外であり、既存の編集所有・衝突回避・権限はそのまま保つ。
-
-以下のnative制限とWithMateのcatalogは互いの許可を拡張しない。どちらも既存の委譲許可・必須専門審査・操作権限に従う。
-
-## nativeサブエージェント
-
-委譲前に読む。履歴継承はhookで `none` に固定されるため、目的、対象・編集所有、必要なcontext・参照の実path、期待成果・完了条件、権限、現在のSessionFolderを渡す。並行作業では競合を避け、ユーザーと他担当の変更を保護する。調査・reviewはread-onlyと明示する。
-
-共有判断を扱う場合は採用済み判断と適用状況・未合意事項、[設計guide](../guides/design-decisions.md)も渡す。reviewには主要動作・後続の依存と[開発guide](../guides/development.md)の統合基準を含め、全規約を複製しない。子がGraph・Glossaryを利用できない場合は、親が許可範囲で必要な取得・記録を担う。bindingやtool制限は迂回しない。
-
-native子の使用modelは以下の4つのみ。設定値と採用理由は[README](../../README.md#modelとrole)に記載する。
-
-| model／汎用role | 選ぶ仕事 |
-| --- | --- |
-| `gpt-6.2-sol`／`general_sol` | 通常の親・一般childの既定。広い文脈や未解決の判断を含む調査・設計・実装・debug・review |
-| `gpt-6-luna`／`general_luna` | 進め方・期待結果がほぼ決まった抽出・定型調査・設計済み実装・基準照合 |
-| `gpt-6.1-terra`／`general_terra` | 明確な入力・要求・検証方法を持つ画像・画面読解、実描画確認、素材に基づく文章、局所修正 |
-| `gpt-6.2-astra`／`general_astra` | 非Astra親から、高度な設計選択・契約矛盾・難しい反例を必要な問題に絞って渡す。Astra→Astraは禁止 |
-
-必要な成果・判断・完了条件から選び、短さや単価だけで決めない。上位modelの前に下位modelの試行や事前診断を義務化せず、定型処理へ未解決の設計・安全判断を押し込まない。専門審査は該当Skillに従う。
-
-role名から実modelを推測せず、起動時のmodel ID・effortを確認する。利用不可なら許可された親で可能な範囲を続ける。model変更で審査や操作権限を変えない。
-
-待機はruntimeの通知・既定値とtoolの許容範囲を使い、短いpollingを避ける。timeout時は進捗と続行条件を確認して必要なら待ち直す。
-
-test価値reviewはruntimeの `review-test-value` Skillに従い、専用role・scheduler・artifact storeを作らない。子は結果・根拠・実施確認・未解決を返し、親が統合・最終確認と指摘の採否・対応時期を判断する。通常の返却に専用文書は要らず、非ブロッカー全件修正待ちにはしない。
+委譲先は責任の持たせ方で選ぶ。独立した会話・Character・担当状態として成果を追うならWithMateの通常子、Workerが担当内で回収する分業・独立reviewなら許可されたnative子を使う。同じ仕事を二重に渡さない。統括の責任・通常子の選定と配送は[Session間の協同](../guides/withmate-collaboration.md)に従う。nativeは別のWithMate参加者ではなく、製品の通知・返却経路を使う。
 
 ## 子の作業領域と親の準備
 
-子を起動する直接の親が、起動前にその子の専用作業領域を作成・確認して絶対pathを渡す。全体統括は自身が起動する個別統括とWorkerの分を、個別統括は自身のWorkerの分を準備する。準備に失敗したら子の起動を保留し、親のWorkspaceを代用しない。子を親のWorkspaceで起動して自己準備させず、領域の準備・回収だけを目的にWorkerを起動しない。Worktree準備だけを直接依頼された場合も、受けた統括が自身で実施する。作業領域の管理は統括の直接操作に含めるが、短い実作業全般を統括へ戻す例外にはしない。
+WithMateの通常Mainは統括・Workerともに1 Sessionにつき1専有Workspaceを使う。起動する直接親が起動前に実体を準備し、その絶対pathを渡す。準備だけのWorkerを立てず、失敗時は子の起動を保留する。他SessionのWorkspaceを共用したり、追加directory経由で直接編集したりしない。許可されたread-only参照は共同編集と区別する。
 
-Git管理下の通常子には専用Worktreeを割り当てる。同じrepositoryでの並行作業は別のbranchで行う。Git管理外の作業は[非Gitの作業領域](#非gitの作業領域)に従う。配置先の取得と結果の使い分けは、協同guideの[Worktreeの配置先](../guides/withmate-collaboration.md#worktreeの配置先)を正本とする。
+Git管理下の通常子にはreviewでも専用Worktreeを用い、並行作業は別branchとする。特定commitへの固定は再現・隔離が必要な時に選ぶ。Auxiliaryとnative子には一律の専用Workspaceを課さず、編集所有・衝突・権限と必要な隔離から決める。
 
 ## Git worktreeの配置
 
-commit固定は具体的な隔離・再現の必要に応じて使い、全reviewへ一律には要求しない。Git管理下の通常子Sessionには、reviewを含めて専用Worktreeを割り当てる。Auxiliaryとnativeサブエージェントでは、具体的な隔離・再現の必要に応じてWorktreeを使う。非Gitの場合は[非Gitの作業領域](#非gitの作業領域)に従う。ここでは独自のroot・分類・layoutやpath組み立てを定義しない。
-
-親が、登録先の実体とbranch、分岐元のbranch・commit、作成先の占有、未コミット変更を確認し、必要なGit操作を行う。返された既存Worktreeは他Sessionの占有を確認してから割り当て、無条件に共有しない。forceで同じbranchを複数checkoutしない。配置候補の取得を作成済み・利用可能の証拠とせず、準備した実体の絶対pathを子のWorkspaceへ渡す。既存worktreeの移設・削除や他者の作業領域の上書きは、この準備の許可に含めない。
-
-## 作業領域の再利用と回収
-
-子の作業領域は同じSession・同じ担当作業で再利用し、Turn単位で作り直さない。待機・中断・修正待ちの間は保持し、idleや経過日数だけで削除しない。親は子の成果を受入し、必要な統合の後に回収する。回収前に、実行中や予約済みの作業と他Sessionの利用がないこと、成果と資料の保全、未コミット・未追跡・ignoredファイルに残すべきデータがないことを確認する。Worktreeとbranchは別々に回収できる。未統合のcommitや採否未決の成果を無断で破棄せず、中止・不採用の場合は保存か破棄かを決めてから扱う。通常の削除が拒否されたら、forceへの自動的な切り替えはしない。
-
-親が回収できるのは、この運用で新規に作った子用のWorktree、ローカルtask branch、非Git専用領域に限る。無関係な既存領域とremote・default・protected branchは対象外とする。回収の管理台帳は新設せず、再開時は保存されたbranch・commitと保全した成果から親が作業領域を再準備する。
-
-子Sessionへの送信が割当Workspaceの不在を理由に拒否された場合、送信元Sessionが復旧を担う。Git管理下では保存したbranch・commitから元の割当pathへWorktreeを再準備し、非Gitでは保全した入力から専用領域を再作成する。いずれも利用可能な実体を確認してから改めて送信する。拒否時に未配送（`effect: none`）が確認できた場合に限って再送し、受付結果が不明なら同じrequestIdと宛先で状態を確認して重複送信を避ける。送信元が安全に復旧できない場合は再送を保留して報告し、子Sessionに復旧を委ねない。
+1. WithMateでは対象repository・branchを `session.resolve_worktree` で解決する。利用可能な既存登録を優先し、返された配置先を使う。未設定なら配置に必要な不足だけ確認する。今回限りの指定は新規候補にだけ適用し、保存方針・既存登録を変更しない。SessionFolder・Crew Folderからpathを組み立てない。
+2. 配置候補は実体ではない。直接親が分岐元のbranch・commit、実体とbranch、他Sessionの占有、未コミット変更を確認して必要なGit操作を行う。同じbranchをforceで複数checkoutしない。既存領域の移設・削除・上書きは準備の範囲外。追加writeが要るなら専用の狭い範囲で通常の承認を求め、拒否を権限拡大で迂回しない。
+3. 子へ渡すのは利用可能と確かめたWorkspace。WithMateはGitの作成・統合を代行しない。実体・branch・占有が変わった事情がなければ確認結果を再利用できる。
 
 ## 非Gitの作業領域
 
-Git管理外の作業では、親が専用directoryへ今回必要な入力だけをコピーし、子は原本を直接編集しない。親は原本の現在状態と対象を確認して、必要な成果だけを反映する。directory全体の上書き戻しはしない。継続した開発や並行統合が見込まれる場合はGitでの管理を提案し、合意がない限りgit initや全ファイルのcommitをしない。DBや外部サービス等、directoryの分離だけでは隔離できない対象は、準備の前に方式を相談する。非Git専用領域の回収も、この運用で新規に作った専用領域だけを対象に、[作業領域の再利用と回収](#作業領域の再利用と回収)と同じ条件で行う。
+親が専用directoryに必要な入力だけをコピーし、子は原本を直接編集しない。親は受入時の原本と照合し、必要な成果だけを戻す。継続的な並行統合にGitが必要なら提案し、合意なしの `git init` や一括commitはしない。DBや外部サービスなどdirectory分離では保護できない対象は準備前に方式を相談する。
+
+## 作業領域の再利用と回収
+
+同じSession・同じ担当の続きには元の領域を使う。idle・経過日数を理由に待機中・中断中・修正待ちの領域を回収しない。親が回収できるのは、この運用で**新規に作った**子用Worktree、ローカルtask branch、非Git専用領域だけ。既存領域、remote・default・protected branchを含めない。
+
+回収は受入・必要な統合の後に行う。実行中・予約済みの作業や他Sessionの利用がなく、成果・参照資料が保全されていることを確認する。未コミット・未追跡・ignoredのデータも対象とし、未統合commitや採否未決の成果を捨てない。中止・不採用なら保存か破棄かを先に決める。Worktreeとbranchは別々に扱い、通常削除の拒否からforceへ切り替えない。
+
+割当Workspaceの不在で送信が拒否されたら、送信元が元の割当pathに復旧する。Gitなら保存したbranch・commit、非Gitなら保全した入力から再準備する。実体を確認できなければ再送を保留し、自分で復旧できない子へ任せない。再送可否は[受付の証拠](../guides/withmate-collaboration.md#通常送信と実行中の補足)で判断する。専用の回収台帳は作らない。
+
+## nativeサブエージェント
+
+nativeの使用モデルは次の4つに限る。WithMateのcatalogや外部role名でこの制限は広がらない。
+
+| model | 向いている担当 |
+| --- | --- |
+| `gpt-6.2-sol` | 通常の親・一般子の既定。広い文脈を要する調査・設計・実装・debug・review |
+| `gpt-6-luna` | 手順と期待結果が定まった抽出・変換・照合・設計済み実装 |
+| `gpt-6.1-terra` | 入力・完了条件が明確な画像や画面の読解、素材に基づく文章、局所修正 |
+| `gpt-6.2-astra` | 難しい判断、契約間の矛盾、反例。非Astra親から問題を絞って渡す。Astra→Astraは禁止 |
+
+必要な成果・判断・検証から直接選び、短さ・単価や下位modelの事前試行を条件にしない。起動時の実model・effortを確認する。未提供なら許可された親でできる範囲を進め、必須専門審査を親の自己評価で代用しない。
+
+汎用roleの権限は親から継承するが、履歴は継承させない（`fork_turns=none`）。親は目的・編集所有・必要な実path、SessionFolder、契約・完了条件・許可範囲を依頼に含める。調査・reviewはread-onlyを明示し、利用できるruntime制限を適用して他担当・ユーザーの変更を保護する。共有判断に関わる時は採否・適用範囲と設計guide、reviewでは主要動作・後続契約と開発guideの該当基準を渡す。Graph・Glossaryのbindingを持たない子には、親が権限内で必要な情報を取得・記録する。
+
+SessionStart／SubagentStartは共通入口を通知する。制限を実行するのは別のPreToolUse hookで、一覧外の明示model、Astra親からAstraの明示指定または `general_astra` を拒否し、許可する呼出しの履歴だけを `none` に置換する。省略modelや任意roleの実modelを解決するのはhookではなく設定・runtimeである。
+
+native子は結果と受入に必要な根拠を親に返す。待機はruntimeの通知・許容timeoutを使い、必要な場合にだけ待ち直す。親が統合・最終確認・指摘の採否と時期を担う。test価値審査はruntimeの `review-test-value` Skillに従い、汎用の返却書式や別の審査経路を作らない。
