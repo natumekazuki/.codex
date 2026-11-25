@@ -27,7 +27,7 @@
 
 共通ルール・自主管理Skill・設定例・通知方針はCodexを基本の正本とし、通常の保守では目的・制約・完了条件を揃えて同じ作業で3者に反映する。各配布元（`.codex`、`.claude`、`~/.config/opencode`）は相互importや共有リンクに依存せず独立して使える構成とする。Claude・OpenCode起点の共通改善はCodexにも戻す。
 
-model・tool・設定形式など製品固有の機構は各製品に合わせる。他の2者への影響を確認し、反映しない場合は理由を示す。対象の差分と必要な動作を確かめて反映・検証結果を報告する。対象製品を限定した依頼を他の配布元への書込権限としない。認証、実config、Session URL・token、Memory・履歴・cache、外部managed Skillは同期しない。
+model・tool・設定形式など製品固有の機構は各製品に合わせる。対象製品を限定した依頼を他の配布元への書込権限としない。認証、実config、Session URL・token、Memory・履歴・cache、外部managed Skillは同期しない。
 
 ## 配置と検証
 
@@ -60,12 +60,8 @@ profileは `codex --profile sol` または `codex --profile astra` で選ぶ。T
 
 `natural-japanese` の[同期元](https://github.com/coji/natural-japanese)・commit・licenseは [NOTICE](skills/natural-japanese/NOTICE) と [LICENSE](skills/natural-japanese/LICENSE) を参照。同期には `pwsh ./scripts/sync-natural-japanese.ps1 -Check`（確認）と、更新時の `pwsh ./scripts/sync-natural-japanese.ps1` を使う。scriptはlocal adaptationと明示起動方針を再現し、このSkillに未コミット変更があれば更新を拒否する。
 
-## 配布する指示の効き方を確かめる
+## 配布時の確認
 
-変えた判断が必要な入力と、その判断を適用してはいけない入力を一組選ぶ。入口・guide・Skill・metadata・hookの参照を照合し、対象の変更に応じて「配布元にある」「端末へ配置された」「そのSessionが読んだ」「期待した行動が観測できた」を別々に確かめる。毎回すべての経路を検査するものではない。
-
-- **入口・通知・role**：startup／resume／compactや子の起動時には、通知から共通入口を辿れるかを確かめる。これとは別に、native委譲の `PreToolUse` が許可リスト外の明示modelとAstra親からAstra子への指定を拒否し、許可時に `fork_turns=none` を設定することを確かめる。モデルや指示の出力を比べるときは履歴・model・Character・tool条件を揃え、答えの正しさと、受け手に残った選別・再説明の負担を見る。
-- **専門Skill**：変更testは決定論的抽出の対象・結果と、抽出record全件のread-only審査を別に見る。UIはSkill名を指定しない変更依頼とUIに関係しない対照で、実際の参照・情報の採否・描画・必要な操作・画像提示を確かめる。暗黙呼出しを許すmetadataやbuild成功だけを適用証拠にしない。Graphは実配置・発見と指示の先行記録／復元を分け、変更した場合は競合・結果不明時の照合も対象にする。
-- **WithMate V7の協同**：実配置した全体統括にAPI名や具体値を指定せず委譲可能な目的を渡し、方針・宛先候補・配置先の取得と通常子への配送を観測する。通常依頼・単発指定で保存方針を変えないことも見る。静的照合やAPIの読取だけでは実配送の確認にならない。
+変更が影響する契約を確認する。配布元の文書を確認しただけなら、端末での適用や実動作まで確認したとは扱わない。出力比較が依頼された場合は、[比較手順](docs/runbooks/compare-subagent-roles.md#役割指示を比較する時)を参照する。
 
 [CI](.github/workflows/ci.yml) は抽出器・言語adapter・監査スクリプト・Windows hookの回帰を検査する。モデル実行やsecretを公開CIへ追加しない。確認した対象・条件・結果と判断に響く未確認は既存の[review記録](docs/guides/development.md#sessionfolderのreview記録と対応管理)等に残し、文書の一致を実動作の証拠にしない。
