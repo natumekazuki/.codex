@@ -1,6 +1,6 @@
 ---
 name: review-test-value
-description: Python、TypeScript、C#の追加・意味変更・削除・移設testを、固定したGit差分、旧側を含む本文、docコメント、契約の根拠から独立したread-onlyサブエージェントへ渡して価値を審査する。runtime test collectionや動的生成caseの展開には使わない。
+description: 言語を問わず、追加・意味変更・削除・移設したtestを固定baseと対象snapshotの差分から確認し、本文・docコメント・契約の根拠を独立したread-only担当へ渡して価値を審査する。テスト実行や動的なcase一覧の生成には使わない。
 ---
 
 # Review Test Value
@@ -13,7 +13,7 @@ description: Python、TypeScript、C#の追加・意味変更・削除・移設t
 2. パスで事前に絞らず、ファイルの追加・削除・改名とpatchの両側を確認する。commitなら `git diff --name-status -M <base> <target>` と `git diff --no-ext-diff --no-textconv -M <base> <target>`、indexなら `git diff --cached --name-status -M <base>` と `git diff --cached --no-ext-diff --no-textconv -M <base>` を使う。Git属性などでテキストソースにpatchが出ない場合は、対象パスの旧・新の元の内容を次の手順で取得して比較する。未追跡ファイルが対象なら、名前だけでなく本文も固定した対象に含める。test file名だけで選ばず、既存・変更両側でframeworkの宣言・呼び出しや生成元、fixture・mock・設定の変更も確認し、testの意味が変わる影響先を辿る。
 3. 追加・意味変更（docコメントの意味変更を含む）・削除・移設されたtestを、両側のパスと宣言位置で特定する。変更hunkだけでなく関連するtest本文と付随するdocコメント、比較に必要な前後を読む。旧本文は `git show <base>:<old-path>`、対象側は `git show <target>:<new-path>` またはindexの `git show :<new-path>` で取得できる。純粋な移設でも、runnerが検出するか、依存・実行条件・保証が維持されるか確認する。改名が削除と追加に分かれても片側を落とさず、名前だけで同じtestとみなさない。
 
-旧testのdocコメントがない、または旧書式しかないときは、旧本文・当時の記述と確認できる契約をそのまま使う。削除のために過去の説明を追加せず、不明な対応・根拠は不足として示す。専用CLI・JSONによる全件機械選択やruntime case一覧の網羅性は保証しない。必要対象を確認できなかった範囲は明記する。
+変更前のdocコメントがないときは、当時の本文・記述と確認できる契約を使う。削除のために過去の説明を追加しない。不明な対応・根拠や対象を確認できなかった範囲は明示する。差分を読む手順であり、実行時のcase一覧や機械的な全件選択は保証しない。
 
 ## 独立した担当へ渡す
 

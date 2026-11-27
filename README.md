@@ -20,7 +20,7 @@
 ### 本repositoryの開発・リリース境界
 
 - `vMAJOR.MINOR.PATCH` タグが指すcommitを配布版とする。タグのないcommitやbranch上の途中状態は互換保証の対象としない。
-- 維持するのは各タグのリリースノートで明示した利用者向け契約であり、実装全体ではない。以前の版に含まれる `review-test-value` のCLI等を使う場合は、対象タグのリリースノートと[移行案内](#変更testの審査を旧方式から移行する)を確認する。
+- 維持するのは各タグのリリースノートで明示した利用者向け契約であり、実装全体ではない。
 - 破壊的な契約変更はmajor、互換な変更はminorまたはpatchを上げて新しいタグへ記録する。リリースごとに [一覧](docs/releases/README.md) と `docs/releases/vMAJOR.MINOR.PATCH.md` を更新し、変更・互換性・検証結果を残す。
 
 ### Codex／Claude／OpenCode間の変更反映
@@ -60,14 +60,7 @@ profileは `codex --profile sol` または `codex --profile astra` で選ぶ。T
 
 `natural-japanese` の[同期元](https://github.com/coji/natural-japanese)・commit・licenseは [NOTICE](skills/natural-japanese/NOTICE) と [LICENSE](skills/natural-japanese/LICENSE) を参照。同期には `pwsh ./scripts/sync-natural-japanese.ps1 -Check`（確認）と、更新時の `pwsh ./scripts/sync-natural-japanese.ps1` を使う。scriptはlocal adaptationと明示起動方針を再現し、このSkillに未コミット変更があれば更新を拒否する。
 
-## 変更testの審査を旧方式から移行する
-
-この配布元では、従来の `@test-value` 専用書式、`extract_test_values.py` CLI、構造化JSON、言語adapter、Git差分からの全件機械選択を廃止した。従来の利用者向け契約を除く破壊的変更として、公開時はmajorを上げる。旧方式が必要な間は契約がある旧タグを使い、ファイルの上書きコピーだけで新旧の手順を混在させない。
-
-- 手動配置では `AGENTS.md`、関連guide、`review-test-value` のSkill本文とUI metadataを同じ版に揃える。追跡済みの旧書式reference・抽出資産のコピーやlinkが残る場合は、利用状況を確かめて新配置から外す。
-- 変更するtestから有効な説明を[コードコメント規約](docs/guides/code-comments.md#テストのドキュメントコメント)に沿うdocコメントへ移す。旧書式と二重記述せず、一括書換えも要求しない。
-- 利用先のCI・hook・wrapper等で旧CLIやJSONを消費していないか調べ、呼び出し・結果依存を外す。独立したread-only審査は[固定base・対象snapshotの差分と旧側を含む本文を渡す手順](skills/review-test-value/SKILL.md)へ切り替え、テスト実行は維持する。JSONや全件機械選択の互換代替はない。その保証が必要なら、切替前に利用先の要件として扱う。
-- コメントの機械検査は[利用先での導入手順](docs/guides/code-comments.md#利用先での機械検査の導入)に従い、対象・配置・上限・除外を決め、通常の検証コマンドへ接続して実行する。共通規約の配置だけでは有効にならない。
+コードとtestのコメントは[共通コメント規約](docs/guides/code-comments.md)に従い、新規・変更箇所から整える。testの価値審査は[変更testの審査と保持](docs/guides/test-changes.md)を参照する。コメントの機械検査は[利用先での導入手順](docs/guides/code-comments.md#利用先での機械検査の導入)に従う。
 
 ## 配布時の確認
 
