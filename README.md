@@ -11,7 +11,7 @@
 | 親・子の設定、profile | [共有config例](config.example.toml)、[registryとprofile](config/) |
 | 任意で組込み指示を置き換える場合 | [WithMate用英語版](.codex/model-instructions-withmate.md)・[日本語版](.codex/model-instructions-withmate.ja.md)、[取得版・訳](docs/system-prompt/)、[保守手順](docs/runbooks/system-prompt-maintenance.md) |
 | 導入・診断、記入例 | [用途別runbook](docs/runbooks/)、[ADR・review記録の記入例](templates/)（任意） |
-| 過去の判断と公開版 | [ADR](docs/adr/)、[版別リリースノート](docs/releases/README.md) |
+| 過去の判断と公開版 | [ADR](docs/adr/)、[版別リリースノート](docs/releases/README.md)（変更に伴う影響） |
 
 ## このrepositoryの管理先とリリース境界
 
@@ -21,7 +21,7 @@
 
 - `vMAJOR.MINOR.PATCH` タグが指すcommitを配布版とする。タグのないcommitやbranch上の途中状態は互換保証の対象としない。
 - 維持するのは各タグのリリースノートで明示した利用者向け契約であり、実装全体ではない。
-- 破壊的な契約変更はmajor、互換な変更はminorまたはpatchを上げて新しいタグへ記録する。リリースごとに [一覧](docs/releases/README.md) と `docs/releases/vMAJOR.MINOR.PATCH.md` を更新し、変更・互換性・検証結果を残す。
+- 破壊的な契約変更はmajor、互換な変更はminorまたはpatchを上げて新しいタグへ記録する。リリースごとに [一覧](docs/releases/README.md) と `docs/releases/vMAJOR.MINOR.PATCH.md` を更新し、変更内容とその互換性・移行・利用・安全上の影響を記録する。
 
 ### Codex／Claude／OpenCode間の変更反映
 
