@@ -23,6 +23,12 @@
 - 維持するのは各タグのリリースノートで明示した利用者向け契約であり、実装全体ではない。
 - 破壊的な契約変更はmajor、互換な変更はminorまたはpatchを上げて新しいタグへ記録する。リリースごとに [一覧](docs/releases/README.md) と `docs/releases/vMAJOR.MINOR.PATCH.md` を更新し、変更内容とその互換性・移行・利用・安全上の影響を記録する。
 
+### この設定ホームでGit管理するもの
+
+新しいパスは既定で除外し、配布専用の文書・開発資産と、明示した設定例・ソースだけを許可する。Skillはパッケージごとに登録する。実設定・認証、端末専用のSkill／pluginや生成物は配布しない。Gitignoreは追跡済みファイルの変更や機密の中身までは除外しないので、stageする内容も確認する。
+
+新しい配布物を追加するときは、必要な親ディレクトリと対象だけを `.gitignore` で許可し、`git check-ignore -v --no-index -- <path>` と `git add -n -- <path>` で正しく追加できるか確かめる。除外を変更するときは、Git Bash等で `git ls-files -z | git check-ignore -z --no-index --stdin` を実行し、既存の追跡パスが出力されないことも確認する。`git add -f` で回避せず、実設定とは別の見本を配布する。
+
 ### Codex／Claude／OpenCode間の変更反映
 
 共通ルール・自主管理Skill・設定例・通知方針はCodexを基本の正本とし、通常の保守では目的・制約・完了条件を揃えて同じ作業で3者に反映する。各配布元（`.codex`、`.claude`、`~/.config/opencode`）は相互importや共有リンクに依存せず独立して使える構成とする。Claude・OpenCode起点の共通改善はCodexにも戻す。
