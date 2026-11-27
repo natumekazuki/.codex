@@ -38,7 +38,6 @@ chrome-native-hosts.json
 cap_sid
 /.sandbox-bin
 /.tmp
-/plugins/cache
 installation_id
 /memories
 /skills/withmate-glossary/
@@ -49,11 +48,8 @@ session_index.jsonl
 .agent-worktrees/
 .app-server-state-reconciled-v1
 /ambient-suggestions
-/browser
 chrome-native-hosts-v2.json
-/computer-use
 /plugins
-/process_manager
 /worktrees
 automations/.run-jitter-salt
 generated_images/*
@@ -65,3 +61,24 @@ transcription-history.jsonl
 
 # 利用者が保持する非配布の端末固有資料
 /withmate.local.md
+
+# Codexの端末固有の設定・認証・実行状態
+/.codex-provisioning-*.guard
+/.sqlite-maintenance.lock
+/app-server-control/
+/app-server-daemon/
+/auth.json.lock
+/auth.lock
+/models_cache.codex_work_desktop.json
+/node_repl/
+/packages/app-server-daemon/
+/pets/
+/session_index.jsonl.lock
+/sol.config.toml
+/tui-thread-reference-capabilities/
+
+# 端末に配備された外部Skillと廃止済みSkillのビルド残留物
+/skills/playwright/
+/skills/review-test-value/**/bin/
+/skills/review-test-value/**/obj/
+/skills/review-test-value/**/node_modules/
