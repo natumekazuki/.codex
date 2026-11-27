@@ -1,6 +1,6 @@
 # ADR-0021: テスト価値審査の対象をGit差分から選択する
 
-> 専用CLIによる遷移・診断・全件機械選択の判断は現行配布の適用対象外。固定baseと対象snapshotの両側を確認し、旧本文も独立審査する目的は維持する。現行の手順は [Review Test Value](../../skills/review-test-value/SKILL.md)。以下は当時の適用範囲を含む判断履歴。
+> 専用CLIによる遷移・診断・全件機械選択の判断は現行配布の適用対象外。変更前後のテストは、実装と同じ[通常のreview](../guides/test-changes.md#通常のreviewで確認する)で確認する。以下は当時の適用範囲を含む判断履歴。
 
 - Status: accepted（一対多置換の停止判断は一部置換）
 - Date: 2026-08-29
@@ -8,7 +8,7 @@
 - Supersedes: none
 - Extends: ADR-0020
 
-## 現在の適用範囲
+## 当時の適用範囲
 
 Decisionの「同一file pairで候補が曖昧なら`RECORD_TRANSITION_UNRESOLVED`で停止する」という判断のうち、[Git選択契約の一対多置換条件](https://github.com/natumekazuki/.codex/blob/513ec18906df7f1d817942799d00498e9452bf2d/skills/review-test-value/references/git-selection-v1.md#selection)に該当する範囲は、現行運用の適用対象外とする。後継判断は同契約を正本とし、旧recordを`DELETED.before`、新recordを他の旧recordとの一意な対応もなければ`ADDED.after`として保持し、旧・新の全件を審査へ渡す。
 

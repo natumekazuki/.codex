@@ -43,4 +43,4 @@ nativeの使用モデルは次の4つに限る。WithMateのcatalogや外部role
 
 SessionStart／SubagentStartは共通入口を通知する。制限を実行するのは別のPreToolUse hookで、一覧外の明示model、Astra親からAstraの明示指定または `general_astra` を拒否し、許可する呼出しの履歴だけを `none` に置換する。省略modelや任意roleの実modelを解決するのはhookではなく設定・runtimeである。
 
-native子は結果と受入に必要な根拠を親に返す。待機はruntimeの通知・許容timeoutを使い、必要な場合にだけ待ち直す。親が統合・最終確認・指摘の採否と時期を担う。test価値審査はruntimeの `review-test-value` Skillに従い、汎用の返却書式や別の審査経路を作らない。
+native子は結果と受入に必要な根拠を親に返す。待機はruntimeの通知・許容timeoutを使い、必要な場合にだけ待ち直す。親が統合・最終確認・指摘の採否と時期を担う。

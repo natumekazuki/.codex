@@ -56,11 +56,11 @@ profileは `codex --profile sol` または `codex --profile astra` で選ぶ。T
 
 ## Skillの配布
 
-このrepositoryで保守するのは、変更testの [review-test-value](skills/review-test-value/)、UIの [design-ui-information](skills/design-ui-information/)、Crewの共有記録を扱う [session-graph](skills/session-graph/)、採用済みrepositoryを扱う [relaygraph](skills/relaygraph/)、期間を指定した [作業監査](skills/audit-codex-work-quality/)、明示的な文章推敲用の [japanese-tech-writing-review](skills/japanese-tech-writing-review/) と [natural-japanese](skills/natural-japanese/) である。導入時はSkill本文とUI表示・起動案内用のmetadataを揃える。
+このrepositoryで保守するのは、UIの [design-ui-information](skills/design-ui-information/)、Crewの共有記録を扱う [session-graph](skills/session-graph/)、採用済みrepositoryを扱う [relaygraph](skills/relaygraph/)、期間を指定した [作業監査](skills/audit-codex-work-quality/)、明示的な文章推敲用の [japanese-tech-writing-review](skills/japanese-tech-writing-review/) と [natural-japanese](skills/natural-japanese/) である。導入時はSkill本文とUI表示・起動案内用のmetadataを揃える。
 
 `natural-japanese` の[同期元](https://github.com/coji/natural-japanese)・commit・licenseは [NOTICE](skills/natural-japanese/NOTICE) と [LICENSE](skills/natural-japanese/LICENSE) を参照。同期には `pwsh ./scripts/sync-natural-japanese.ps1 -Check`（確認）と、更新時の `pwsh ./scripts/sync-natural-japanese.ps1` を使う。scriptはlocal adaptationと明示起動方針を再現し、このSkillに未コミット変更があれば更新を拒否する。
 
-コードとtestのコメントは[共通コメント規約](docs/guides/code-comments.md)に従い、新規・変更箇所から整える。testの価値審査は[変更testの審査と保持](docs/guides/test-changes.md)を参照する。コメントの機械検査は[利用先での導入手順](docs/guides/code-comments.md#利用先での機械検査の導入)に従う。
+コードとtestのコメントは[共通コメント規約](docs/guides/code-comments.md)に従い、新規・変更箇所から整える。通常のreviewでtestの変更を見る観点は[テスト変更と保持の判断](docs/guides/test-changes.md)を参照する。コメントの機械検査は[利用先での導入手順](docs/guides/code-comments.md#利用先での機械検査の導入)に従う。
 
 ## 配布時の確認
 

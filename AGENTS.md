@@ -24,7 +24,6 @@
 | 開発・調査・設計・reviewの開始・再開・Compact後、要求・制約・承認・判断・状態が変わったとき | runtimeの `session-graph` Skill。関連記録を読み、指示を保存・照合して依存作業へ進む。既存内容で答えられ条件の変わらない説明・確認・雑談は対象外 |
 | 設計選択、共有判断の不足・矛盾、共有方針・現行説明・判断履歴の作成・変更・統合 | `~/.codex/docs/guides/design-decisions.md`。文書作成の明示依頼は不要 |
 | 実装着手・完了判断、課題・予定管理、reviewの開始・結果確認・対応・再開・完了、互換性変更・統合・公開範囲の判断 | `~/.codex/docs/guides/development.md` と対象repositoryのREADMEまたはAGENTS.mdが指定する運用文書。実装前に維持対象と残件の管理先を確認し、アプリ開発には同guideの「実装規約の基本セット」を適用する |
-| 言語を問わずtestを追加・意味変更・削除・移設する前 | `~/.codex/docs/guides/test-changes.md` とruntimeの `review-test-value` Skill |
 | UI開発環境の整備、ユーザー向けUIの新設・変更（文言を含む）・設計見直し、描画確認・報告 | `~/.codex/docs/guides/ui.md`、runtimeの `design-ui-information` Skill、対象製品のUI規約 |
 | 委譲前、Git worktreeの配置先決定・作成・回収時 | `~/.codex/docs/architecture/subagent-workspace.md` |
 | WithMate統括が担当を選ぶ前（ユーザー直接入力を含む）、Session間の依頼・相談・報告・再開、通常子の実行条件選定 | `~/.codex/docs/guides/withmate-collaboration.md` |
