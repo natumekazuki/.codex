@@ -1,44 +1,30 @@
 ---
 name: review-test-value
-description: Python、TypeScript、C#の変更testをGit差分から決定論的に抽出し、構造化された@test-value metadataとtest本文を通常のread-onlyサブエージェント審査へ渡す。runtime test collectionや動的生成caseの展開には使わない。
+description: Python、TypeScript、C#の追加・意味変更・削除・移設testを、固定したGit差分、旧側を含む本文、docコメント、契約の根拠から独立したread-onlyサブエージェントへ渡して価値を審査する。runtime test collectionや動的生成caseの展開には使わない。
 ---
 
 # Review Test Value
 
-差分から選定するのは抽出器、testと維持契約の対応を確かめるのは独立したread-onlyの審査担当、指摘の採否・対応時期を決めるのは親である。恒久testを残す判断はユーザーhomeの `~/.codex/docs/guides/test-changes.md`、担当選択は `~/.codex/docs/architecture/subagent-workspace.md` に従う。
+何を残すかはユーザーhomeの `~/.codex/docs/guides/test-changes.md`、説明は同じhomeの `~/.codex/docs/guides/code-comments.md`、独立担当の選定は `~/.codex/docs/architecture/subagent-workspace.md` に従う。手順はruntimeが示すこのSkillを使う。reviewとテスト実行は別である。
 
-## 対象を固定して抽出する
+## 差分と本文を固定する
 
-タスク開始時のbase commitと審査対象のsnapshotを特定する。追加・意味変更・削除・移設を含む差分から、言語ごとに抽出する。宣言の認識範囲は[対応adapter](references/source-adapters-v1.md)、metadataの追加・修正は[v2コメント書式](references/comment-format-v2.md)に従う。script・referenceは作業対象repositoryではなく、runtimeが示すこのSkillのdirectoryから解決する。次の例の `$reviewSkillRoot` はその絶対pathである。
+1. タスク開始時のbaseを完全なcommit IDで示し、審査する対象snapshotを固定する。対象commit、確認中に変えないindex、または未追跡分を含めて保存した変更集合を使う。別のbaseや動くworking treeの名前だけで固定したことにしない。保存した範囲と実際に出す差分が変われば、影響箇所を更新する。
+2. パスで事前に絞らず、ファイルの追加・削除・改名とpatchの両側を確認する。commitなら `git diff --name-status -M <base> <target>` と `git diff --no-ext-diff --no-textconv -M <base> <target>`、indexなら `git diff --cached --name-status -M <base>` と `git diff --cached --no-ext-diff --no-textconv -M <base>` を使う。Git属性などでテキストソースにpatchが出ない場合は、対象パスの旧・新の元の内容を次の手順で取得して比較する。未追跡ファイルが対象なら、名前だけでなく本文も固定した対象に含める。test file名だけで選ばず、既存・変更両側でframeworkの宣言・呼び出しや生成元、fixture・mock・設定の変更も確認し、testの意味が変わる影響先を辿る。
+3. 追加・意味変更（docコメントの意味変更を含む）・削除・移設されたtestを、両側のパスと宣言位置で特定する。変更hunkだけでなく関連するtest本文と付随するdocコメント、比較に必要な前後を読む。旧本文は `git show <base>:<old-path>`、対象側は `git show <target>:<new-path>` またはindexの `git show :<new-path>` で取得できる。純粋な移設でも、runnerが検出するか、依存・実行条件・保証が維持されるか確認する。改名が削除と追加に分かれても片側を落とさず、名前だけで同じtestとみなさない。
 
-```powershell
-python -X utf8 "$reviewSkillRoot/scripts/extract_test_values.py" --root <repository-root> --changed-from <task-base-commit> --language python
-```
-
-`--language` は `python`、`typescript`、`csharp` のいずれか。既定のworking tree、`--staged` のindex、`--head <commit>` のcommitは別の対象である。[Git差分・遷移契約](references/git-selection-v1.md)に従い、都合のよいbase・path・行を手で選ばない。
-
-| 終了値 | 審査へ渡せるもの |
-| --- | --- |
-| `0` | JSONの `tests` と `transitions` の全record。対象なしと審査済みを区別する。 |
-| `1` | 抽出未完了。source・metadataの診断を確認し、部分結果で進めない。直比較の失敗が `RECORD_TRANSITION_UNRESOLVED` だけなら、[既存のfirst-parent統合履歴経路](references/git-selection-v1.md#統合履歴による審査)を使える。元のbaseと最終snapshotを保ち、終端を含む全区間の抽出成功と全recordの審査が必要。 |
-| `2` | CLI・adapter・I/O等の失敗。抽出成功や問題なしとは扱わない。 |
-
-遷移の旧・新の本文とmetadataを保つ。`DELETED.before` は、旧testにmetadataがなければ `null` のまま、正常なv1なら元のまま審査に使う。現行側の欠落・不正を補完しない。固定baseのTypeScriptの動的titleは式を含む宣言であり、実行時case一覧ではない。移設が削除と追加に分かれても、名前だけで存続と決めない。抽出を通すためにtestの意味や配置、履歴を変えない。
+旧testのdocコメントがない、または旧書式しかないときは、旧本文・当時の記述と確認できる契約をそのまま使う。削除のために過去の説明を追加せず、不明な対応・根拠は不足として示す。専用CLI・JSONによる全件機械選択やruntime case一覧の網羅性は保証しない。必要対象を確認できなかった範囲は明記する。
 
 ## 独立した担当へ渡す
 
-契約・SUT・fixtureを共有するrecordは全件を読める単位にまとめ、通常のread-onlyサブエージェントへ依頼する。分割した場合も全record・全遷移を網羅する。担当の枠が限られれば順次扱い、同じ対象を観点ごとに再委譲しない。
-
-依頼にはrepository root、base・対象snapshot、対象fileとlocator、抽出したmetadataとtest source、審査範囲と維持契約の根拠、下記の観点と統合基準を渡す。削除・置換の理由は確認済みの契約と分ける。担当は該当snapshotのproduction code、fixture、mock、oracleへ自分で辿る。担当から取得できないsourceは親が出典とともに渡し、要約や親の自己評価で独立確認を置き換えない。
+通常のread-onlyサブエージェントへ、repository root、固定base・対象snapshot、差分範囲、対象fileとlocator、旧側を含む本文・docコメント、維持契約の確認先、以下の観点を渡す。契約・SUT・fixtureを共有する範囲はまとめ、分ける場合も旧側を含めて担当範囲の漏れを確認する。削除・置換の提案理由と既知の契約は区別する。担当自身が対象snapshotのproduction code、fixture、mock、根拠を読めるようにし、アクセスできない原文は出典付きで渡す。親の要約だけで置き換えない。
 
 ## 一回のreviewで確認する観点
 
-- **守る契約。** そのtestが落ちるとどの利用者・データ・機能に何が起きるか。実装や既存testの存在、`permanent` の指定は維持契約の根拠ではない。削除・移設も同じ基準で見て、旧機構専用のtestに同等品を自動で要求しない。有効な保証には、既存checkや小さいtestの方が直接検出できないかを考える。
-- **metadataと根拠。** claim・fault・observable・観測境界・scope・lifecycleが自己完結し、欠陥を具体的に反証できるか。[oracleの根拠](references/comment-format-v2.md#oracleの根拠参照)を実際に辿って期待値を確認する。本文から欠けた意味を補わず、参照不能なら判断に必要な不足を返す。
-- **本文と検出力。** setupとactionが意図するproduction pathを通り、欠陥がassertionの直接観測まで伝わるか。期待値が実装と循環する、mockが欠陥を隠す、内部の配線を縛るだけ、といった場合は、どの故障を検出できないか、またはどの正しい変更を拒むかを示す。
+- **守る契約。** 失敗が利用者・データ・機能に及ぼす具体的な影響と、既存checkでは足りない保証を確認する。実装やtestの存在自体は保持理由にならない。削除・移設では、現役の保証の持ち先と旧機構専用の保証を分ける。同等品を自動では要求しない。
+- **説明と根拠。** 条件、期待結果、検出したい故障が読めるか。期待値に根拠が要るなら正本の箇所を辿る。一時固定・一時検証の見直しや除去の条件を確認し、未確認の判断理由や契約を補作しない。
+- **本文と検出力。** setupとactionが対象のproduction pathを通り、故障がassertionの観測に届くか。期待値と実装の循環、mockが隠す故障、内部配線を縛るだけのassertionに注意する。移設で検出・設定・依存が変わるなら影響まで確認する。
 
 ## 審査を閉じる条件
 
-親は、対象ごとの自然言語の所見を読み、根拠・影響を確かめる。抽出成功、全recordの独立審査、必要なtest実行、修正済み、統合可能を分ける。起動失敗・空の応答・未確認recordがあれば審査は完了していない。必要なcontextまたは担当を補い、影響するrecordだけ再確認する。
-
-指摘の採否・時期・引継ぎは `~/.codex/docs/guides/development.md` に従う。必須確認を後追いにはできないが、任意改善の全件修正は完了条件ではない。固定verdict・返答schema・追加の同一性証明は求めない。抽出器を変更した場合は、`scripts/test_extract_test_values*.py` のPython・多言語回帰testを実行し、抽出器とGit選択scriptの構文も確認する。
+親は実際の所見を読み、確認した範囲と未確認を区別し、指摘を扱う。起動失敗・空の応答・必要対象の確認漏れを審査済みにせず、不足を補って影響範囲だけ再確認する。差分確認、独立審査、必要なtest実行、統合可否は別に扱う。指摘の分類・記録・引継ぎは `~/.codex/docs/guides/development.md` に従う。固定verdictや返答schemaは要求しない。

@@ -1,4 +1,4 @@
 interface:
   display_name: "Review Test Value"
-  short_description: "構造化コメントとテスト本文の検証価値を審査する"
-  default_prompt: "$review-test-valueで変更されたtestを決定論的に抽出し、共通の委譲基準で担当を選んでread-only reviewを委譲してください。"
+  short_description: "差分・本文・docコメントから変更testの価値を審査する"
+  default_prompt: "$review-test-valueで固定baseと対象snapshotの差分から削除・移設を含むtestを確認し、旧側の本文・docコメント・根拠も独立したread-only担当へ渡してください。"
