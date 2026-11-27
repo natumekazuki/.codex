@@ -81,9 +81,21 @@ obj/
 *.sqlite-shm
 *.sqlite-wal
 config.toml
+
+# Codexの端末状態・識別子・履歴は配布ディレクトリの内側でも除外する
+version.json
+.personality_migration
+.codex-global-state.json
+.app-server-state-reconciled-v1
+.agent-worktrees/
+chrome-native-hosts.json
+chrome-native-hosts-v2.json
+cap_sid
+installation_id
 history.jsonl
 session_index.jsonl
 session_index.jsonl.lock
+transcription-history.jsonl
 models_cache*.json
 internal_storage.json
 /.codex-provisioning-*.guard
