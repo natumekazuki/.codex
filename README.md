@@ -20,7 +20,7 @@
 ### 本repositoryの開発・リリース境界
 
 - `vMAJOR.MINOR.PATCH` タグが指すcommitを配布版とする。タグのないcommitやbranch上の途中状態は互換保証の対象としない。
-- 維持するのは各タグのリリースノートで明示した利用者向け契約であり、実装全体ではない。[初回の維持対象 v1.0.0](docs/releases/v1.0.0.md) から `review-test-value` のCLI、構造化result、metadata v2、対応adapter、Git差分選択を含む。詳細は[契約別の参照文書](skills/review-test-value/references/)で確認する。
+- 維持するのは各タグのリリースノートで明示した利用者向け契約であり、実装全体ではない。
 - 破壊的な契約変更はmajor、互換な変更はminorまたはpatchを上げて新しいタグへ記録する。リリースごとに [一覧](docs/releases/README.md) と `docs/releases/vMAJOR.MINOR.PATCH.md` を更新し、変更・互換性・検証結果を残す。
 
 ### Codex／Claude／OpenCode間の変更反映
@@ -56,12 +56,22 @@ profileは `codex --profile sol` または `codex --profile astra` で選ぶ。T
 
 ## Skillの配布
 
-このrepositoryで保守するのは、変更testの [review-test-value](skills/review-test-value/)、UIの [design-ui-information](skills/design-ui-information/)、Crewの共有記録を扱う [session-graph](skills/session-graph/)、採用済みrepositoryを扱う [relaygraph](skills/relaygraph/)、期間を指定した [作業監査](skills/audit-codex-work-quality/)、明示的な文章推敲用の [japanese-tech-writing-review](skills/japanese-tech-writing-review/) と [natural-japanese](skills/natural-japanese/) である。導入時はSkill本文とmetadataを揃える。
+このrepositoryで保守するのは、UIの [design-ui-information](skills/design-ui-information/)、Crewの共有記録を扱う [session-graph](skills/session-graph/)、採用済みrepositoryを扱う [relaygraph](skills/relaygraph/)、期間を指定した [作業監査](skills/audit-codex-work-quality/)、明示的な文章推敲用の [japanese-tech-writing-review](skills/japanese-tech-writing-review/) と [natural-japanese](skills/natural-japanese/) である。導入時はSkill本文とUI表示・起動案内用のmetadataを揃える。
 
 `natural-japanese` の[同期元](https://github.com/coji/natural-japanese)・commit・licenseは [NOTICE](skills/natural-japanese/NOTICE) と [LICENSE](skills/natural-japanese/LICENSE) を参照。同期には `pwsh ./scripts/sync-natural-japanese.ps1 -Check`（確認）と、更新時の `pwsh ./scripts/sync-natural-japanese.ps1` を使う。scriptはlocal adaptationと明示起動方針を再現し、このSkillに未コミット変更があれば更新を拒否する。
+
+コードとtestのコメントは[共通コメント規約](docs/guides/code-comments.md)に従い、新規・変更箇所から整える。通常のreviewでtestの変更を見る観点は[テスト変更と保持の判断](docs/guides/test-changes.md)を参照する。コメントの機械検査は[利用先での導入手順](docs/guides/code-comments.md#利用先での機械検査の導入)に従う。
 
 ## 配布時の確認
 
 変更が影響する契約を確認する。配布元の文書を確認しただけなら、端末での適用や実動作まで確認したとは扱わない。出力比較が依頼された場合は、[比較手順](docs/runbooks/compare-subagent-roles.md#役割指示を比較する時)を参照する。
 
-[CI](.github/workflows/ci.yml) は抽出器・言語adapter・監査スクリプト・Windows hookの回帰を検査する。モデル実行やsecretを公開CIへ追加しない。確認した対象・条件・結果と判断に響く未確認は既存の[review記録](docs/guides/development.md#sessionfolderのreview記録と対応管理)等に残し、文書の一致を実動作の証拠にしない。
+[CI](.github/workflows/ci.yml) は監査スクリプト・Windows hookの回帰を検査する。利用先のコメント規約の強制は、このCIの成功とは別に確認する。モデル実行やsecretを公開CIへ追加しない。確認した対象・条件・結果と判断に響く未確認は既存の[review記録](docs/guides/development.md#sessionfolderのreview記録と対応管理)等に残し、文書の一致を実動作の証拠にしない。
+
+### このrepositoryのGit pre-commit
+
+[`.githooks/pre-commit`](.githooks/pre-commit) はこのrepositoryの開発用で、`hooks.json` で登録するCodexの実行時hookとは別。Python 3.12と、監査テストには `sqlite3`、Windows hookテストには `pwsh` を使う。
+
+1. `git config --show-origin --get core.hooksPath` と既存hookを確認する。単独cloneで既存hookがなければ `git config --local core.hooksPath .githooks` で有効化できる。linked worktreeではlocal設定が共有されるので、共有設定を変えずそのコミットだけに適用するなら `git -c core.hooksPath=.githooks commit` を使う。既存hookがある場合は置き換えずに手動検証するか、既存経路へ明示的に組み込む。
+2. コミットせずに同じチェックを実行するには、このrepositoryで `python -X utf8 -B scripts/check-repo.py --staged` を使う。lintはstagedの空白エラー・衝突マーカーと、監査スクリプトおよび検証スクリプトのPython構文を確認する。コメント検査はそのPython範囲の追加・構文が変わったクラス／関数／メソッドに空でないdocstringを要求する。同期元を持つSkill、他言語、本文コメントの配置や意味は検査しない。
+3. 監査・Windows hookとその検証経路を変更した場合は、関係するtestをstaged内容の一時展開先で実行する。文書だけの変更ではtestを起動しない。Windows以外で実行できないhook testはWindows CIで確認する。CIは同じ差分検査を統合候補で行い、既存の監査・Windows hook testも実行する。
