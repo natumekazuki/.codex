@@ -24,7 +24,7 @@ pwsh ./scripts/capture-codex-system-prompt.ps1 `
 
 ## 任意の適用と確認
 
-[設定例](../../config.example.toml)の指定先は英語版です。日本語版を選ぶ時は `model-instructions-withmate.ja.md` に差し替え、二つを連結しません。端末への適用は配布元の編集と別です。
+[設定例](../../config.example.toml)は英語版のパスをコメントとして示しており、既定では置換しません。採用する場合は実ファイルのパスを指定します。日本語版を選ぶ時は `model-instructions-withmate.ja.md` に差し替え、二つを連結しません。端末への適用は配布元の編集と別です。
 
 - 信頼済みプロジェクトの `.codex/config.toml` では、その設定ファイルと同じディレクトリに置いた本文をトップレベルの `model_instructions_file = "model-instructions-withmate.md"` で選べます。相対pathとtrustの条件は[高度な設定ガイド](https://learn.chatgpt.com/docs/config-file/config-advanced)を参照します。
 - ユーザー単位では、その端末が使う設定に対象ファイルの絶対pathを指定します。この設定を読む全Sessionに影響するため、範囲と既存値を確認し、必要なキーだけ扱います。認証・MCP・個人設定を配布元へ取り込みません。

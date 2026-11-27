@@ -9,7 +9,7 @@ project_doc_max_bytes = 131072
 
 # 任意の完全置換。英語版を使う端末では実ファイルの絶対パスを指定する。
 # 組み込み本文を使う場合は、このキーを設定しない。適用確認は docs/runbooks/system-prompt-maintenance.md。
-model_instructions_file = "C:\\path\\to\\repository\\.codex\\model-instructions-withmate.md"
+# model_instructions_file = "C:\\path\\to\\repository\\.codex\\model-instructions-withmate.md"
 
 [features]
 fast_mode = false
