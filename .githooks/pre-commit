@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# Use the staged checker, even if the script has unstaged edits.
+checker=$(git show :scripts/check-repo.py) || exit 1
+exec python -X utf8 -B -c "$checker" --staged

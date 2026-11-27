@@ -67,3 +67,11 @@ profileは `codex --profile sol` または `codex --profile astra` で選ぶ。T
 変更が影響する契約を確認する。配布元の文書を確認しただけなら、端末での適用や実動作まで確認したとは扱わない。出力比較が依頼された場合は、[比較手順](docs/runbooks/compare-subagent-roles.md#役割指示を比較する時)を参照する。
 
 [CI](.github/workflows/ci.yml) は監査スクリプト・Windows hookの回帰を検査する。利用先のコメント規約の強制は、このCIの成功とは別に確認する。モデル実行やsecretを公開CIへ追加しない。確認した対象・条件・結果と判断に響く未確認は既存の[review記録](docs/guides/development.md#sessionfolderのreview記録と対応管理)等に残し、文書の一致を実動作の証拠にしない。
+
+### このrepositoryのGit pre-commit
+
+[`.githooks/pre-commit`](.githooks/pre-commit) はこのrepositoryの開発用で、`hooks.json` で登録するCodexの実行時hookとは別。Python 3.12と、監査テストには `sqlite3`、Windows hookテストには `pwsh` を使う。
+
+1. `git config --show-origin --get core.hooksPath` と既存hookを確認する。単独cloneで既存hookがなければ `git config --local core.hooksPath .githooks` で有効化できる。linked worktreeではlocal設定が共有されるので、共有設定を変えずそのコミットだけに適用するなら `git -c core.hooksPath=.githooks commit` を使う。既存hookがある場合は置き換えずに手動検証するか、既存経路へ明示的に組み込む。
+2. コミットせずに同じチェックを実行するには、このrepositoryで `python -X utf8 -B scripts/check-repo.py --staged` を使う。lintはstagedの空白エラー・衝突マーカーと、監査スクリプトおよび検証スクリプトのPython構文を確認する。コメント検査はそのPython範囲の追加・構文が変わったクラス／関数／メソッドに空でないdocstringを要求する。同期元を持つSkill、他言語、本文コメントの配置や意味は検査しない。
+3. 監査・Windows hookとその検証経路を変更した場合は、関係するtestをstaged内容の一時展開先で実行する。文書だけの変更ではtestを起動しない。Windows以外で実行できないhook testはWindows CIで確認する。CIは同じ差分検査を統合候補で行い、既存の監査・Windows hook testも実行する。

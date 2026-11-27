@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -37,16 +39,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: choco install sqlite --version=3.53.4 --no-progress --yes
+      - name: Check changed source and comments
+        shell: bash
+        env:
+          CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python -B -X utf8 scripts/check-repo.py --from "$CHECK_BASE"
       - name: Run Python contract tests
-        run: >-
-          python -m unittest
-          skills/audit-codex-work-quality/scripts/test_collect_session_evidence.py
-          skills/audit-codex-work-quality/scripts/test_audit_history.py
-      - name: Compile Python entry points
-        run: >-
-          python -m py_compile
-          skills/audit-codex-work-quality/scripts/collect_session_evidence.py
-          skills/audit-codex-work-quality/scripts/audit_history.py
+        run: python -B -X utf8 scripts/check-repo.py --audit
 
   hook-tests:
     name: Hook tests (Windows)
